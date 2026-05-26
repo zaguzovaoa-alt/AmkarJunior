@@ -1,0 +1,77 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Outfit", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  --font-display: "Space Grotesk", "Outfit", ui-sans-serif, system-ui, sans-serif;
+
+  /* Overwrite Tailwind colors to use white, red, black as our primary themes */
+  --color-emerald-50: #fef2f2;
+  --color-emerald-100: #fee2e2;
+  --color-emerald-150: #fecaca;
+  --color-emerald-155: #fca5a5;
+  --color-emerald-200: #fecaca;
+  --color-emerald-300: #fca5a5;
+  --color-emerald-400: #f87171;
+  --color-emerald-500: #e21a22; /* Authentic Amkar Junior Bold Red */
+  --color-emerald-600: #e21a22;
+  --color-emerald-650: #b91c1c;
+  --color-emerald-700: #991b1b;
+  --color-emerald-800: #7f1d1d;
+  --color-emerald-850: #5c0d10;
+  --color-emerald-900: #450a0a;
+
+  /* Overwrite blue and indigo to sleek dark grey / blacks for secondary tech accents */
+  --color-indigo-50: #f4f4f5;
+  --color-indigo-100: #e4e4e7;
+  --color-indigo-200: #d4d4d8;
+  --color-indigo-300: #a1a1aa;
+  --color-indigo-400: #71717a;
+  --color-indigo-500: #27272a; /* Deep Charcoal Text/Bg */
+  --color-indigo-600: #18181b; /* Pitch Dark Text/Bg */
+  --color-indigo-700: #0f0f11;
+  --color-indigo-800: #09090b;
+  --color-indigo-900: #030303; /* Pure athletic black */
+  --color-indigo-950: #010101;
+  
+  --color-blue-50: #fafafa;
+  --color-blue-100: #f4f4f5;
+  --color-blue-200: #e4e4e7;
+  --color-blue-300: #d4d4d8;
+  --color-blue-400: #a1a1aa;
+  --color-blue-500: #181112; 
+  --color-blue-600: #11090a;
+  --color-blue-700: #0d0607;
+}
+
+/* Custom visual refinements to make the panels look premium and stylish */
+body {
+  background-color: #f7f7f9;
+  color: #171717;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.card-shadow {
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04), 0 2px 8px -1px rgba(0, 0, 0, 0.02);
+}
+
+.premium-border {
+  border-color: #f4f4f5;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

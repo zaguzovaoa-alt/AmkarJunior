@@ -1,0 +1,197 @@
+{
+  "entities": {
+    "Lead": {
+      "title": "Lead",
+      "description": "New customer lead details for trial booking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier of the lead" },
+        "parentName": { "type": "string", "description": "Name of the parent" },
+        "parentPhone": { "type": "string", "description": "Phone number of the parent" },
+        "parentEmail": { "type": "string", "description": "Email of the parent" },
+        "childName": { "type": "string", "description": "Name of the child" },
+        "childSurname": { "type": "string", "description": "Surname of the child" },
+        "childBirthYear": { "type": "number", "description": "Year the child was born" },
+        "childAge": { "type": "number", "description": "Age of the child in 2026" },
+        "source": { "type": "string", "description": "Source attribution channel (vk, telegram, etc.)" },
+        "createdAt": { "type": "string", "description": "ISO timestamp when lead was created" },
+        "timeString": { "type": "string", "description": "HH:MM format for list order" },
+        "status": { "type": "string", "description": "Funnel state: new, contacted, trial_booked, trial_completed, converted, lost" },
+        "note": { "type": "string", "description": "Optional notes or comments about the lead" }
+      },
+      "required": ["id", "parentName", "parentPhone", "childName", "childSurname", "status"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "Registered and onboarded sports school student",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique client Identifier" },
+        "parentName": { "type": "string", "description": "Name of the parent" },
+        "parentPhone": { "type": "string", "description": "Phone number of the parent" },
+        "parentEmail": { "type": "string", "description": "Email of the parent" },
+        "childName": { "type": "string", "description": "Name of the child player" },
+        "childSurname": { "type": "string", "description": "Surname of the child player" },
+        "childBirthYear": { "type": "number", "description": "Year of birth" },
+        "childAge": { "type": "number", "description": "Calculated age of the child" },
+        "status": { "type": "string", "description": "Active, trial, paused, or completed student" },
+        "abonement": { "type": "string", "description": "Selected ticket / tariff tier" },
+        "abonementStatus": { "type": "string", "description": "Subscription payment status" },
+        "abonementExpirationDate": { "type": "string", "description": "Optional ISO date of expiration" },
+        "abonementSessionsLeft": { "type": "number", "description": "Active remaining sessions on subscription" },
+        "groupName": { "type": "string", "description": "Enrolled training group name (or null)" },
+        "coachId": { "type": "string", "description": "Assigned head coach's ID" },
+        "coachName": { "type": "string", "description": "Assigned head coach's full name" },
+        "branch": { "type": "string", "description": "Sports venue / field identifier" },
+        "medicalCertificateUrl": { "type": "string", "description": "Medical certificate attachment name" },
+        "insuranceUrl": { "type": "string", "description": "Optional insurance file attachment name" },
+        "notes": { "type": "string", "description": "Coaching feedback and individual comments" },
+        "progress": {
+          "type": "object",
+          "properties": {
+            "technique": { "type": "number" },
+            "tactics": { "type": "number" },
+            "physical": { "type": "number" },
+            "discipline": { "type": "number" }
+          }
+        }
+      },
+      "required": ["id", "parentName", "parentPhone", "childName", "childSurname", "status", "abonement", "abonementStatus"]
+    },
+    "CRMTask": {
+      "title": "CRMTask",
+      "description": "Administrative work item matching operational requirements",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "assignedTo": { "type": "string", "description": "Role: manager, trainer, or director" },
+        "status": { "type": "string", "description": "new, pending, completed, or overdue" },
+        "dueDate": { "type": "string" },
+        "description": { "type": "string" },
+        "relatedClientId": { "type": "string" },
+        "relatedLeadId": { "type": "string" }
+      },
+      "required": ["id", "title", "assignedTo", "status", "dueDate"]
+    },
+    "TrainingGroup": {
+      "title": "TrainingGroup",
+      "description": "Football training squad categorized by age and branch",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "year": { "type": "number" },
+        "coachId": { "type": "string" },
+        "coachName": { "type": "string" },
+        "playersCount": { "type": "number" },
+        "attendanceRate": { "type": "number" },
+        "scheduleDays": { "type": "array" }
+      },
+      "required": ["id", "name", "year", "coachId", "coachName"]
+    },
+    "Coach": {
+      "title": "Coach",
+      "description": "Professional football athletic trainer",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "joinedYear": { "type": "number" },
+        "groupsCount": { "type": "number" },
+        "kidsCount": { "type": "number" },
+        "workload": { "type": "number" },
+        "rating": { "type": "number" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "name", "role", "status"]
+    },
+    "FinanceRecord": {
+      "title": "FinanceRecord",
+      "description": "Bookkeeping item tracking revenue and organizational expenses",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "description": "income or expense" },
+        "category": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string" },
+        "description": { "type": "string" },
+        "groupName": { "type": "string" }
+      },
+      "required": ["id", "type", "category", "amount", "date"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Collaboration room message for users of the school",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "senderRole": { "type": "string" },
+        "senderName": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "fileName": { "type": "string" },
+        "fileType": { "type": "string" }
+      },
+      "required": ["id", "senderRole", "senderName", "text", "timestamp"]
+    },
+    "TrainingSession": {
+      "title": "TrainingSession",
+      "description": "Information about a completed group training session and player attendance",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "groupId": { "type": "string" },
+        "groupName": { "type": "string" },
+        "date": { "type": "string" },
+        "dateString": { "type": "string" },
+        "coachId": { "type": "string" },
+        "coachName": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "notes": { "type": "string" },
+        "presentCount": { "type": "number" },
+        "sickCount": { "type": "number" },
+        "absentCount": { "type": "number" },
+        "records": { "type": "array" }
+      },
+      "required": ["id", "groupId", "groupName", "date", "dateString", "coachId", "coachName", "presentCount", "sickCount", "absentCount", "records"]
+    }
+  },
+  "firestore": {
+    "leads": {
+      "schema": "Lead",
+      "description": "School pipelines and inbound inquiries"
+    },
+    "clients": {
+      "schema": "Client",
+      "description": "Enrolled football players and metrics"
+    },
+    "tasks": {
+      "schema": "CRMTask",
+      "description": "Managerial and coaching agendas"
+    },
+    "groups": {
+      "schema": "TrainingGroup",
+      "description": "Football training group compositions"
+    },
+    "coaches": {
+      "schema": "Coach",
+      "description": "Trainers registered in the company roster"
+    },
+    "finances": {
+      "schema": "FinanceRecord",
+      "description": "Detailed cashflow journal records"
+    },
+    "messages": {
+      "schema": "ChatMessage",
+      "description": "Staff and client chat boards and files shared"
+    },
+    "training_sessions": {
+      "schema": "TrainingSession",
+      "description": "Session reports with notes, photos and attendance protocols"
+    }
+  }
+}

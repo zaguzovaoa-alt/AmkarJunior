@@ -1,0 +1,2047 @@
+import React, { useState } from 'react';
+import { useCRM } from '../context/CRMContext';
+import { 
+  Users, Search, UserPlus, Filter, Mail, Phone, Calendar, 
+  Trash2, CreditCard, ChevronRight, Edit2, Check, AlertCircle, Sparkles, MessageSquare, Save,
+  Camera, Upload, Volume2, MicOff, PhoneOff, Mic, Loader2, BookOpen, Timer, TrendingDown, FileText
+} from 'lucide-react';
+import { Client, Lead, ClientStatus, CRMTask } from '../types';
+
+interface ManagerCRMProps {
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
+  onOpenPayment: (clientId: string) => void;
+}
+
+export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab, onOpenPayment }) => {
+  const { 
+    clients, leads, tasks, addLead, bookTrial, sendPaymentLink, addTask, completeTask, 
+    deleteClient, deleteLead, updateClientNotes, updateClient, schoolName, groups, assignClientToGroup 
+  } = useCRM();
+  
+  // Search & Filters
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState<string>('all'); // all, active, trial, paused, completed
+  const [filterGroup, setFilterGroup] = useState<string>('all');
+
+  // Selected client for detail drawer (matches right panel on photo 4)
+  const [selectedClientId, setSelectedClientId] = useState<string>('cl1');
+  const [isEditingRightCard, setIsEditingRightCard] = useState<boolean>(false);
+  const [clientDetailTab, setClientDetailTab] = useState<'info' | 'abos' | 'visits' | 'payments' | 'history'>('info');
+  const [clientNotes, setClientNotes] = useState<{[key: string]: string}>({
+    cl1: 'Любит играть в защите, левша. Большие физические задатки.',
+    cl2: 'Интересуется вратарской позицией. Хорошо видит поле.',
+    cl3: 'Заморожен по семейным обстоятельствам до конца мая.'
+  });
+
+  // Client form modal state
+  const [selectedClientIds, setSelectedClientIds] = useState<Set<string>>(new Set());
+  const [isAddClientOpen, setIsAddClientOpen] = useState(false);
+  const [newParentName, setNewParentName] = useState('');
+  const [newChildName, setNewChildName] = useState('');
+  const [newChildSurname, setNewChildSurname] = useState('');
+  const [newChildAge, setNewChildAge] = useState(6);
+  const [newChildYear, setNewChildYear] = useState(2018);
+  const [newPhone, setNewPhone] = useState('');
+  const [newSource, setNewSource] = useState<'MAX' | 'telegram' | 'vk' | 'листовка' | 'рекомендация'>('MAX');
+
+  // Edit Client modal state
+  const [isEditClientOpen, setIsEditClientOpen] = useState(false);
+  const [editClientId, setEditClientId] = useState('');
+  const [editParentName, setEditParentName] = useState('');
+  const [editChildName, setEditChildName] = useState('');
+  const [editChildSurname, setEditChildSurname] = useState('');
+  const [editChildAge, setEditChildAge] = useState(6);
+  const [editChildYear, setEditChildYear] = useState(2018);
+  const [editPhone, setEditPhone] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editStatus, setEditStatus] = useState<ClientStatus>('active');
+  const [editAbonement, setEditAbonement] = useState<Client['abonement']>('none');
+  const [editAbonementSessions, setEditAbonementSessions] = useState(0);
+  const [editAvatarUrl, setEditAvatarUrl] = useState('');
+  const [editGroup, setEditGroup] = useState<string>('');
+  const [editRelationshipRisk, setEditRelationshipRisk] = useState<'none'|'low'|'high'>('none');
+  const [editRelationshipNotes, setEditRelationshipNotes] = useState('');
+  const [editRiskType, setEditRiskType] = useState<'none' | 'conflict' | 'absences'>('none');
+  const [editRiskDetails, setEditRiskDetails] = useState('');
+  const [editRiskUrgency, setEditRiskUrgency] = useState<'none' | 'intervene' | 'urgent'>('none');
+  const [editRiskResolution, setEditRiskResolution] = useState<'none' | 'left' | 'thinking' | 'renewed' | 'refused' | 'resolved' | 'reconciled'>('none');
+  const [editRiskComment, setEditRiskComment] = useState('');
+
+  // Dynamic set of all active/school groups present in DB or default presets (trimmed to avoid duplicates)
+  const availableGroups = Array.from(new Set([
+    ...(groups || []).map(g => g.name?.trim()),
+    ...(clients || []).map(c => c.groupName?.trim()).filter(Boolean) as string[],
+  ])).sort();
+
+  // MAX Messenger Call state
+  const [isMaxCallingOpen, setIsMaxCallingOpen] = useState(false);
+  const [maxCallTargetName, setMaxCallTargetName] = useState('');
+  const [maxCallTargetPhone, setMaxCallTargetPhone] = useState('');
+  const [maxCallTargetAvatar, setMaxCallTargetAvatar] = useState('');
+  const [maxCallStatus, setMaxCallStatus] = useState<'connecting' | 'ringing' | 'active' | 'ended'>('connecting');
+  const [maxCallDuration, setMaxCallDuration] = useState(0);
+  const [isMaxCallMuted, setIsMaxCallMuted] = useState(false);
+  const [isMaxCallSpeaker, setIsMaxCallSpeaker] = useState(false);
+
+  React.useEffect(() => {
+    let statusTimer: any;
+    let durationInterval: any;
+
+    if (isMaxCallingOpen) {
+      if (maxCallStatus === 'connecting') {
+        statusTimer = setTimeout(() => {
+          setMaxCallStatus('ringing');
+        }, 1500);
+      } else if (maxCallStatus === 'ringing') {
+        statusTimer = setTimeout(() => {
+          setMaxCallStatus('active');
+        }, 2000);
+      } else if (maxCallStatus === 'active') {
+        durationInterval = setInterval(() => {
+          setMaxCallDuration(prev => prev + 1);
+        }, 1000);
+      } else if (maxCallStatus === 'ended') {
+        statusTimer = setTimeout(() => {
+          setIsMaxCallingOpen(false);
+        }, 1500);
+      }
+    } else {
+      setMaxCallDuration(0);
+      setIsMaxCallMuted(false);
+      setIsMaxCallSpeaker(false);
+    }
+
+    return () => {
+      clearTimeout(statusTimer);
+      clearInterval(durationInterval);
+    };
+  }, [isMaxCallingOpen, maxCallStatus]);
+
+  const handleStartMaxCall = (client: Client) => {
+    setMaxCallTargetName(`${client.parentName || 'Родитель'} (${client.childName || 'Ученик'})`);
+    setMaxCallTargetPhone(client.parentPhone || '');
+    setMaxCallTargetAvatar(client.avatarUrl || '');
+    setMaxCallStatus('connecting');
+    setMaxCallDuration(0);
+    setIsMaxCallingOpen(true);
+
+    const cleanPhone = (client.parentPhone || '').replace(/\D/g, '');
+    try {
+      window.location.href = `max://call?phone=${cleanPhone}`;
+    } catch (e) {
+      console.warn("Could not launch custom protocol max://", e);
+    }
+  };
+
+  const handleStartEditClient = (client: Client) => {
+    setEditClientId(client.id);
+    setEditParentName(client.parentName || '');
+    setEditChildName(client.childName || '');
+    setEditChildSurname(client.childSurname || '');
+    setEditChildAge(client.childAge || 0);
+    setEditChildYear(client.childBirthYear || 2018);
+    setEditPhone(client.parentPhone || '');
+    setEditEmail(client.parentEmail || '');
+    setEditStatus(client.status || 'active');
+    setEditAbonement(client.abonement || 'none');
+    setEditAbonementSessions(client.abonementSessionsLeft || 0);
+    setEditAvatarUrl(client.avatarUrl || '');
+    setEditGroup(client.groupName || '');
+    setEditRelationshipRisk(client.relationshipRisk || 'none');
+    setEditRelationshipNotes(client.relationshipNotes || '');
+    setEditRiskType(client.riskType || 'none');
+    setEditRiskDetails(client.riskDetails || '');
+    setEditRiskUrgency(client.riskUrgency || 'none');
+    setEditRiskResolution(client.riskResolution || 'none');
+    setEditRiskComment(client.riskComment || '');
+    setIsEditClientOpen(true);
+  };
+
+  const handleSaveClientEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editClientId) return;
+    try {
+      await updateClient(editClientId, {
+        parentName: editParentName,
+        childName: editChildName,
+        childSurname: editChildSurname,
+        childAge: editChildAge,
+        childBirthYear: editChildYear,
+        parentPhone: editPhone,
+        parentEmail: editEmail,
+        status: editStatus,
+        abonement: editAbonement,
+        abonementSessionsLeft: editAbonementSessions,
+        avatarUrl: editAvatarUrl,
+        relationshipRisk: editRelationshipRisk,
+        relationshipNotes: editRelationshipNotes,
+        riskType: editRiskType,
+        riskDetails: editRiskDetails,
+        riskUrgency: editRiskUrgency,
+        riskResolution: editRiskResolution,
+        riskComment: editRiskComment
+      });
+      // also assign client to selected group effectively
+      await assignClientToGroup(editClientId, editGroup || null);
+      
+      setIsEditClientOpen(false);
+      alert('Данные ученика успешно обновлены!');
+    } catch (err: any) {
+      alert('Ошибка при обновлении данных: ' + err.message);
+    }
+  };
+
+  const handleSaveInlineEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedClient) return;
+    try {
+      await updateClient(selectedClient.id, {
+        parentName: editParentName,
+        childName: editChildName,
+        childSurname: editChildSurname,
+        childAge: editChildAge,
+        childBirthYear: editChildYear,
+        parentPhone: editPhone,
+        parentEmail: editEmail,
+        status: editStatus,
+        abonement: editAbonement,
+        abonementSessionsLeft: editAbonementSessions,
+        avatarUrl: editAvatarUrl,
+        relationshipNotes: editRelationshipNotes,
+        relationshipRisk: editRelationshipRisk,
+        riskType: editRiskType,
+        riskDetails: editRiskDetails,
+        riskUrgency: editRiskUrgency,
+        riskResolution: editRiskResolution,
+        riskComment: editRiskComment
+      });
+      // also assign client to selected group effectively
+      await assignClientToGroup(selectedClient.id, editGroup || null);
+      
+      setIsEditingRightCard(false);
+    } catch (err: any) {
+      alert('Ошибка при сохранении: ' + err.message);
+    }
+  };
+
+  const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setEditAvatarUrl(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const PRESET_AVATARS = [
+    { emoji: '⚽', bg: 'bg-emerald-500 text-white' },
+    { emoji: '👟', bg: 'bg-amber-500 text-white' },
+    { emoji: '🏆', bg: 'bg-blue-500 text-white' },
+    { emoji: '⭐', bg: 'bg-indigo-500 text-white' },
+    { emoji: '🔥', bg: 'bg-rose-500 text-white' },
+    { emoji: '🦁', bg: 'bg-teal-500 text-white' },
+  ];
+
+  // Helper to construct SVG/base64 avatar from emoji
+  const selectPresetAvatar = (preset: typeof PRESET_AVATARS[0]) => {
+    // Generate an SVG data url with the preset
+    const svgCode = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+        <rect width="100%" height="100%" fill="${preset.bg.includes('emerald') ? '#10b981' : preset.bg.includes('amber') ? '#f59e0b' : preset.bg.includes('blue') ? '#3b82f6' : preset.bg.includes('indigo') ? '#6366f1' : preset.bg.includes('rose') ? '#f43f5e' : '#14b8a6'}"/>
+        <text x="50%" y="65%" font-size="50" text-anchor="middle" dominant-baseline="middle">${preset.emoji}</text>
+      </svg>
+    `;
+    const base64Svg = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgCode)))}`;
+    setEditAvatarUrl(base64Svg);
+  };
+
+  const selectedClient = clients.find(c => c.id === selectedClientId) || clients[0];
+
+  React.useEffect(() => {
+    if (selectedClient) {
+      setClientNotes(prev => {
+        if (prev[selectedClient.id] === undefined) {
+          return {
+            ...prev,
+            [selectedClient.id]: selectedClient.notes || ''
+          };
+        }
+        return prev;
+      });
+    }
+  }, [selectedClient]);
+
+  const handleSaveNotes = async (id: string, text: string) => {
+    setClientNotes(prev => ({
+      ...prev,
+      [id]: text
+    }));
+    try {
+      await updateClientNotes(id, text);
+      alert('Заметка о клиенте успешно сохранена в базе данных!');
+    } catch (e: any) {
+      alert('Ошибка при сохранении заметки: ' + (e.message || String(e)));
+    }
+  };
+
+  const handleAddNewLead = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newParentName || !newChildName) return;
+    try {
+      await addLead({
+        parentName: newParentName,
+        parentPhone: newPhone || '+7 (900) 123-45-67',
+        parentEmail: 'client@amkar-junior.ru',
+        childName: newChildName,
+        childSurname: newChildSurname || 'Иванов',
+        childBirthYear: newChildYear,
+        childAge: newChildAge,
+        source: newSource
+      });
+      alert('Новая входящая заявка успешно зарегистрирована во вкладке "Заявки" и добавлена в задачник руководителя и менеджера!');
+      setIsAddClientOpen(false);
+      // clean forms
+      setNewParentName('');
+      setNewChildName('');
+      setNewChildSurname('');
+      setNewPhone('');
+    } catch (err: any) {
+      alert('Ошибка при регистрации лида: ' + (err.message || String(err)));
+    }
+  };
+
+  const handleBookTrialFromLead = (lead: Lead) => {
+    const defaultCoach = 'c1'; // Andrey Petrov
+    const defaultGroup = availableGroups[0] || 'Без группы';
+    bookTrial(lead.id, defaultCoach, defaultGroup, 'Сегодня', '17:00');
+    alert(`Заявка переведена в статус "Забронирована пробная"!\nРебенок добавлен в "Пробный период" клиентов.\nТренеру "Петров Андрей" отправлено автоматическое задание на пробное занятие.`);
+  };
+
+  const handleSendBilling = (client: Client, packageTitle: string, amount: number) => {
+    sendPaymentLink(client.id, amount, packageTitle);
+    alert(`Ссылка на оплату тарифа "${packageTitle}" (${amount} руб) сформирована через ЮKassa и отправлена родителю ${client.parentName} в Личный кабинет!`);
+  };
+
+  // Filter clients logically
+  const filteredClients = clients.filter(c => {
+    const matchesSearch = 
+      c.childName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.childSurname.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.parentName.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesStatus = filterStatus === 'all' || c.status === filterStatus;
+    const matchesGroup = filterGroup === 'all' || 
+      (c.groupName && filterGroup && c.groupName.trim().toLowerCase() === filterGroup.trim().toLowerCase());
+
+    return matchesSearch && matchesStatus && matchesGroup;
+  });
+
+  return (
+    <div className="flex-1 overflow-y-auto bg-slate-50 text-gray-800 min-h-screen">
+      
+      {/* Dynamic Header bar */}
+      <div className="p-6 bg-white border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-950 font-sans tracking-tight">
+            {activeTab === 'hq_leads' ? 'Входящие Лиды и Заявки' : 'База Клиентов школы'}
+          </h1>
+          <p className="text-gray-500 text-sm">Управление цепочкой лидов, распределение по возрастным группам и контроль абонементов.</p>
+        </div>
+
+        <div className="flex items-center space-x-3">
+          <button 
+            onClick={() => setIsAddClientOpen(true)}
+            className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-xs transition flex items-center space-x-2 shadow-lg shadow-emerald-100"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Новая заявка (Лид)</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="p-6 max-w-7xl mx-auto space-y-6">
+        
+        {/* LEADS BOARD INTERACTIVE (МАТЧИТ ИЗОБРАЖЕНИЕ №4) */}
+        {activeTab === 'hq_leads' && (
+          <div className="space-y-6">
+            
+            {/* Quick stats grid */}
+            <div className="bg-slate-900 rounded-xl p-4 border border-slate-800 text-white flex flex-wrap gap-6 items-center justify-between">
+              <div className="text-left space-y-1">
+                <div className="text-2xl font-black text-emerald-500">{leads.length}</div>
+                <div className="text-[10px] text-gray-400 font-mono tracking-wider uppercase">Поступило заявок всего</div>
+              </div>
+              <div className="h-8 w-[1px] bg-slate-800"></div>
+              <div className="text-left space-y-1">
+                <div className="text-xl font-black text-slate-200">
+                  {(() => {
+                    const sources: { [key: string]: number } = {};
+                    leads.forEach(l => {
+                      const src = (l.source || 'Другое').toUpperCase();
+                      sources[src] = (sources[src] || 0) + 1;
+                    });
+                    const entries = Object.entries(sources);
+                    return entries.length > 0 
+                      ? entries.map(([src, count]) => `${src}: ${count}`).join(' • ') 
+                      : 'Нет активных заявок';
+                  })()}
+                </div>
+                <div className="text-[10px] text-gray-400 font-mono tracking-wider uppercase">Распределение по рекламе</div>
+              </div>
+              <div className="h-8 w-[1px] bg-slate-800"></div>
+              <div className="text-xs text-slate-300 max-w-sm">
+                Заявки автоматически регистрируются в CRM по API и добавляются в задачник менеджерам.
+              </div>
+            </div>
+
+            {/* Leads list table/grid */}
+            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm space-y-4">
+              <h3 className="font-extrabold text-slate-900 text-sm text-left">Входящие обращения (на модерации звонка)</h3>
+              
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-slate-700 border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-gray-400 font-semibold uppercase tracking-wider border-b">
+                      <th className="p-3">Родитель</th>
+                      <th className="p-3">Ребенок</th>
+                      <th className="p-3">Возраст</th>
+                      <th className="p-3">Источник рекламы</th>
+                      <th className="p-3">Дата обращения</th>
+                      <th className="p-3">Текущий статус</th>
+                      <th className="p-3 text-right">Экспресс-действия</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {leads.map((lead, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50 transition">
+                        <td className="p-3">
+                          <div className="font-bold text-slate-800">{lead.parentName}</div>
+                          <div className="text-[10px] text-gray-400 font-mono">{lead.parentPhone}</div>
+                        </td>
+                        <td className="p-3 font-semibold text-slate-800">{lead.childSurname} {lead.childName}</td>
+                        <td className="p-3 font-medium">{lead.childAge} лет <span className="text-[10px] text-gray-400">({lead.childBirthYear} г.р.)</span></td>
+                        <td className="p-3">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            lead.source === 'MAX' ? 'bg-orange-100 text-orange-800' :
+                            lead.source === 'telegram' ? 'bg-sky-100 text-sky-800' :
+                            lead.source === 'vk' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {lead.source}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          <div className="font-bold">{lead.timeString}</div>
+                          <p className="text-[10px] text-gray-400 font-mono">23.05.2026</p>
+                        </td>
+                        <td className="p-3">
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase ${
+                            lead.status === 'new' ? 'bg-orange-100 text-orange-800 font-black' :
+                            lead.status === 'trial_booked' ? 'bg-indigo-100 text-indigo-800' : 'bg-emerald-100 text-emerald-800'
+                          }`}>
+                            {lead.status === 'new' ? 'Новая заявка' :
+                             lead.status === 'trial_booked' ? 'Пробная забронирована' : 'Отработано'}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right flex items-center justify-end space-x-2">
+                          {lead.status === 'new' || lead.status === 'contacted' ? (
+                            <button
+                              onClick={() => handleBookTrialFromLead(lead)}
+                              className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded font-bold text-[10px] transition"
+                            >
+                              Пригласить на пробную
+                            </button>
+                          ) : (
+                            <span className="text-[11px] text-emerald-600 font-bold">✓ Отработан успешно</span>
+                          )}
+                          <button
+                            onClick={async () => {
+                              const confirmDel = window.confirm(`Вы уверены, что хотите окончательно удалить заявку от родителя ${lead.parentName} (${lead.childName})?`);
+                              if (confirmDel) {
+                                await deleteLead(lead.id);
+                                alert('Заявка успешно удалена из базы.');
+                              }
+                            }}
+                            className="p-1.5 text-red-500 hover:bg-red-50 rounded transition"
+                            title="Удалить заявку"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* CLIENTS DIRECTORY VIEW (МАТЧИТ ИЗОБРАЖЕНИЕ №4) */}
+        {activeTab === 'hq_clients' && (
+          <div className="space-y-6">
+            
+            {/* Custom Top Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm relative z-10 -mx-6 -mt-6 rounded-b-none mb-6">
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900 leading-tight">Клиенты</h1>
+                <div className="text-xs text-gray-400 mt-1 font-medium">Главная <ChevronRight className="w-3 h-3 inline pb-0.5" /> Клиенты</div>
+              </div>
+              <div className="flex items-center space-x-4">
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute left-3 top-2.5 text-gray-400" />
+                  <input type="text" placeholder="Поиск клиента..." className="pl-9 pr-4 py-2 bg-gray-50 hover:bg-gray-100 rounded-full text-xs font-medium border-none focus:ring-0 outline-none w-56 transition-colors text-gray-700" />
+                </div>
+                <button 
+                  onClick={() => setIsAddClientOpen(true)}
+                  className="bg-black hover:bg-gray-800 text-white px-5 py-2 rounded-full text-xs font-bold transition-all shadow-md shadow-gray-200"
+                >
+                  <span className="-ml-1 mr-1.5">+</span> Добавить клиента
+                </button>
+                <div className="relative cursor-pointer hover:bg-gray-50 p-2 rounded-full transition-colors ml-2">
+                  <span className="w-1.5 h-1.5 bg-red-500 rounded-full absolute top-2 right-2 ring-2 ring-white"></span>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-600">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                  </svg>
+                </div>
+                <div className="flex items-center space-x-2.5 pl-2 cursor-pointer border-l border-gray-100">
+                  <img src="https://i.pravatar.cc/100?img=11" alt="avatar" className="w-9 h-9 rounded-full object-cover bg-gray-100 border border-gray-200" />
+                  <div className="text-left hidden md:block">
+                    <div className="font-bold text-gray-900 text-xs">Василий</div>
+                    <div className="text-[10px] text-gray-500">Администратор</div>
+                  </div>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400 hidden md:block">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            {/* Dashboard / Stats Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm flex flex-col justify-between">
+                <div className="flex justify-between items-start">
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wide">Всего клиентов</span>
+                  <div className="w-6 h-6 rounded-md bg-gray-50 text-gray-400 flex items-center justify-center">
+                    <Users className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <div className="text-2xl font-bold text-gray-900">{clients.length}</div>
+                  <div className="text-[10px] text-emerald-500 font-bold mt-1 tracking-wide">+18 за неделю</div>
+                </div>
+              </div>
+              <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm flex flex-col justify-between">
+                <div className="flex justify-between items-start">
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wide">Активные</span>
+                  <div className="w-6 h-6 rounded-md bg-emerald-50 text-emerald-500 flex items-center justify-center">
+                    <Check className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <div className="text-2xl font-bold text-gray-900">{clients.filter(c => c.status === 'active').length}</div>
+                  <div className="text-[10px] text-emerald-500 font-bold mt-1 tracking-wide">{clients.length ? Math.round((clients.filter(c => c.status === 'active').length / clients.length) * 100) : 0}% от всех</div>
+                </div>
+              </div>
+              <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm flex flex-col justify-between">
+                <div className="flex justify-between items-start">
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wide">Новые за месяц</span>
+                  <div className="w-6 h-6 rounded-md bg-blue-50 text-blue-500 flex items-center justify-center">
+                    <UserPlus className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <div className="text-2xl font-bold text-gray-900">24</div>
+                  <div className="text-[10px] text-emerald-500 font-bold mt-1 tracking-wide">+6 к прошлому месяцу</div>
+                </div>
+              </div>
+              <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm flex flex-col justify-between">
+                <div className="flex justify-between items-start">
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wide">На пробном периоде</span>
+                  <div className="w-6 h-6 rounded-md bg-amber-50 text-amber-500 flex items-center justify-center">
+                    <Timer className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <div className="text-2xl font-bold text-gray-900">{clients.filter(c => c.status === 'trial').length}</div>
+                  <div className="text-[10px] text-emerald-500 font-bold mt-1 tracking-wide">{clients.length ? Math.round((clients.filter(c => c.status === 'trial').length / clients.length) * 100) : 0}% от всех</div>
+                </div>
+              </div>
+              <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm flex flex-col justify-between">
+                <div className="flex justify-between items-start">
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wide">Отток / Завершили</span>
+                  <div className="w-6 h-6 rounded-md bg-rose-50 text-rose-500 flex items-center justify-center">
+                    <TrendingDown className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <div className="text-2xl font-bold text-gray-900">{clients.filter(c => c.status === 'left' || c.status === 'inactive').length}</div>
+                  <div className="text-[10px] text-rose-500 font-bold mt-1 tracking-wide">-8 к прошлому месяцу</div>
+                </div>
+              </div>
+            </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* Left table directory (2 cols) */}
+            <div className="lg:col-span-2 space-y-4">
+              <div className="flex items-center space-x-2 text-[10px] font-bold font-sans overflow-x-auto pb-2 scrollbar-hide">
+                <span className="text-gray-900 mr-2 text-sm font-extrabold pr-2">Список клиентов</span>
+                <button onClick={() => setFilterStatus('all')} className={`px-3 py-1.5 rounded-full shrink-0 transition-colors ${filterStatus === 'all' ? 'bg-black text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'}`}>Все <span className={`font-medium ml-1 ${filterStatus === 'all' ? 'text-gray-300' : 'text-gray-400'}`}>{clients.length}</span></button>
+                <button onClick={() => setFilterStatus('active')} className={`px-3 py-1.5 rounded-full shrink-0 transition-colors ${filterStatus === 'active' ? 'bg-black text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'}`}>Активные <span className={`font-medium ml-1 ${filterStatus === 'active' ? 'text-gray-300' : 'text-gray-400'}`}>{clients.filter(c => c.status === 'active').length}</span></button>
+                <button onClick={() => setFilterStatus('paused')} className={`px-3 py-1.5 rounded-full shrink-0 transition-colors ${filterStatus === 'paused' ? 'bg-black text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'}`}>На паузе <span className={`font-medium ml-1 ${filterStatus === 'paused' ? 'text-gray-300' : 'text-gray-400'}`}>{clients.filter(c => c.status === 'paused').length}</span></button>
+                <button onClick={() => setFilterStatus('left')} className={`px-3 py-1.5 rounded-full shrink-0 transition-colors ${filterStatus === 'left' ? 'bg-black text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'}`}>Завершили <span className={`font-medium ml-1 ${filterStatus === 'left' ? 'text-gray-300' : 'text-gray-400'}`}>{clients.filter(c => c.status === 'left').length}</span></button>
+                <button onClick={() => setFilterStatus('trial')} className={`px-3 py-1.5 rounded-full shrink-0 transition-colors ${filterStatus === 'trial' ? 'bg-black text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'}`}>Пробный период <span className={`font-medium ml-1 ${filterStatus === 'trial' ? 'text-gray-300' : 'text-gray-400'}`}>{clients.filter(c => c.status === 'trial').length}</span></button>
+                <button onClick={() => setFilterStatus('inactive')} className={`px-3 py-1.5 rounded-full shrink-0 transition-colors ${filterStatus === 'inactive' ? 'bg-black text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'}`}>Отвал <span className={`font-medium ml-1 ${filterStatus === 'inactive' ? 'text-gray-300' : 'text-gray-400'}`}>{clients.filter(c => c.status === 'inactive').length}</span></button>
+              </div>
+
+              <div className="bg-white rounded-2xl p-4 px-5 border border-gray-100 shadow-sm space-y-4">
+                
+                {/* Search & filtering row */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b-none pb-0">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 absolute left-3 top-2.5 text-gray-400" />
+                    <input 
+                      type="text" 
+                      placeholder="Поиск по имени, телефону..." 
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full pl-9 pr-4 py-2 bg-gray-50 focus:bg-white text-xs border-none font-medium hover:bg-gray-100 rounded-full outline-none transition-colors"
+                    />
+                  </div>
+                  
+                  <div className="flex items-center space-x-2 shrink-0">
+                    <select 
+                      className="py-2 pl-3 pr-8 bg-white border-none font-medium text-gray-500 text-[11px] rounded-full outline-none appearance-none cursor-pointer hover:bg-gray-50"
+                      style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'10\' height=\'10\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpolyline points=\'6 9 12 15 18 9\'%3E%3C/polyline%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
+                    >
+                      <option>Филиал: Все</option>
+                    </select>
+
+                    <select 
+                      value={filterGroup}
+                      onChange={(e) => setFilterGroup(e.target.value)}
+                      className="py-2 pl-3 pr-8 bg-white border-none font-medium text-gray-500 text-[11px] rounded-full outline-none appearance-none cursor-pointer hover:bg-gray-50"
+                      style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'10\' height=\'10\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpolyline points=\'6 9 12 15 18 9\'%3E%3C/polyline%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
+                    >
+                      <option value="all">Группа: Все</option>
+                      {availableGroups.map((name) => (
+                        <option key={name} value={name}>{name}</option>
+                      ))}
+                    </select>
+
+                    <select 
+                      value={filterStatus}
+                      onChange={(e) => setFilterStatus(e.target.value)}
+                      className="py-2 pl-3 pr-8 bg-white border-none font-medium text-gray-500 text-[11px] rounded-full outline-none appearance-none cursor-pointer hover:bg-gray-50"
+                      style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'10\' height=\'10\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpolyline points=\'6 9 12 15 18 9\'%3E%3C/polyline%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
+                    >
+                      <option value="all">Статус: Все</option>
+                      <option value="active">Активные</option>
+                      <option value="inactive">Неактивные</option>
+                      <option value="trial">На пробном периоде</option>
+                      <option value="paused">На паузе</option>
+                      <option value="left">Ушли / Выпускники</option>
+                    </select>
+
+                    <button className="flex items-center space-x-1 py-2 px-3 text-[11px] font-bold text-gray-600 hover:text-black hover:bg-gray-50 rounded-full transition-colors ml-1">
+                      <Filter className="w-3.5 h-3.5" />
+                      <span>Фильтры</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Main Client list */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-slate-700 border-collapse">
+                    <thead>
+                      <tr className="text-gray-400 font-medium uppercase tracking-wide border-b border-gray-100 text-[9px]">
+                        <th className="p-3 whitespace-nowrap">
+                          <input 
+                            type="checkbox" 
+                            className="rounded text-black focus:ring-black border-gray-300 mr-1" 
+                            checked={filteredClients.length > 0 && selectedClientIds.size === filteredClients.length}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedClientIds(new Set(filteredClients.map(c => c.id)));
+                              } else {
+                                setSelectedClientIds(new Set());
+                              }
+                            }}
+                          /> Клиент
+                        </th>
+                        <th className="p-3">Ребенок</th>
+                        <th className="p-3">Группа</th>
+                        <th className="p-3">Филиал</th>
+                        <th className="p-3">Статус</th>
+                        <th className="p-3">Абонемент</th>
+                        <th className="p-3">Оплата</th>
+                        <th className="p-3">Действия</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {filteredClients.map((client, idx) => {
+                        const isSelected = selectedClientId === client.id;
+                        return (
+                          <tr 
+                            key={idx} 
+                            onClick={() => {
+                              setSelectedClientId(client.id);
+                              setIsEditingRightCard(false);
+                              
+                              // sync editing states immediately
+                              setEditClientId(client.id);
+                              setEditParentName(client.parentName || '');
+                              setEditChildName(client.childName || '');
+                              setEditChildSurname(client.childSurname || '');
+                              setEditChildAge(client.childAge || 0);
+                              setEditChildYear(client.childBirthYear || 2018);
+                              setEditPhone(client.parentPhone || '');
+                              setEditEmail(client.parentEmail || '');
+                              setEditStatus(client.status || 'active');
+                              setEditAbonement(client.abonement || 'none');
+                              setEditAbonementSessions(client.abonementSessionsLeft || 0);
+                              setEditAvatarUrl(client.avatarUrl || '');
+                              setEditGroup(client.groupName || '');
+                              setEditRelationshipRisk(client.relationshipRisk || 'none');
+                              setEditRelationshipNotes(client.relationshipNotes || '');
+                              setEditRiskType(client.riskType || 'none');
+                              setEditRiskDetails(client.riskDetails || '');
+                              setEditRiskUrgency(client.riskUrgency || 'none');
+                              setEditRiskResolution(client.riskResolution || 'none');
+                              setEditRiskComment(client.riskComment || '');
+
+                              // prefill note
+                              if (!clientNotes[client.id]) {
+                                setClientNotes(prev => ({ ...prev, [client.id]: client.notes }));
+                              }
+                            }}
+                            className={`cursor-pointer transition border-b border-gray-100 last:border-none ${
+                              isSelected ? 'bg-gray-50/80 shadow-sm' : 'hover:bg-gray-50/50'
+                            }`}
+                          >
+                          <td className="p-3 flex items-center space-x-2.5">
+                            <input 
+                              type="checkbox" 
+                              className="rounded text-black focus:ring-black border-gray-300"
+                              checked={selectedClientIds.has(client.id)}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                const newSet = new Set(selectedClientIds);
+                                if (e.target.checked) {
+                                  newSet.add(client.id);
+                                } else {
+                                  newSet.delete(client.id);
+                                }
+                                setSelectedClientIds(newSet);
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            <div className="h-8 w-8 rounded-full bg-slate-100 font-bold text-slate-700 text-xs flex items-center justify-center overflow-hidden border border-gray-200 shrink-0">
+                              {client.avatarUrl ? (
+                                <img src={client.avatarUrl} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              ) : (
+                                client.parentName?.[0] || '?'
+                              )}
+                            </div>
+                            <div>
+                              <div className="font-bold text-gray-900 text-[11px] leading-tight">{client.parentName}</div>
+                              <div className="text-[10px] text-gray-500 font-medium leading-tight mt-0.5">{client.parentPhone}</div>
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <div className="font-bold text-gray-900 text-[11px] leading-tight">{client.childSurname} {client.childName}</div>
+                            <div className="text-[10px] text-gray-500 font-medium leading-tight mt-0.5">{client.childBirthYear} г.р.</div>
+                          </td>
+                          <td className="p-3">
+                            <div className="font-bold text-gray-900 text-[11px] leading-tight">{client.groupName || 'Без группы'}</div>
+                            {client.coachName && <div className="text-[10px] text-gray-500 font-medium leading-tight mt-0.5">Тренер: {client.coachName}</div>}
+                          </td>
+                          <td className="p-3 text-[11px] font-bold text-gray-900">
+                             Импульс Арена
+                          </td>
+                            <td className="p-3">
+                              <div className="flex flex-col gap-1 items-start">
+                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide capitalize ${
+                                  client.status === 'active' ? 'bg-emerald-50 text-emerald-600' :
+                                  client.status === 'left' ? 'bg-red-50 text-red-600' :
+                                  client.status === 'inactive' ? 'bg-gray-100 text-gray-500' :
+                                  client.status === 'trial' ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-600'
+                                }`}>
+                                  {client.status === 'active' ? 'Активный' :
+                                   client.status === 'left' ? 'Завершил' :
+                                   client.status === 'inactive' ? 'Отвал' :
+                                   client.status === 'trial' ? 'Пробный период' : 'На паузе'}
+                                </span>
+                                {client.relationshipRisk && client.relationshipRisk !== 'none' && (
+                                  <span className={`px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase tracking-wide flex items-center shadow-sm ${client.relationshipRisk === 'high' ? 'bg-red-500 text-white animate-pulse' : 'bg-orange-100 border border-orange-200 text-orange-700'}`}>
+                                    <span className="mr-0.5">!</span> Риск оттока
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-3">
+                              <div className="font-bold text-gray-900 text-[11px] truncate max-w-[100px]">{client.abonement === 'none' ? '-' : (client.abonement === 'basic' ? 'Базовый' : 'Стандарт')}</div>
+                              {client.status === 'paused' ? (
+                                <div className="text-[10px] text-amber-500 font-medium">заморожен</div>
+                              ) : (
+                                <div className="text-[10px] text-gray-500 font-medium">
+                                  {client.abonementExpirationDate ? `до ${new Date(client.abonementExpirationDate).toLocaleDateString('ru-RU')}` : 'нет данных'}
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-3">
+                              <span className={`text-[10px] ${
+                                client.abonementStatus === 'Оплачено' ? 'text-emerald-500 font-medium' : 'text-amber-500 font-medium'
+                              }`}>
+                                {client.abonementStatus || 'Не оплачено'}
+                              </span>
+                              <div className="text-[9px] text-gray-400 mt-0.5">
+                                {client.abonementSessionsLeft !== undefined ? `Остаток: ${client.abonementSessionsLeft} зан.` : ''}
+                              </div>
+                            </td>
+                            <td className="p-3 text-gray-400">
+                               <button 
+                                 className="hover:text-black p-1 hover:bg-gray-100 rounded transition-colors"
+                                 onClick={(e) => {
+                                   e.stopPropagation();
+                                   setSelectedClientId(client.id);
+                                   
+                                   // Sync edit states
+                                   setEditClientId(client.id);
+                                   setEditParentName(client.parentName || '');
+                                   setEditChildName(client.childName || '');
+                                   setEditChildSurname(client.childSurname || '');
+                                   setEditChildAge(client.childAge || 0);
+                                   setEditChildYear(client.childBirthYear || 2018);
+                                   setEditPhone(client.parentPhone || '');
+                                   setEditEmail(client.parentEmail || '');
+                                   setEditStatus(client.status || 'active');
+                                   setEditAbonement(client.abonement || 'none');
+                                   setEditAbonementSessions(client.abonementSessionsLeft || 0);
+                                   setEditAvatarUrl(client.avatarUrl || '');
+                                   setEditGroup(client.groupName || '');
+                                   setEditRelationshipRisk(client.relationshipRisk || 'none');
+                                   setEditRelationshipNotes(client.relationshipNotes || '');
+                                   setEditRiskType(client.riskType || 'none');
+                                   setEditRiskDetails(client.riskDetails || '');
+                                   setEditRiskUrgency(client.riskUrgency || 'none');
+                                   setEditRiskResolution(client.riskResolution || 'none');
+                                   setEditRiskComment(client.riskComment || '');
+
+                                   setIsEditingRightCard(true);
+                                 }}
+                               >
+                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg>
+                               </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+              {/* Pagination stub matching image bottom */}
+              <div className="flex items-center justify-between pt-2">
+                <span className="text-[11px] text-gray-400 font-medium">Показано 1-{Math.min(filteredClients.length, 10)} из {filteredClients.length} клиентов</span>
+                <div className="flex items-center space-x-1">
+                  <button className="w-7 h-7 flex items-center justify-center bg-black text-white rounded text-[11px] font-bold shadow-sm">1</button>
+                  {filteredClients.length > 10 && <button className="w-7 h-7 flex items-center justify-center hover:bg-gray-50 rounded text-[11px] font-medium text-gray-600 transition">2</button>}
+                  {filteredClients.length > 20 && <button className="w-7 h-7 flex items-center justify-center hover:bg-gray-50 rounded text-[11px] font-medium text-gray-600 transition">3</button>}
+                  {filteredClients.length > 30 && <span className="text-gray-400 mx-1">...</span>}
+                  <button className="w-7 h-7 flex items-center justify-center hover:bg-gray-50 rounded text-[11px] font-medium text-gray-600 transition"><ChevronRight className="w-3 h-3"/></button>
+                  <div className="ml-4 flex items-center space-x-1 border-l border-gray-100 pl-4 py-1">
+                    <span className="text-[11px] text-gray-400 font-medium hidden sm:inline-block">На странице:</span>
+                    <select className="text-[11px] font-bold text-gray-700 bg-transparent border border-gray-100 rounded px-2 appearance-none outline-none cursor-pointer pr-4 hover:border-gray-200 transition" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'10\' height=\'10\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpolyline points=\'6 9 12 15 18 9\'%3E%3C/polyline%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 4px center' }}>
+                      <option>10</option>
+                      <option>20</option>
+                      <option>50</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              </div>
+            </div>
+
+            {/* Right details box - Drawer layout exactly matching Image 4 right */}
+            <div className="space-y-4 lg:col-span-1">
+              <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm text-left sticky top-4">
+                <div className="flex justify-between items-center mb-6">
+                  <button 
+                    onClick={() => {
+                      if (isEditingRightCard) {
+                        setIsEditingRightCard(false);
+                      }
+                    }}
+                    className="text-gray-400 hover:text-gray-600 text-[11px] font-bold flex items-center transition-colors hover:scale-105"
+                  >
+                    <ChevronRight className="w-4 h-4 rotate-180 mr-1" />
+                    Назад
+                  </button>
+                  {isEditingRightCard ? (
+                    <button 
+                      type="button"
+                      onClick={() => setIsEditingRightCard(false)} 
+                      className="text-gray-400 hover:text-red-500 text-[11px] font-bold flex items-center transition-colors hover:scale-105"
+                    >
+                      Отмена
+                    </button>
+                  ) : (
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        handleStartEditClient(selectedClient as any);
+                        setIsEditingRightCard(true);
+                      }} 
+                      className="text-gray-400 hover:text-gray-600 text-[11px] font-bold flex items-center transition-colors hover:scale-105"
+                    >
+                      <Edit2 className="w-3.5 h-3.5 mr-1.5" />
+                      Редактировать
+                    </button>
+                  )}
+                </div>
+
+                {selectedClient ? (
+                  isEditingRightCard ? (
+                    <form onSubmit={handleSaveInlineEdit} className="space-y-4 pt-1 text-xs">
+                      <div className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider">Профиль ученика</div>
+                      
+                      {/* Avatar Preset Section */}
+                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center gap-3">
+                        <div className="relative h-12 w-12 rounded-xl bg-white border flex items-center justify-center text-slate-700 text-lg font-extrabold overflow-hidden shrink-0 shadow-inner">
+                          {editAvatarUrl ? (
+                            <img src={editAvatarUrl} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            editChildName?.[0] || '?'
+                          )}
+                        </div>
+                        <div className="flex-1 space-y-1.5">
+                          <span className="block text-[9px] font-bold text-slate-400 uppercase">Быстрые стикеры:</span>
+                          <div className="flex flex-wrap gap-1">
+                            {PRESET_AVATARS.map((ps, i) => (
+                              <button
+                                key={i}
+                                type="button"
+                                onClick={() => {
+                                  const svgCode = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><rect width="100%" height="100%" fill="${ps.bg.includes('emerald') ? '%2310b981' : ps.bg.includes('amber') ? '%23f59e0b' : ps.bg.includes('blue') ? '%233b82f6' : ps.bg.includes('indigo') ? '%236366f1' : ps.bg.includes('rose') ? '%23f43f5e' : '%2314b8a6'}"/><text x="50%" y="65%" font-size="50" text-anchor="middle" dominant-baseline="middle">${ps.emoji}</text></svg>`;
+                                  setEditAvatarUrl(svgCode);
+                                }}
+                                className={`h-6 w-6 rounded-full ${ps.bg} border flex items-center justify-center text-xs hover:scale-105 active:scale-95 transition shadow-sm`}
+                              >
+                                {ps.emoji}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Child Fields */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-extrabold uppercase text-gray-400 tracking-wider">Фамилия ребенка</label>
+                          <input 
+                            required 
+                            type="text" 
+                            value={editChildSurname} 
+                            onChange={(e) => setEditChildSurname(e.target.value)}
+                            className="w-full p-2 bg-slate-50 rounded-lg outline-none focus:bg-white text-[11px] font-semibold text-slate-900 border"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-extrabold uppercase text-gray-400 tracking-wider">Имя ребенка</label>
+                          <input 
+                            required 
+                            type="text" 
+                            value={editChildName} 
+                            onChange={(e) => setEditChildName(e.target.value)}
+                            className="w-full p-2 bg-slate-50 rounded-lg outline-none focus:bg-white text-[11px] font-semibold text-slate-900 border"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-extrabold uppercase text-gray-400 tracking-wider">Возраст (лет)</label>
+                          <input 
+                            required 
+                            type="number" 
+                            min="3" 
+                            max="18" 
+                            value={editChildAge} 
+                            onChange={(e) => {
+                              const v = parseInt(e.target.value) || 0;
+                              setEditChildAge(v);
+                              setEditChildYear(2026 - v);
+                            }}
+                            className="w-full p-2 bg-slate-50 rounded-lg outline-none focus:bg-white text-[11px] font-semibold text-slate-900 border"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-extrabold uppercase text-gray-400 tracking-wider">Год рождения</label>
+                          <input 
+                            required 
+                            type="number" 
+                            min="2000" 
+                            max="2026" 
+                            value={editChildYear} 
+                            onChange={(e) => {
+                              const v = parseInt(e.target.value) || 2018;
+                              setEditChildYear(v);
+                              setEditChildAge(2026 - v);
+                            }}
+                            className="w-full p-2 bg-slate-50 rounded-lg outline-none focus:bg-white text-[11px] font-semibold text-slate-800 border"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Parent details */}
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-extrabold uppercase text-gray-400 tracking-wider">ФИО представителя (Родителя)</label>
+                        <input 
+                          required 
+                          type="text" 
+                          value={editParentName} 
+                          onChange={(e) => setEditParentName(e.target.value)}
+                          className="w-full p-2 bg-slate-50 rounded-lg outline-none focus:bg-white text-[11px] font-semibold text-slate-900 border"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-extrabold uppercase text-gray-400 tracking-wider">Телефон родителя</label>
+                          <input 
+                            required 
+                            type="text" 
+                            value={editPhone} 
+                            onChange={(e) => setEditPhone(e.target.value)}
+                            className="w-full p-2 bg-slate-50 rounded-lg outline-none focus:bg-white text-[11px] font-mono font-semibold text-slate-900 border"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-extrabold uppercase text-gray-400 tracking-wider">Email родителя</label>
+                          <input 
+                            type="email" 
+                            value={editEmail} 
+                            onChange={(e) => setEditEmail(e.target.value)}
+                            className="w-full p-2 bg-slate-50 rounded-lg outline-none focus:bg-white text-[11px] font-mono font-semibold text-slate-900 border"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Management Details */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-extrabold uppercase text-gray-400 tracking-wider">Группа</label>
+                          <select 
+                            value={editGroup} 
+                            onChange={(e) => setEditGroup(e.target.value)}
+                            className="w-full p-2 bg-slate-50 border rounded-lg outline-none text-[11px] font-semibold text-slate-705 appearance-none cursor-pointer"
+                            style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'10\' height=\'10\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpolyline points=\'6 9 12 15 18 9\'%3E%3C/polyline%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
+                          >
+                            <option value="">-- Без группы --</option>
+                            {availableGroups.map(name => (
+                              <option key={name} value={name}>{name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-extrabold uppercase text-gray-400 tracking-wider">Статус</label>
+                          <select 
+                            value={editStatus} 
+                            onChange={(e: any) => setEditStatus(e.target.value)}
+                            className="w-full p-2 bg-slate-50 border rounded-lg outline-none text-[11px] font-semibold text-slate-705 appearance-none cursor-pointer"
+                            style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'10\' height=\'10\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpolyline points=\'6 9 12 15 18 9\'%3E%3C/polyline%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
+                          >
+                            <option value="active">Активный</option>
+                            <option value="inactive">Отвал</option>
+                            <option value="trial">Пробное</option>
+                            <option value="paused">На паузе</option>
+                            <option value="left">Завершил</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-extrabold uppercase text-gray-400 tracking-wider">Абонемент</label>
+                          <select 
+                            value={editAbonement} 
+                            onChange={(e: any) => setEditAbonement(e.target.value)}
+                            className="w-full p-2 bg-slate-50 border rounded-lg outline-none text-[11px] font-semibold text-slate-705 appearance-none cursor-pointer"
+                            style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'10\' height=\'10\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpolyline points=\'6 9 12 15 18 9\'%3E%3C/polyline%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
+                          >
+                            <option value="none">Нет пакета</option>
+                            <option value="basic">Базовый</option>
+                            <option value="standard">Стандарт</option>
+                            <option value="premium">Премиум</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-extrabold uppercase text-gray-400 tracking-wider">Баланс занятий</label>
+                          <input 
+                            type="number" 
+                            min="0" 
+                            max="100" 
+                            value={editAbonementSessions} 
+                            onChange={(e) => setEditAbonementSessions(parseInt(e.target.value) || 0)}
+                            className="w-full p-2 bg-slate-50 rounded-lg outline-none focus:bg-white text-[11px] font-semibold text-slate-900 border"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Risk Management dropdowns in sidebar */}
+                      <div className="grid grid-cols-2 gap-2 border-t pt-2 mt-1">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-extrabold uppercase text-gray-400 tracking-wider">Анализ риска</label>
+                          <select 
+                            value={editRelationshipRisk} 
+                            onChange={(e: any) => setEditRelationshipRisk(e.target.value)}
+                            className="w-full p-2 bg-slate-50 border rounded-lg outline-none text-[11px] font-semibold text-slate-705 appearance-none cursor-pointer"
+                            style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'10\' height=\'10\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpolyline points=\'6 9 12 15 18 9\'%3E%3C/polyline%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
+                          >
+                            <option value="none">Идеально (Нет рисков)</option>
+                            <option value="low">Низкий (Есть пропуски)</option>
+                            <option value="high">Высокий риски</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-extrabold uppercase text-gray-400 tracking-wider">Тип риска</label>
+                          <select 
+                            value={editRiskType} 
+                            onChange={(e: any) => setEditRiskType(e.target.value)}
+                            className="w-full p-2 bg-slate-50 border rounded-lg outline-none text-[11px] font-semibold text-slate-705 appearance-none cursor-pointer"
+                            style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'10\' height=\'10\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpolyline points=\'6 9 12 15 18 9\'%3E%3C/polyline%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
+                          >
+                            <option value="none">Норма / Без жалоб</option>
+                            <option value="conflict">Конфликт</option>
+                            <option value="absences">Пропуски занятий</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="pt-3 flex gap-2">
+                        <button 
+                          type="submit" 
+                          className="flex-grow py-2.5 bg-black hover:bg-gray-800 text-white font-extrabold text-xs rounded-full transition shadow-md shadow-gray-200"
+                        >
+                          Сохранить изменения
+                        </button>
+                        <button 
+                          type="button" 
+                          onClick={() => setIsEditingRightCard(false)}
+                          className="py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-full transition"
+                        >
+                          Отмена
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="space-y-6">
+                      
+                      {/* Header */}
+                      <div className="flex items-start space-x-4 border-b border-gray-100 pb-5">
+                        <div className="h-14 w-14 rounded-full bg-slate-100 font-bold text-slate-700 text-lg flex items-center justify-center overflow-hidden border border-gray-200 shrink-0">
+                          {selectedClient.avatarUrl ? (
+                            <img src={selectedClient.avatarUrl} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          ) : (
+                            selectedClient.childName?.[0] || '?'
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          <h3 className="font-bold text-gray-900 text-base leading-none">{selectedClient.childSurname} {selectedClient.childName}</h3>
+                          <div className="text-xs text-gray-500 font-medium pb-1.5">{selectedClient.childBirthYear} г.р. ({selectedClient.childAge} лет)</div>
+                          <span className={`px-3 py-1 rounded-full text-[10px] font-bold tracking-wide capitalize ${
+                            selectedClient.status === 'active' ? 'bg-emerald-50 text-emerald-600' :
+                            selectedClient.status === 'left' ? 'bg-red-50 text-red-600' :
+                            selectedClient.status === 'inactive' ? 'bg-gray-100 text-gray-500' :
+                            selectedClient.status === 'trial' ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-600'
+                          }`}>
+                            {selectedClient.status === 'active' ? 'Активный' :
+                             selectedClient.status === 'left' ? 'Завершил' :
+                             selectedClient.status === 'inactive' ? 'Отвал' :
+                             selectedClient.status === 'trial' ? 'Пробный период' : 'На паузе'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Summary Info */}
+                      <div className="grid grid-cols-2 gap-y-4 gap-x-2 text-[11px]">
+                        <div>
+                          <div className="text-gray-400 font-medium mb-1">Родитель</div>
+                          <div className="font-bold text-gray-900">{selectedClient.parentName}</div>
+                          <div className="text-gray-500 font-medium mt-0.5">{selectedClient.parentPhone}</div>
+                          <div className="flex items-center space-x-2 mt-1.5">
+                            <button className="text-emerald-500 hover:text-emerald-600 transition-colors">
+                              <Phone className="w-3.5 h-3.5" />
+                            </button>
+                            <button className="text-blue-500 hover:text-blue-600 transition-colors">
+                              <span className="font-bold cursor-pointer text-xs">💬</span>
+                            </button>
+                          </div>
+                        </div>
+                        <div className="space-y-4 text-[11px]">
+                          <div>
+                            <div className="text-gray-400 font-medium mb-1">Филиал</div>
+                            <div className="font-bold text-gray-900">Импульс Арена</div>
+                          </div>
+                          <div>
+                            <div className="text-gray-400 font-medium mb-1">Группа</div>
+                            <div className="font-bold text-gray-900">{selectedClient.groupName || 'Без группы'}</div>
+                            {selectedClient.coachName && (
+                              <div className="text-gray-500 font-medium mt-0.5 text-[10px]">Тренер: {selectedClient.coachName}</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Explicit Risk Display area below Summary Info */}
+                      {selectedClient.relationshipRisk && selectedClient.relationshipRisk !== 'none' && (
+                        <div className={`my-4 p-3 rounded-xl border flex flex-col space-y-1.5 shadow-sm text-[11px] ${selectedClient.relationshipRisk === 'high' ? 'bg-red-50 border-red-200' : 'bg-orange-50 border-orange-200'}`}>
+                           <div className="flex justify-between items-center w-full pb-1 border-b border-white/40">
+                             <span className={`font-bold flex items-center space-x-1.5 ${selectedClient.relationshipRisk === 'high' ? 'text-red-700' : 'text-orange-700'}`}>
+                               <span className="w-4 h-4 flex items-center justify-center rounded-full bg-white font-extrabold text-[9px] shadow-sm">!</span>
+                               <span>Учёт риска оттока</span>
+                             </span>
+                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${selectedClient.relationshipRisk === 'high' ? 'bg-red-600 text-white animate-pulse' : 'bg-orange-200 text-orange-900'}`}>
+                               {selectedClient.relationshipRisk === 'high' ? 'Высокий риск' : 'Низкий риск'}
+                             </span>
+                           </div>
+                           {selectedClient.riskType && selectedClient.riskType !== 'none' && (
+                             <div className="flex justify-between pt-1">
+                               <span className="text-gray-500 font-medium">Тип риска:</span>
+                               <span className="font-bold text-gray-900">
+                                  {selectedClient.riskType === 'conflict' ? 'Взаимоотношения/Конфликт' : 'Пропуски занятий'}
+                               </span>
+                             </div>
+                           )}
+                           {selectedClient.riskComment && (
+                             <div className="mt-1 pb-1 text-[11px] text-gray-700 leading-snug italic">
+                               "{selectedClient.riskComment}"
+                             </div>
+                           )}
+                        </div>
+                      )}
+
+                      {/* Quick navigation indicators tabs */}
+                      <div className="flex space-x-4 border-b border-gray-100 overflow-x-auto pb-[1px]">
+                        {[
+                          { id: 'info', label: 'Информация' },
+                          { id: 'abos', label: 'Абонементы' },
+                          { id: 'visits', label: 'Посещения' },
+                          { id: 'payments', label: 'Платежи' },
+                          { id: 'history', label: 'История' }
+                        ].map((tb) => (
+                          <button
+                            key={tb.id}
+                            onClick={() => setClientDetailTab(tb.id as any)}
+                            className={`pb-3 font-semibold text-[11px] whitespace-nowrap border-b-2 transition-colors ${
+                              clientDetailTab === tb.id ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-400 hover:text-gray-600'
+                            }`}
+                          >
+                            {tb.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Detail views */}
+                      <div className="text-[11px] text-gray-700 min-h-[140px] pt-1">
+                        
+                        {(clientDetailTab === 'info' || clientDetailTab === 'history') && (
+                          <div className="space-y-4">
+                            <div className="flex justify-between items-center">
+                              <span className="text-gray-500 font-medium w-1/2 flex items-center"><Calendar className="w-3.5 h-3.5 mr-2 text-gray-400" /> Дата зачисления</span>
+                              <span className="font-bold text-gray-900 flex-1 ml-4 text-right">По умолчанию</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-gray-500 font-medium w-1/2 flex items-center"><span className="w-3.5 mr-2 flex justify-center text-gray-400 font-bold">C</span> Статус</span>
+                              <span className="font-bold text-emerald-600 flex-1 ml-4 text-right">{selectedClient.status === 'active' ? 'Активный' : (selectedClient.status === 'paused' ? 'На паузе' : 'Уточнить')}</span>
+                            </div>
+                            <div className="flex justify-between items-start pt-1">
+                              <span className="text-gray-500 font-medium w-1/2 flex items-center mt-0.5"><BookOpen className="w-3.5 h-3.5 mr-2 text-gray-400" /> Абонемент</span>
+                              <div className="flex-1 ml-4 text-right">
+                                <span className="font-bold text-gray-900 block">{selectedClient.abonement === 'none' ? 'Нет пакета' : (selectedClient.abonement === 'basic' ? 'Базовый' : 'Стандарт')}</span>
+                                <span className="text-[9px] text-gray-400 font-medium">
+                                  {selectedClient.abonementExpirationDate ? `до ${new Date(selectedClient.abonementExpirationDate).toLocaleDateString('ru-RU')}` : ''}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex justify-between items-center pt-2">
+                              <span className="text-gray-500 font-medium w-1/2 flex items-center"><span className="w-3.5 mr-2 flex justify-center text-gray-400 font-bold">$</span> Оплата</span>
+                              <div className="flex flex-1 justify-end items-center ml-4">
+                                <span className="font-bold text-emerald-500">{selectedClient.abonementStatus || 'Не оплачено'}</span>
+                              </div>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-gray-500 font-medium w-1/2 flex items-center"><span className="w-3.5 mr-2 flex justify-center text-gray-400 font-bold">⏸️</span> Заморозки</span>
+                              <span className="font-bold text-gray-900 flex-1 ml-4 text-right">{selectedClient.status === 'paused' ? 'Да' : 'Нет'}</span>
+                            </div>
+                            
+                            <div className="pt-2 border-t border-gray-100 flex items-start mt-4">
+                               <span className="text-gray-500 font-medium w-1/3 flex items-center mt-0.5"><FileText className="w-3.5 h-3.5 mr-2 text-gray-400" /> Примечание</span>
+                               <div className="flex-1 text-right text-gray-900 font-medium">
+                                 Любит играть в защите, левша.
+                               </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {clientDetailTab === 'abos' && (
+                          <div className="space-y-2">
+                            <div><strong>Абонемент:</strong> {selectedClient.abonement === 'none' ? 'Нет' : selectedClient.abonement}</div>
+                            <div><strong>Баланс занятий:</strong> {selectedClient.abonementSessionsLeft} тренировок</div>
+                            <div><strong>Срок действия:</strong> {selectedClient.abonementExpirationDate || '—'}</div>
+                            
+                            {selectedClient.status === 'trial' && (
+                              <div className="p-3.5 bg-orange-50 text-orange-850 rounded-xl space-y-2 mt-2 border border-orange-150">
+                                <h5 className="font-bold">Выставить счет на оплату</h5>
+                                <p className="text-[10px] leading-relaxed">Отправьте платежную форму ЮKassa родителю в Личный кабинет:</p>
+                                <div className="grid grid-cols-2 gap-1 px-1">
+                                  <button onClick={() => handleSendBilling(selectedClient, 'Абонемент 12 зан.', 5400)} className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold p-1 rounded font-mono text-[9px] transition">12 зан. — 5400Р</button>
+                                  <button onClick={() => handleSendBilling(selectedClient, 'Абонемент 8 зан.', 4000)} className="bg-slate-900 hover:bg-slate-800 text-white font-bold p-1 rounded font-mono text-[9px] transition">8 зан. — 4000Р</button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {clientDetailTab === 'visits' && (
+                          <div className="space-y-1">
+                            <strong>Последняя активность:</strong>
+                            {selectedClient.attendance.length === 0 ? (
+                              <p className="text-gray-400 italic">Нет зарегистрированных посещений.</p>
+                            ) : (
+                              selectedClient.attendance.map((t, i) => (
+                                <div key={i} className="flex justify-between items-center bg-slate-50 p-1.5 rounded text-[11px]">
+                                  <span className="font-mono font-bold">{t.date}</span>
+                                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                    t.status === 'present' ? 'bg-emerald-100 text-emerald-800' : 'bg-orange-100 text-orange-800'
+                                  }`}>
+                                    {t.status === 'present' ? 'Был' : 'Пропуск'}
+                                  </span>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )}
+
+                        {clientDetailTab === 'payments' && (
+                          <div className="space-y-1">
+                            <strong>Детали платежных поручений:</strong>
+                            {selectedClient.payments.length === 0 ? (
+                              <p className="text-gray-400 italic">Транзакций не обнаружено.</p>
+                            ) : (
+                              selectedClient.payments.map((p, i) => (
+                                <div key={i} className="flex justify-between p-1.5 bg-slate-50 rounded text-[11px]">
+                                  <span>{p.item}</span>
+                                  <span className="font-mono font-bold text-slate-850">{p.amount} Р</span>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )}
+
+                      </div>
+
+                      {/* Text Area Note matches Image 4 exact right */}
+                      <div className="space-y-2 border-t pt-3">
+                        <label className="block text-[10px] font-extrabold uppercase text-gray-400 tracking-wider">Рабочая заметка менеджера:</label>
+                        <textarea
+                          value={clientNotes[selectedClient.id] || ''}
+                          onChange={(e) => setClientNotes(prev => ({ ...prev, [selectedClient.id]: e.target.value }))}
+                          className="w-full font-mono p-2.5 bg-slate-100 focus:bg-white text-[11px] border focus:border-emerald-500 rounded-xl outline-none min-h-[70px] resize-none text-slate-700 leading-normal"
+                          placeholder="Например, левша, любит играть в защите..."
+                        />
+                        <button 
+                          onClick={() => handleSaveNotes(selectedClient.id, clientNotes[selectedClient.id] || '')}
+                          className="w-full py-1.5 bg-slate-950 text-white font-bold text-xs rounded-lg flex items-center justify-center space-x-1"
+                        >
+                          <Save className="w-3.5 h-3.5" />
+                          <span>Сохранить заметку</span>
+                        </button>
+                      </div>
+
+                      {/* Help actions */}
+                      <div className="flex gap-2 pt-1 border-t">
+                        <button 
+                          onClick={() => handleStartMaxCall(selectedClient)}
+                          className="flex-1 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 text-center rounded font-extrabold text-[11px] flex items-center justify-center space-x-1.5 transition border border-indigo-200"
+                        >
+                          <Phone className="w-3.5 h-3.5" />
+                          <span>Позвонить в MAX</span>
+                        </button>
+                        <button 
+                          onClick={() => {
+                            const cleanPhone = selectedClient.parentPhone.replace(/\D/g, '');
+                            let whatsappPhone = cleanPhone;
+                            if (whatsappPhone.startsWith('8') && whatsappPhone.length === 11) {
+                              whatsappPhone = '7' + whatsappPhone.substring(1);
+                            } else if (whatsappPhone.startsWith('9') && whatsappPhone.length === 10) {
+                              whatsappPhone = '7' + whatsappPhone;
+                            }
+                            const msg = `Здравствуйте, ${selectedClient.parentName}! Беспокоит футбольный клуб "${schoolName || 'АМКАР ЮНИОР'}". Хотели бы уточнить детали относительно занятий ${selectedClient.childName}.`;
+                            const url = `https://api.whatsapp.com/send?phone=${whatsappPhone}&text=${encodeURIComponent(msg)}`;
+                            window.open(url, '_blank');
+                          }}
+                          className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-center rounded font-bold text-[11px] flex items-center justify-center space-x-1 transition"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                          <span>Чат WhatsApp</span>
+                        </button>
+                      </div>
+
+                      <div className="pt-2 border-t mt-1">
+                        <button
+                          onClick={async () => {
+                            const confirmDelete = window.confirm(`⚠️ ВНИМАНИЕ: Вы действительно хотите окончательно УДАЛИТЬ ученика "${selectedClient.childSurname} ${selectedClient.childName}" из базы данных школы?`);
+                            if (confirmDelete) {
+                              const targetId = selectedClient.id;
+                              const remaining = clients.filter(c => c.id !== targetId);
+                              await deleteClient(targetId);
+                              alert('Профиль ученика успешно удален из базы данных.');
+                              if (remaining.length > 0) {
+                                setSelectedClientId(remaining[0].id);
+                              } else {
+                                setSelectedClientId('');
+                              }
+                            }
+                          }}
+                          className="w-full py-1.5 bg-red-50 hover:bg-red-100 text-red-650 font-bold text-[11px] rounded transition flex items-center justify-center space-x-1 border border-red-200"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Удалить профиль ученика</span>
+                        </button>
+                      </div>
+
+                    </div>
+                  )
+                ) : (
+                  <div className="text-gray-400 text-center py-8">Выберите клиента для отображения подробного досье.</div>
+                )}
+              </div>
+            </div>
+
+          </div>
+          </div>
+        )}
+
+        {/* MANAGER ANALYTICS & BONUSES VIEW */}
+        {activeTab === 'hq_analytics' && (
+          <div className="space-y-6">
+            <div className="bg-slate-900 rounded-xl p-6 border border-slate-800 text-white flex flex-wrap gap-6 items-center justify-between">
+              <div className="text-left space-y-1">
+                <div className="text-2xl font-black text-emerald-500">
+                  {clients.reduce((acc, c) => acc + (c.managerBonusAccrued || 0), 0)} ₽
+                </div>
+                <div className="text-[10px] text-gray-400 font-mono tracking-wider uppercase">Общая премия менеджера</div>
+              </div>
+              <div className="h-8 w-[1px] bg-slate-800"></div>
+              <div className="text-left space-y-1">
+                <div className="text-xl font-black text-slate-200">
+                  {clients.filter(c => c.status === 'active' || c.status === 'trial').length}
+                </div>
+                <div className="text-[10px] text-gray-400 font-mono tracking-wider uppercase">Активных клиентов в работе</div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl p-6 border border-gray-105 shadow-sm space-y-4">
+              <div className="flex justify-between items-center flex-wrap gap-2">
+                <h3 className="font-extrabold text-slate-900 text-sm text-left">Учет рисков взаимоотношений и лояльности клиентов</h3>
+                <span className="text-[10px] bg-indigo-50 text-indigo-700 font-bold px-2 py-1 rounded">Контроль оттока</span>
+              </div>
+              <div className="overflow-x-auto text-left">
+                <table className="w-full text-xs text-slate-700 border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-gray-400 font-semibold uppercase tracking-wider border-b">
+                      <th className="p-3">Клиент / Группа</th>
+                      <th className="p-3">Текущий Анализ Риска</th>
+                      <th className="p-3">Срочность решения</th>
+                      <th className="p-3">Ход решения / Результат</th>
+                      <th className="p-3">Начисленная Премия Менеджера</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {clients.map((client, idx) => {
+                      const hasActiveRisk = client.riskType && client.riskType !== 'none';
+                      
+                      let riskTypeBadge = <span className="text-gray-400">Нет рисков</span>;
+                      if (client.riskType === 'conflict') {
+                        riskTypeBadge = (
+                          <div className="space-y-0.5">
+                            <span className="px-2 py-0.5 bg-rose-50 border border-rose-150 text-rose-800 rounded font-bold text-[10px]">Конфликт</span>
+                            {client.riskDetails && <div className="text-[11px] font-medium text-slate-600">С кем: {client.riskDetails}</div>}
+                          </div>
+                        );
+                      } else if (client.riskType === 'absences') {
+                        riskTypeBadge = (
+                          <div className="space-y-0.5">
+                            <span className="px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-800 rounded font-bold text-[10px]">Пропуски (&gt;2)</span>
+                          </div>
+                        );
+                      }
+
+                      let urgencyBadge = <span className="text-gray-450 text-[11px]">Низкая</span>;
+                      if (client.riskUrgency === 'urgent') {
+                        urgencyBadge = <span className="px-2 py-0.5 bg-red-500 text-white rounded font-bold text-[9px] uppercase tracking-wide animate-pulse">СРОЧНО!</span>;
+                      } else if (client.riskUrgency === 'intervene') {
+                        urgencyBadge = <span className="px-2 py-0.5 bg-orange-100 border border-orange-200 text-orange-800 rounded font-bold text-[9px] uppercase tracking-wide">Вмешаться</span>;
+                      }
+
+                      let resolutionBadge = <span className="text-slate-400">-</span>;
+                      if (client.riskResolution && client.riskResolution !== 'none') {
+                        const labelsMap: any = {
+                          left: 'Уходит отток',
+                          thinking: 'Думает / сомнения',
+                          renewed: 'Абонемент продлен',
+                          refused: 'Отказ от занятий',
+                          resolved: 'Решено штатно',
+                          reconciled: 'Конфликт исчерпан'
+                        };
+                        const classMap: any = {
+                          left: 'bg-red-50 text-red-750 border-red-200',
+                          thinking: 'bg-amber-50 text-amber-700 border-amber-200',
+                          renewed: 'bg-emerald-50 text-emerald-700 border-emerald-150',
+                          refused: 'bg-rose-50 text-rose-700 border-rose-200',
+                          resolved: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+                          reconciled: 'bg-teal-50 text-teal-700 border-teal-200'
+                        };
+                        resolutionBadge = (
+                          <span className={`px-2 py-0.5 border rounded font-bold text-[10px] ${classMap[client.riskResolution] || 'bg-slate-100'}`}>
+                            {labelsMap[client.riskResolution] || client.riskResolution}
+                          </span>
+                        );
+                      } else if (hasActiveRisk) {
+                        resolutionBadge = <span className="px-2 py-0.5 bg-blue-50 border border-blue-200 text-blue-700 rounded font-bold text-[10px]">В работе</span>;
+                      }
+
+                      return (
+                        <tr key={idx} className="hover:bg-slate-50/50 transition duration-150">
+                          <td className="p-3">
+                            <div className="font-bold text-slate-800">{client.childSurname} {client.childName}</div>
+                            <div className="text-[10px] text-gray-500 font-mono mt-0.5">{client.groupName || 'Без группы'} • {client.parentName}</div>
+                          </td>
+                          <td className="p-3">
+                            {riskTypeBadge}
+                            {client.riskComment && (
+                              <div className="mt-1 text-[10px] text-slate-500 italic max-w-[220px] bg-slate-50 p-1.5 rounded border border-slate-100 leading-normal">
+                                {client.riskComment}
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-3 font-semibold">
+                            {urgencyBadge}
+                          </td>
+                          <td className="p-3">
+                            {resolutionBadge}
+                          </td>
+                          <td className="p-3 font-semibold text-emerald-600">
+                            {client.managerBonusAccrued ? `+${client.managerBonusAccrued} ₽` : '-'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
+
+      {/* Add Client (Lead) modal drawer dialog */}
+      {isAddClientOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden border shadow-xl">
+            <div className="p-5 bg-slate-900 text-white flex justify-between items-center text-left">
+              <div>
+                <h3 className="font-extrabold text-white text-sm">Создание новой входящей заявки</h3>
+                <p className="text-[10px] text-gray-400 mt-0.5">Ручной ввод лида при входящем звонке / визите.</p>
+              </div>
+              <button onClick={() => setIsAddClientOpen(false)} className="text-white hover:text-slate-300 font-bold">✕</button>
+            </div>
+
+            <form onSubmit={handleAddNewLead} className="p-6 space-y-4 text-left font-sans text-xs">
+              <div className="space-y-1">
+                <label className="block text-gray-500 font-semibold uppercase tracking-wider">ФИО Законного представителя (Родителя)</label>
+                <input required type="text" placeholder="Например, Иванова Мария" className="w-full p-2.5 bg-slate-50 border rounded-xl" value={newParentName} onChange={(e) => setNewParentName(e.target.value)} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3.5">
+                <div className="space-y-1">
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Имя мальчика</label>
+                  <input required type="text" placeholder="Максим" className="w-full p-2.5 bg-slate-50 border rounded-xl" value={newChildName} onChange={(e) => setNewChildName(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Фамилия мальчика</label>
+                  <input type="text" placeholder="Иванов" className="w-full p-2.5 bg-slate-50 border rounded-xl" value={newChildSurname} onChange={(e) => setNewChildSurname(e.target.value)} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3.5">
+                <div className="space-y-1">
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Возраст мальчика (4-12)</label>
+                  <input type="number" min="4" max="12" className="w-full p-2.5 bg-slate-50 border rounded-xl" value={newChildAge} onChange={(e) => {
+                    setNewChildAge(parseInt(e.target.value));
+                    setNewChildYear(2026 - parseInt(e.target.value));
+                  }} />
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Год рождения</label>
+                  <input type="number" className="w-full p-2.5 bg-slate-50 font-mono border rounded-xl" value={newChildYear} readOnly />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-gray-500 font-semibold uppercase tracking-wider">Телефон для связи</label>
+                <input required type="text" placeholder="+7 (___) ___-__-__" className="w-full p-2.5 bg-slate-50 font-mono border rounded-xl" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-gray-500 font-semibold uppercase tracking-wider">Рекламный источник</label>
+                <select className="w-full p-2.5 bg-slate-50 border rounded-xl" value={newSource} onChange={(e: any) => setNewSource(e.target.value)}>
+                  <option value="MAX">Рекламная кампания MAX</option>
+                  <option value="telegram">Канал Telegram</option>
+                  <option value="vk">Ретаргетинг ВКонтакте</option>
+                  <option value="листовка">Листовки у школ/садов</option>
+                  <option value="рекомендация">Рекомендация родителей</option>
+                </select>
+              </div>
+
+              <div className="flex space-x-3 pt-4 border-t">
+                <button type="submit" className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-xs transition">Зарегистрировать лид</button>
+                <button type="button" onClick={() => setIsAddClientOpen(false)} className="flex-1 py-3 bg-slate-200 text-slate-700 rounded-xl">Отмена</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Client modal dialog */}
+      {isEditClientOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden border shadow-xl my-8">
+            <div className="p-5 bg-slate-900 text-white flex justify-between items-center text-left">
+              <div>
+                <h3 className="font-extrabold text-white text-sm">Редактирование профиля ученика</h3>
+                <p className="text-[10px] text-gray-400 mt-0.5">Полное обновление регистрационных данных и аватара футболиста.</p>
+              </div>
+              <button type="button" onClick={() => setIsEditClientOpen(false)} className="text-white hover:text-slate-300 font-bold">✕</button>
+            </div>
+
+            <form onSubmit={handleSaveClientEdit} className="p-6 space-y-4 text-left font-sans text-xs">
+              
+              {/* Avatar Section */}
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3.5">
+                <label className="block text-gray-500 font-bold uppercase tracking-wider">Фото / Аватар футболиста</label>
+                <div className="flex items-center space-x-4">
+                  <div className="relative group h-16 w-16 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-700 text-2xl font-extrabold overflow-hidden shrink-0 shadow-inner">
+                    {editAvatarUrl ? (
+                      <img src={editAvatarUrl} alt="Аватар" className="w-full h-full object-cover" />
+                    ) : (
+                      editChildName?.[0] || '?'
+                    )}
+                    <label className="absolute inset-0 bg-black/40 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition">
+                      <Camera className="w-5 h-5" />
+                      <input type="file" accept="image/*" onChange={handleAvatarFileChange} className="hidden" />
+                    </label>
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <label className="inline-flex items-center px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg cursor-pointer font-bold transition text-[10px] border border-emerald-200">
+                        <Upload className="w-3 h-3 mr-1" />
+                        Загрузить файл
+                        <input type="file" accept="image/*" onChange={handleAvatarFileChange} className="hidden" />
+                      </label>
+                      {editAvatarUrl && (
+                        <button type="button" onClick={() => setEditAvatarUrl('')} className="px-2 py-1.5 text-[10px] text-rose-600 hover:bg-rose-50 rounded-lg font-bold transition">
+                          Сбросить
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-400">Форматы: PNG, JPG, GIF. До 5МБ.</p>
+                  </div>
+                </div>
+
+                {/* Preset circles */}
+                <div className="space-y-1.5 pt-1.5 border-t border-slate-200/60 text-left">
+                  <span className="block text-[10px] font-semibold text-slate-400">Или выберите быстрый футбольный стикер:</span>
+                  <div className="flex flex-wrap gap-2">
+                    {PRESET_AVATARS.map((ps, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => selectPresetAvatar(ps)}
+                        className={`h-8 w-8 rounded-full ${ps.bg} border flex items-center justify-center text-base hover:scale-105 active:scale-95 transition shadow-sm`}
+                        title="Нажмите, чтобы применить"
+                      >
+                        {ps.emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Child Info Block */}
+              <div className="grid grid-cols-2 gap-3.5">
+                <div className="space-y-1">
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Имя воспитанника *</label>
+                  <input required type="text" placeholder="Имя" className="w-full p-2.5 bg-slate-50 border rounded-xl focus:bg-white focus:ring-1 focus:ring-emerald-500 outline-none" value={editChildName} onChange={(e) => setEditChildName(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Фамилия воспитанника *</label>
+                  <input required type="text" placeholder="Фамилия" className="w-full p-2.5 bg-slate-50 border rounded-xl focus:bg-white focus:ring-1 focus:ring-emerald-500 outline-none" value={editChildSurname} onChange={(e) => setEditChildSurname(e.target.value)} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3.5">
+                <div className="space-y-1">
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Возраст (лет) *</label>
+                  <input required type="number" min="3" max="17" className="w-full p-2.5 bg-slate-50 border rounded-xl focus:bg-white focus:ring-1 focus:ring-emerald-500 outline-none" value={editChildAge} onChange={(e) => {
+                    const val = parseInt(e.target.value) || 0;
+                    setEditChildAge(val);
+                    setEditChildYear(2026 - val);
+                  }} />
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Год рождения *</label>
+                  <input required type="number" min="2000" max="2025" className="w-full p-2.5 bg-slate-50 font-mono border rounded-xl focus:bg-white focus:ring-1 focus:ring-emerald-500 outline-none" value={editChildYear} onChange={(e) => {
+                    const yr = parseInt(e.target.value) || 2018;
+                    setEditChildYear(yr);
+                    setEditChildAge(2026 - yr);
+                  }} />
+                </div>
+              </div>
+
+              {/* Parents details */}
+              <div className="space-y-1">
+                <label className="block text-gray-500 font-semibold uppercase tracking-wider">ФИО Законного представителя (Родителя) *</label>
+                <input required type="text" placeholder="Иванова Мария Петровна" className="w-full p-2.5 bg-slate-50 border rounded-xl focus:bg-white focus:ring-1 focus:ring-emerald-500 outline-none" value={editParentName} onChange={(e) => setEditParentName(e.target.value)} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3.5">
+                <div className="space-y-1">
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Телефон родителя *</label>
+                  <input required type="text" placeholder="+7 (999) 111-22-33" className="w-full p-2.5 bg-slate-50 font-mono border rounded-xl focus:bg-white focus:ring-1 focus:ring-emerald-500 outline-none" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Email родителя</label>
+                  <input type="email" placeholder="parent@mail.ru" className="w-full p-2.5 bg-slate-50 font-mono border rounded-xl focus:bg-white focus:ring-1 focus:ring-emerald-500 outline-none" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} />
+                </div>
+              </div>
+
+              {/* School management status and fields */}
+              <div className="border-t pt-3.5 grid grid-cols-2 gap-3.5">
+                <div className="space-y-1">
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Статус обучения</label>
+                  <select className="w-full p-2.5 bg-slate-50 border rounded-xl focus:bg-white outline-none animate-none" value={editStatus} onChange={(e: any) => setEditStatus(e.target.value)}>
+                    <option value="active">Активный ученик</option>
+                    <option value="inactive">Неактивный</option>
+                    <option value="trial">Пробное посещение</option>
+                    <option value="paused">Заморожен / пауза</option>
+                    <option value="left">Ушел / Выпускник</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Учебная группа</label>
+                  <select className="w-full p-2.5 bg-slate-50 border rounded-xl focus:bg-white outline-none text-slate-700 font-medium animate-none" value={editGroup} onChange={(e) => setEditGroup(e.target.value)}>
+                    <option value="">-- Без группы --</option>
+                    {availableGroups.map(name => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Abonement details */}
+              <div className="grid grid-cols-2 gap-3.5 pb-2">
+                <div className="space-y-1">
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Пакет занятий (абонемент)</label>
+                  <select className="w-full p-2.5 bg-slate-50 border rounded-xl focus:bg-white outline-none" value={editAbonement} onChange={(e: any) => setEditAbonement(e.target.value)}>
+                    <option value="none">Нет активного пакета</option>
+                    <option value="12_sessions">Пакет на 12 тренировок</option>
+                    <option value="8_sessions">Пакет на 8 тренировок</option>
+                    <option value="4_sessions">Пакет на 4 тренировки</option>
+                    <option value="1_session">Разовое пробное занятие</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Баланс занятий (остаток)</label>
+                  <input type="number" min="0" max="100" className="w-full p-2.5 bg-slate-50 font-mono border rounded-xl focus:bg-white focus:ring-1 focus:ring-emerald-500 outline-none" value={editAbonementSessions} onChange={(e) => setEditAbonementSessions(parseInt(e.target.value) || 0)} />
+                </div>
+              </div>
+
+              {/* Relationship Risk details */}
+              <div className="border-t border-slate-200/50 pt-3.5 space-y-4 pb-2 text-left">
+                <h4 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider text-emerald-600 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Учет рисков взаимоотношений и конфликтов
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-1">
+                    <label className="block text-gray-550 font-bold uppercase tracking-wider text-[9px]">Тип возникающего риска</label>
+                    <select 
+                      className="w-full p-2.5 bg-slate-50 border rounded-xl focus:bg-white outline-none text-slate-700 font-medium text-xs" 
+                      value={editRiskType} 
+                      onChange={(e: any) => setEditRiskType(e.target.value)}
+                    >
+                      <option value="none">Нет рисков / Норма</option>
+                      <option value="conflict">Конфликт (указывается с кем)</option>
+                      <option value="absences">Пропуски (более 2-х занятий)</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-gray-550 font-bold uppercase tracking-wider text-[9px]">Срочность вмешательства</label>
+                    <select 
+                      className="w-full p-2.5 bg-slate-50 border rounded-xl focus:bg-white outline-none text-slate-700 font-medium text-xs" 
+                      value={editRiskUrgency} 
+                      onChange={(e: any) => setEditRiskUrgency(e.target.value)}
+                    >
+                      <option value="none">Решение в штатном режиме</option>
+                      <option value="intervene">Вмешаться</option>
+                      <option value="urgent">СРОЧНО</option>
+                    </select>
+                  </div>
+                </div>
+
+                {editRiskType === 'conflict' && (
+                  <div className="space-y-1 animate-fadeIn">
+                    <label className="block text-gray-550 font-bold uppercase tracking-wider text-[9px]">С кем конкретно возник конфликт?</label>
+                    <input 
+                      type="text" 
+                      placeholder="Например: с тренером Василием, с родителем другого ученика" 
+                      className="w-full p-2.5 bg-slate-50 border rounded-xl focus:bg-white text-xs text-slate-800 outline-none" 
+                      value={editRiskDetails} 
+                      onChange={(e) => setEditRiskDetails(e.target.value)} 
+                    />
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-1">
+                    <label className="block text-gray-550 font-bold uppercase tracking-wider text-[9px]">Результат решения</label>
+                    <select 
+                      className="w-full p-2.5 bg-slate-50 border rounded-xl focus:bg-white outline-none text-slate-700 font-medium text-xs" 
+                      value={editRiskResolution} 
+                      onChange={(e: any) => setEditRiskResolution(e.target.value)}
+                    >
+                      <option value="none">В процессе решения</option>
+                      <option value="left">Уходит</option>
+                      <option value="thinking">Думает</option>
+                      <option value="renewed">Продлил</option>
+                      <option value="refused">Отказ</option>
+                      <option value="resolved">Решено</option>
+                      <option value="reconciled">Помирились</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-gray-550 font-bold uppercase tracking-wider text-[9px]">Уровень риска для аналитики</label>
+                    <select 
+                      className="w-full p-2.5 bg-slate-50 border rounded-xl focus:bg-white outline-none text-slate-700 font-medium text-xs" 
+                      value={editRelationshipRisk} 
+                      onChange={(e: any) => setEditRelationshipRisk(e.target.value)}
+                    >
+                      <option value="none">Нормальный (Рисков нет)</option>
+                      <option value="low">Низкий уровень риска</option>
+                      <option value="high">Высокий уровень риска</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-gray-550 font-bold uppercase tracking-wider text-[9px]">Активный комментарий к ситуации</label>
+                  <textarea 
+                    rows={2} 
+                    placeholder="Запишите ход переговоров, действия по решению ситуации и текущие заметки..." 
+                    className="w-full p-2.5 bg-slate-50 border rounded-xl focus:bg-white focus:ring-1 focus:ring-emerald-500 outline-none resize-none leading-relaxed text-xs text-slate-800 placeholder:text-gray-400" 
+                    value={editRiskComment} 
+                    onChange={(e) => setEditRiskComment(e.target.value)} 
+                  />
+                </div>
+              </div>
+
+              <div className="flex space-x-3 pt-4 border-t border-slate-200/50">
+                <button type="submit" className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-xs flex items-center justify-center space-x-1 transition shadow-sm">
+                  <Save className="w-4 h-4" />
+                  <span>Сохранить изменения</span>
+                </button>
+                <button type="button" onClick={() => setIsEditClientOpen(false)} className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-750 font-semibold rounded-xl text-xs transition border">
+                  Выйти без сохранения
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MAX Messenger Voice Calling Immersive HUD Overlay */}
+      {isMaxCallingOpen && (
+        <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-300">
+          <div className="relative bg-slate-900 border border-slate-800 text-white w-full max-w-sm rounded-[36px] overflow-hidden shadow-2xl p-7 flex flex-col items-center justify-between min-h-[460px] text-center animate-in zoom-in-95 duration-200">
+            
+            {/* Top pill for Branding */}
+            <div className="w-full flex justify-between items-center px-2">
+              <span className="text-[10px] font-black uppercase text-indigo-400 bg-indigo-950/80 border border-indigo-900 px-3 py-1 rounded-full flex items-center gap-1.5 tracking-widest">
+                <span className={`h-2 w-2 rounded-full bg-indigo-500 ${maxCallStatus !== 'ended' ? 'animate-pulse' : ''}`} />
+                MAX Secure Voice Call
+              </span>
+              <span className="text-[10px] font-semibold text-slate-500 font-mono">256-bit AES</span>
+            </div>
+
+            {/* Main content Area: Caller Info */}
+            <div className="my-auto space-y-6 flex flex-col items-center">
+              
+              {/* Avatar circle with pulsing glow */}
+              <div className="relative h-28 w-28 flex items-center justify-center">
+                
+                {/* Multi glow rings for active conversation */}
+                {maxCallStatus === 'active' && !isMaxCallMuted && (
+                  <>
+                    <div className="absolute inset-0 rounded-full border border-indigo-500/30 animate-ping" />
+                    <div className="absolute -inset-4 rounded-full border border-indigo-500/10 animate-pulse" />
+                  </>
+                )}
+                {maxCallStatus === 'ringing' && (
+                  <div className="absolute -inset-2 rounded-full border border-slate-500/20 animate-ping" />
+                )}
+
+                <div className="relative h-24 w-24 rounded-full bg-slate-800 border-2 border-indigo-500 shadow-xl overflow-hidden flex items-center justify-center text-white text-3xl font-black">
+                  {maxCallTargetAvatar ? (
+                    <img src={maxCallTargetAvatar} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    maxCallTargetName[0] || '?'
+                  )}
+                </div>
+              </div>
+
+              {/* Name and State description */}
+              <div className="space-y-2">
+                <h3 className="font-extrabold text-white text-lg tracking-tight px-4">{maxCallTargetName}</h3>
+                <p className="text-xs transition font-mono text-indigo-300 select-none">
+                  {maxCallTargetPhone}
+                </p>
+                
+                {/* State translation badging */}
+                <div className="pt-2 text-center">
+                  {maxCallStatus === 'connecting' && (
+                    <div className="inline-flex items-center space-x-1 py-1 px-3 bg-slate-800 border border-slate-700 rounded-full text-[10px] font-bold text-slate-300">
+                      <Loader2 className="w-3 h-3 animate-spin text-indigo-400" />
+                      <span>Инициализация MAX шлюза...</span>
+                    </div>
+                  )}
+
+                  {maxCallStatus === 'ringing' && (
+                    <div className="inline-flex items-center space-x-1.5 py-1 px-3 bg-indigo-950/40 border border-indigo-900 rounded-full text-[10px] font-bold text-indigo-300 animate-pulse">
+                      <Phone className="w-3 h-3" />
+                      <span>Идет гудок в приложении MAX...</span>
+                    </div>
+                  )}
+
+                  {maxCallStatus === 'active' && (
+                    <div className="inline-flex flex-col items-center space-y-2">
+                      <div className="inline-flex items-center space-x-1.5 py-1 px-3.5 bg-emerald-950/60 border border-emerald-900 rounded-full text-[10px] font-bold text-emerald-400">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
+                        <span>Разговор через MAX</span>
+                      </div>
+                      
+                      {/* Live Call Duration */}
+                      <span className="block text-3xl font-black tracking-widest font-mono text-white pt-1">
+                        {Math.floor(maxCallDuration / 60).toString().padStart(2, '0')}:{(maxCallDuration % 60).toString().padStart(2, '0')}
+                      </span>
+
+                      {/* Animated Soundwave bars */}
+                      {!isMaxCallMuted && (
+                        <div className="flex items-end justify-center space-x-1.5 h-6 pt-2">
+                          {[0.7, 1.4, 0.5, 1.9, 1.2, 0.6, 1.5, 0.9, 1.7, 0.4].map((delay, i) => (
+                            <div 
+                              key={i} 
+                              className="w-1 bg-gradient-to-t from-indigo-500 to-emerald-400 rounded-full animate-bounce" 
+                              style={{ 
+                                height: `${Math.random() * 20 + 4}px`, 
+                                animationDuration: `${delay}s`,
+                                animationIterationCount: 'infinite'
+                              }} 
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {maxCallStatus === 'ended' && (
+                    <div className="inline-flex items-center space-x-1.5 py-1 px-3 bg-red-950/60 border border-red-900 rounded-full text-[10px] font-bold text-red-400">
+                      <PhoneOff className="w-3 h-3" />
+                      <span>Звонок завершен</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Calling Function Actions Row */}
+            <div className="w-full space-y-6 pt-4 border-t border-slate-800/80">
+              
+              <div className="flex items-center justify-around w-full max-w-[240px] mx-auto">
+                {/* Mute Mic */}
+                <button 
+                  type="button"
+                  onClick={() => setIsMaxCallMuted(!isMaxCallMuted)}
+                  disabled={maxCallStatus === 'ended'}
+                  className={`h-11 w-11 rounded-full flex items-center justify-center transition border ${
+                    isMaxCallMuted 
+                      ? 'bg-amber-600 border-amber-500 text-white' 
+                      : 'bg-slate-800/60 hover:bg-slate-850 border-slate-700 text-slate-300'
+                  }`}
+                  title={isMaxCallMuted ? "Включить микрофон" : "Выключить микрофон"}
+                >
+                  {isMaxCallMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                </button>
+
+                {/* Speaker Toggle */}
+                <button 
+                  type="button"
+                  onClick={() => setIsMaxCallSpeaker(!isMaxCallSpeaker)}
+                  disabled={maxCallStatus === 'ended'}
+                  className={`h-11 w-11 rounded-full flex items-center justify-center transition border ${
+                    isMaxCallSpeaker 
+                      ? 'bg-indigo-600 border-indigo-500 text-white' 
+                      : 'bg-slate-800/60 hover:bg-slate-850 border-slate-700 text-slate-300'
+                  }`}
+                  title={isMaxCallSpeaker ? "Выключить динамик" : "Включить громкую связь"}
+                >
+                  <Volume2 className={`w-4 h-4 ${isMaxCallSpeaker ? 'animate-pulse' : ''}`} />
+                </button>
+              </div>
+
+              {/* End/Hangup Red Action */}
+              <div className="pb-1">
+                {maxCallStatus !== 'ended' ? (
+                  <button 
+                    type="button"
+                    onClick={() => setMaxCallStatus('ended')}
+                    className="h-14 w-14 rounded-full bg-rose-600 hover:bg-rose-700 text-white shadow-lg shadow-rose-600/30 font-black cursor-pointer flex items-center justify-center mx-auto transform hover:scale-105 active:scale-95 transition"
+                    title="Завершить вызов"
+                  >
+                    <PhoneOff className="w-6 h-6 animate-pulse" />
+                  </button>
+                ) : (
+                  <div className="h-14 flex items-center justify-center" />
+                )}
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};
