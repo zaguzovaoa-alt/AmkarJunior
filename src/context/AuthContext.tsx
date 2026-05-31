@@ -42,10 +42,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
       if (firebaseUser) {
+        setUser(firebaseUser);
         await resolveAppUser(firebaseUser);
       } else {
+        setUser(null);
         setAppUser(null);
       }
       setLoading(false);
@@ -187,6 +188,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
+    setUser(null);
+    setAppUser(null);
     await signOut(auth);
   };
 

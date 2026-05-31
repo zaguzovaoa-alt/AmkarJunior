@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { Shield, Smartphone, Loader2, Info, PhoneCall } from 'lucide-react';
+import { AmkarLogo } from './AmkarLogo';
 
 export const AuthScreen: React.FC = () => {
   const { loginWithGoogle, sendPhoneCode, verifyPhoneCode, phoneError, loading } = useAuth();
@@ -80,8 +81,8 @@ export const AuthScreen: React.FC = () => {
         className="w-full max-w-md bg-white rounded-3xl overflow-hidden shadow-2xl relative"
       >
         <div className="bg-slate-900 p-8 text-center relative border-b border-white/10">
-          <div className="w-20 h-20 bg-emerald-500 rounded-2xl mx-auto flex items-center justify-center rotate-3 mb-6 shadow-lg shadow-emerald-500/20">
-            <span className="text-white font-black text-3xl tabular-nums">10</span>
+          <div className="mx-auto flex items-center justify-center mb-6 h-28 w-24">
+            <AmkarLogo width="100%" height="100%" />
           </div>
           <h1 className="text-white text-2xl font-black uppercase tracking-tight">АМКАР ЮНИОР</h1>
           <p className="text-slate-400 text-sm mt-2 font-medium">Единая корпоративная система</p>
