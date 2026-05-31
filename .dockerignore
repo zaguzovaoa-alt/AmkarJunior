@@ -4,4 +4,3 @@ dist
 .git
 .gitignore
 .vercel
-firebase-applet-config.json
