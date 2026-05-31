@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useCRM } from '../context/CRMContext';
 import { ScheduleCalendar } from './ScheduleCalendar';
 import { 
   Calendar, Check, User, AlertCircle, TrendingUp, CreditCard, 
-  MessageSquare, BookOpen, Download, HelpCircle, Trophy, ArrowRight, Upload, Clock, Phone, Send, Eye
+  MessageSquare, BookOpen, Download, HelpCircle, Trophy, ArrowRight, Upload, Clock, Phone, Send, Eye, Edit2, Trash
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import amkarUniform from '../assets/images/amkar_uniform.jpg';
 
 interface ParentPortalProps {
   activeTab: string;
@@ -14,16 +15,89 @@ interface ParentPortalProps {
 }
 
 export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActiveTab, onOpenPayment }) => {
-  const { clients, messages, addChatMessage, uploadDocument } = useCRM();
+  const { clients, messages, addChatMessage, updateChatMessage, deleteChatMessage, uploadDocument, groups, userProfile } = useCRM();
   const [chatInput, setChatInput] = useState('');
+  const [chatVisibility, setChatVisibility] = useState<('manager' | 'trainer' | 'parent' | 'director')[]>(['manager', 'trainer', 'director']);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editMessageText, setEditMessageText] = useState('');
+  const [uploadingDoc, setUploadingDoc] = useState<'medical' | 'insurance' | null>(null);
+  const [uploadSuccessMessage, setUploadSuccessMessage] = useState<string | null>(null);
+
+  const medicalInputRef = useRef<HTMLInputElement>(null);
+  const insuranceInputRef = useRef<HTMLInputElement>(null);
   
-  // We simulate acting as "Мария Иванова" (Mom of "Максим Иванов", client: cl1)
-  const myClient = clients.find(c => c.id === 'cl1') || clients[0];
+  // Find the child associated with the currently logged-in parent
+  const myClientRaw = clients.find(c => 
+    (userProfile?.phone && c.parentPhone === userProfile.phone) || 
+    (userProfile?.email && c.parentEmail?.toLowerCase() === userProfile.email.toLowerCase()) ||
+    (userProfile?.name && c.parentName === userProfile.name)
+  ) || clients.find(c => c.id === 'cl2') || clients[0];
+  
+  const myClient = Object.assign({}, myClientRaw || {});
   const [selectedArticle, setSelectedArticle] = useState<any | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
 
-  if (!myClient) {
+  if (!myClient || !myClient.id) {
     return <div className="p-8 text-center bg-gray-50 text-gray-400">Загрузка данных личного кабинета...</div>;
+  }
+
+  const myGroup = groups.find(g => g.name === myClient.groupName);
+  
+  // Calculate next training
+  const today = new Date();
+  const optionsMonth: Intl.DateTimeFormatOptions = { month: 'long', year: 'numeric' };
+  const currentMonthStr = today.toLocaleDateString('ru-RU', optionsMonth);
+  const currentDay = today.getDate();
+  const currentWeekDay = today.toLocaleDateString('ru-RU', { weekday: 'short' });
+
+  // Use the first schedule day of the group or fallback
+  const fallbackSchedule = "Пн 19:00";
+  const nextTrainingSchedule = myGroup?.scheduleDays?.[0] || fallbackSchedule;
+  const nextTime = nextTrainingSchedule.split(' ')[1] || '17:00';
+  const endTimeParts = nextTime.split(':');
+  const endHour = parseInt(endTimeParts[0]) + 1;
+  const endTime = endTimeParts.length > 1 ? `${endHour}:${endTimeParts[1]}` : '18:30';
+
+  const currentMonthNum = today.getMonth();
+  const currentYear = today.getFullYear();
+  
+  // Calculate attendance stats for the current month
+  const attendanceThisMonth = myClient.attendance || [];
+  const presentCount = attendanceThisMonth.filter(a => a.status === 'present').length;
+  const absentSickCount = attendanceThisMonth.filter(a => a.status === 'absent_sick').length;
+  const absentCount = attendanceThisMonth.filter(a => a.status === 'absent').length;
+
+  // Calendar logic
+  const firstDayOfMonth = new Date(currentYear, currentMonthNum, 1);
+  const lastDayOfMonth = new Date(currentYear, currentMonthNum + 1, 0);
+  const startDayOfWeek = firstDayOfMonth.getDay(); // 0 is Sunday, 1 is Monday...
+  const emptyDaysPre = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1; // Align to Monday
+  const daysInMonth = lastDayOfMonth.getDate();
+  
+  // Create an array mapping days to their attendance status
+  const attendanceMap = new Map<number, 'present' | 'absent_sick' | 'absent'>();
+  attendanceThisMonth.forEach(record => {
+    // Basic date parser assuming 'DD.MM' or similar local dates
+    const dateParts = record.date.split('.');
+    if (dateParts.length >= 2) {
+      // Very naive matching, assuming dates are valid and for this month for demo
+      const recordDay = parseInt(dateParts[0], 10);
+      if (!isNaN(recordDay)) {
+        attendanceMap.set(recordDay, record.status);
+      }
+    }
+  });
+
+  const nextThreeDates = [];
+  for(let i=1; i<=3; i++) {
+    const td = new Date(today.getTime() + 1000 * 60 * 60 * 24 * i);
+    nextThreeDates.push({
+      day: td.getDate().toString(),
+      month: td.toLocaleDateString('ru-RU', { month: 'short' }).replace('.', ''),
+      title: i === 1 ? 'Тренировка' : i === 2 ? 'Турнир "Кубок"' : 'Собрание',
+      time: i === 1 ? nextTime : i === 2 ? '10:00 - 15:00' : '19:00 - 20:00',
+      loc: i === 1 ? (myClient.branch || 'Манеж') : i === 2 ? 'Стадион Звезда' : 'Онлайн (Zoom)'
+    });
   }
 
   const handleSendChat = (e: React.FormEvent) => {
@@ -31,17 +105,33 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
     if (!chatInput.trim()) return;
     addChatMessage({
       senderRole: 'parent',
-      senderName: `${myClient.parentName} (Мама ${myClient.childName})`,
-      text: chatInput
+      senderName: `${myClient.parentName} (Родитель: ${myClient.childName})`,
+      text: chatInput,
+      visibleTo: chatVisibility
     });
     setChatInput('');
   };
 
-  const handleFileUploadMock = (type: 'medical' | 'insurance') => {
-    const fileName = type === 'medical' ? 'справка_пройдена_2026.pdf' : 'полис_страховой_защиты_спорт.pdf';
-    uploadDocument(myClient.id, type, fileName);
-    alert(`Файл ${fileName} успешно прикреплен к учетной карточке ребенка! Менеджер и тренер увидят это в системе.`);
+  const visibleMessages = messages.filter(m => !m.visibleTo || m.visibleTo.includes('parent') || m.senderRole === 'parent');
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'medical' | 'insurance') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingDoc(type);
+    setTimeout(() => {
+      uploadDocument(myClient.id, type, file.name);
+      setUploadingDoc(null);
+      setUploadSuccessMessage(
+        type === 'medical' 
+          ? `Медицинская справка "${file.name}" успешно загружена!`
+          : `Страховой полис "${file.name}" успешно загружен!`
+      );
+      setTimeout(() => setUploadSuccessMessage(null), 4500);
+      e.target.value = ''; // Reset input to allow re-upload of same file
+    }, 1200);
   };
+
 
   // Knowledge base mock articles matching Image 1
   const kbArticles = [
@@ -83,14 +173,30 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
   ];
 
   return (
-    <div className="flex-1 overflow-y-auto bg-slate-50 text-gray-800 min-h-screen">
+    <div className="flex-1 overflow-y-auto bg-slate-50 text-gray-800 min-h-screen relative">
+      <AnimatePresence>
+        {uploadSuccessMessage && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95, y: -10 }}
+            className="fixed top-6 right-6 z-50 bg-slate-900 text-white rounded-2xl px-5 py-3.5 shadow-xl flex items-center space-x-3 text-xs font-semibold max-w-sm border border-slate-800"
+          >
+            <div className="h-6 w-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0">
+              <Check className="w-3.5 h-3.5" />
+            </div>
+            <span className="leading-tight">{uploadSuccessMessage}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header bar matching exact screenshots */}
       <div className="p-6 bg-white border-b border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-950 font-sans tracking-tight">
             {activeTab === 'parent_knowledge' 
               ? 'База знаний' 
-              : `Добрый день, ${myClient.parentName ? (myClient.parentName.split(' ')[1] || myClient.parentName.split(' ')[0] || 'Родитель') : 'Родитель'}! 👋`}
+              : `Добрый день, ${myClient.parentName ? (myClient.parentName.split(' ')[1] || myClient.parentName.split(' ')[0] || 'Родитель') : 'Родитель'}!`}
           </h1>
           <p className="text-gray-500 text-sm">
             {activeTab === 'parent_knowledge' 
@@ -114,7 +220,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
             </div>
             <div className="text-xs hidden sm:block text-left">
               <div className="font-bold text-gray-800">{myClient.parentName}</div>
-              <div className="text-gray-500 text-[10px]">Мама Максима</div>
+              <div className="text-gray-500 text-[10px]">Родитель</div>
             </div>
           </div>
         </div>
@@ -141,21 +247,21 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
                   <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative overflow-hidden">
                     <div className="space-y-3.5 z-10">
                       <div className="flex items-center space-x-2">
-                        <span className="px-2.5 py-1 rounded bg-orange-105 bg-orange-100 text-orange-600 font-bold text-[10px] uppercase font-mono tracking-wide">
+                        <span className="px-2.5 py-1 rounded bg-orange-100 text-orange-600 font-bold text-[10px] uppercase font-mono tracking-wide">
                           Тренировка
                         </span>
                         <span className="text-xs text-slate-400 font-medium">Рекомендуется прийти за 15 минут</span>
                       </div>
                       <div className="flex items-baseline space-x-3">
-                        <span className="text-4xl font-extrabold text-slate-900">21</span>
+                        <span className="text-4xl font-extrabold text-slate-900">{currentDay}</span>
                         <div className="text-xs leading-tight text-gray-500">
-                          <div>Сегодня, ср</div>
-                          <div className="font-semibold text-slate-800">Май 2026</div>
+                          <div className="capitalize">Сегодня, {currentWeekDay}</div>
+                          <div className="font-semibold text-slate-800 capitalize">{currentMonthStr}</div>
                         </div>
                         <div className="h-10 w-[1px] bg-gray-200 mx-1"></div>
                         <div className="space-y-0.5">
-                          <div className="text-lg font-bold text-slate-800">17:00 – 18:30</div>
-                          <div className="text-xs text-gray-500 font-medium">Манеж «Спартак»</div>
+                          <div className="text-lg font-bold text-slate-800">{nextTime} – {endTime}</div>
+                          <div className="text-xs text-gray-500 font-medium">{myClient.branch || 'Манеж «Спартак»'}</div>
                         </div>
                       </div>
                       <div className="flex items-center space-x-2 text-xs text-gray-600">
@@ -168,12 +274,9 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
                       </div>
                     </div>
 
-                    {/* Fun Graphic representation of team football jersey */}
-                    <div className="h-32 w-32 bg-slate-900 rounded-2xl border border-slate-800 flex flex-col items-center justify-center text-white relative flex-shrink-0">
-                      <div className="absolute top-2 left-2 text-[9px] font-mono text-gray-500 tracking-wider">КИП_ДОМАШНИЙ</div>
-                      <div className="font-mono text-xl font-extrabold text-slate-100">10</div>
-                      <div className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest mt-1">АМКАР</div>
-                      <div className="w-14 h-4 mt-1 bg-emerald-600 rounded flex items-center justify-center text-[8px] font-semibold text-white uppercase">Иванов</div>
+                    {/* Graphic representation of team football jersey */}
+                    <div className="h-40 w-48 sm:h-48 sm:w-56 flex-shrink-0 -mr-4 -my-4 group bg-transparent">
+                      <img src={amkarUniform} alt="Экипировка" className="w-full h-full object-contain" style={{ mixBlendMode: 'multiply', filter: 'contrast(1.1) brightness(1.05)' }} />
                     </div>
                   </div>
 
@@ -262,6 +365,13 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                       <div className="p-3 bg-slate-50 border border-gray-200 rounded-xl space-y-2 flex flex-col justify-between">
+                        <input 
+                          type="file" 
+                          ref={medicalInputRef} 
+                          onChange={(e) => handleFileChange(e, 'medical')} 
+                          className="hidden" 
+                          accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" 
+                        />
                         <div className="flex items-start justify-between">
                           <div className="text-xs">
                             <div className="font-bold text-slate-800">Справка-допуск спортивная</div>
@@ -280,22 +390,34 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
 
                         <div className="flex items-center justify-between pt-1.5 border-t border-gray-200">
                           <span className="text-[10px] text-gray-500 font-medium truncate max-w-[120px]">
-                            {myClient.medicalCertificateUrl || 'Не загружен'}
+                            {uploadingDoc === 'medical' ? 'Загрузка...' : (myClient.medicalCertificateUrl || 'Не загружен')}
                           </span>
                           <button 
-                            onClick={() => handleFileUploadMock('medical')}
-                            className="p-1.5 bg-emerald-500 hover:bg-emerald-650 text-white rounded text-[10px] font-bold transition flex items-center space-x-1"
+                            onClick={() => medicalInputRef.current?.click()}
+                            disabled={uploadingDoc === 'medical'}
+                            className="p-1.5 bg-emerald-500 hover:bg-emerald-650 text-white rounded text-[10px] font-bold transition flex items-center space-x-1 disabled:opacity-50 cursor-pointer"
                           >
-                            <Upload className="w-3 h-3" />
-                            <span>{myClient.medicalCertificateUrl ? 'Заменить' : 'Загрузить'}</span>
+                            {uploadingDoc === 'medical' ? (
+                              <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                            ) : (
+                              <Upload className="w-3 h-3" />
+                            )}
+                            <span>{uploadingDoc === 'medical' ? 'Загрузка...' : (myClient.medicalCertificateUrl ? 'Заменить' : 'Загрузить')}</span>
                           </button>
                         </div>
                       </div>
 
                       <div className="p-3 bg-slate-50 border border-gray-200 rounded-xl space-y-2 flex flex-col justify-between">
+                        <input 
+                          type="file" 
+                          ref={insuranceInputRef} 
+                          onChange={(e) => handleFileChange(e, 'insurance')} 
+                          className="hidden" 
+                          accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" 
+                        />
                         <div className="flex items-start justify-between">
                           <div className="text-xs">
-                            <div className="font-bold text-slate-800">Полис страхования жизни</div>
+                            <div className="font-bold text-slate-800">Полис страхования</div>
                             <div className="text-[10px] text-gray-400 mt-0.5 font-mono">Спортивная страховка (футбол)</div>
                           </div>
                           {myClient.insuranceUrl ? (
@@ -311,14 +433,19 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
 
                         <div className="flex items-center justify-between pt-1.5 border-t border-gray-200">
                           <span className="text-[10px] text-gray-500 font-medium truncate max-w-[120px]">
-                            {myClient.insuranceUrl || 'Не загружен'}
+                            {uploadingDoc === 'insurance' ? 'Загрузка...' : (myClient.insuranceUrl || 'Не загружен')}
                           </span>
                           <button 
-                            onClick={() => handleFileUploadMock('insurance')}
-                            className="p-1.5 bg-emerald-500 hover:bg-emerald-650 text-white rounded text-[10px] font-bold transition flex items-center space-x-1"
+                            onClick={() => insuranceInputRef.current?.click()}
+                            disabled={uploadingDoc === 'insurance'}
+                            className="p-1.5 bg-emerald-500 hover:bg-emerald-650 text-white rounded text-[10px] font-bold transition flex items-center space-x-1 disabled:opacity-50 cursor-pointer"
                           >
-                            <Upload className="w-3 h-3" />
-                            <span>{myClient.insuranceUrl ? 'Заменить' : 'Загрузить'}</span>
+                            {uploadingDoc === 'insurance' ? (
+                              <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                            ) : (
+                              <Upload className="w-3 h-3" />
+                            )}
+                            <span>{uploadingDoc === 'insurance' ? 'Загрузка...' : (myClient.insuranceUrl ? 'Заменить' : 'Загрузить')}</span>
                           </button>
                         </div>
                       </div>
@@ -376,80 +503,69 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
                     </div>
                   </div>
 
-                  {/* Calendar/Attendance Grid (Май 2025/2026) */}
+                  {/* Calendar/Attendance Grid */}
                   <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-4">
                     <div className="flex justify-between items-center border-b border-gray-100 pb-3">
                       <div>
                         <h3 className="font-bold text-slate-900 text-sm">Посещаемость</h3>
                         <p className="text-[10px] text-gray-400 font-medium">Журнал тренировок</p>
                       </div>
-                      <span className="text-xs font-bold font-mono text-gray-600 bg-slate-100 px-2 py-0.5 rounded">
-                        Май 2026
+                      <span className="text-xs font-bold font-mono text-gray-600 bg-slate-100 px-2 py-0.5 rounded capitalize">
+                        {currentMonthStr}
                       </span>
                     </div>
 
                     <div className="grid grid-cols-3 gap-2 px-1 text-center bg-slate-50 p-2.5 rounded-xl border border-gray-100">
                       <div>
-                        <div className="text-xs font-bold text-slate-800">8</div>
+                        <div className="text-xs font-bold text-slate-800">{presentCount}</div>
                         <div className="text-[9px] text-gray-400 font-medium mt-0.5">Посещено</div>
                       </div>
                       <div>
-                        <div className="text-xs font-bold text-emerald-600">1</div>
+                        <div className="text-xs font-bold text-emerald-600">{absentSickCount}</div>
                         <div className="text-[9px] text-gray-400 font-medium mt-0.5">Уваж. пропуск</div>
                       </div>
                       <div>
-                        <div className="text-xs font-bold text-orange-500">0</div>
+                        <div className="text-xs font-bold text-orange-500">{absentCount}</div>
                         <div className="text-[9px] text-gray-400 font-medium mt-0.5">Болезнь/прогул</div>
                       </div>
                     </div>
 
-                    {/* Dynamic styled Monthly Calendar layout like image 2 */}
+                    {/* Dynamic styled Monthly Calendar layout */}
                     <div className="grid grid-cols-7 gap-1 text-center text-[10px]">
                       {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map((d, i) => (
                         <div key={i} className="text-gray-400 font-bold py-1">{d}</div>
                       ))}
-                      {/* Blank days pre month */}
-                      <div className="text-gray-300 py-1 font-mono">27</div>
-                      <div className="text-gray-300 py-1 font-mono">28</div>
-                      <div className="text-gray-300 py-1 font-mono">29</div>
-                      <div className="text-gray-300 py-1 font-mono">30</div>
                       
-                      {/* Calendar items */}
-                      <div className="text-slate-800 py-1 font-bold rounded-lg border border-transparent font-mono">1</div>
-                      <div className="text-slate-800 py-1 font-bold rounded-lg border border-transparent font-mono">2</div>
-                      <div className="text-slate-800 py-1 font-bold rounded-lg border border-transparent font-mono">3</div>
-                      <div className="text-slate-800 py-1 font-bold rounded-lg border border-transparent font-mono">4</div>
-                      <div className="text-slate-800 py-1 font-bold rounded-lg border border-transparent font-mono">5</div>
-                      {/* May 6, 7 (Present) */}
-                      <div className="bg-emerald-500 text-white font-bold py-1 rounded-full font-mono flex items-center justify-center">6</div>
-                      <div className="bg-emerald-500 text-white font-bold py-1 rounded-full font-mono flex items-center justify-center">7</div>
-                      <div className="text-slate-800 py-1 font-bold rounded-lg border border-transparent font-mono">8</div>
-                      <div className="text-slate-800 py-1 font-bold rounded-lg border border-transparent font-mono">9</div>
-                      <div className="text-slate-800 py-1 font-bold rounded-lg border border-transparent font-mono">10</div>
-                      <div className="text-slate-800 py-1 font-bold rounded-lg border border-transparent font-mono">11</div>
-                      {/* May 12 (Special absent) */}
-                      <div className="bg-amber-100 text-amber-800 font-bold py-1 rounded-full font-mono flex items-center justify-center">12</div>
-                      <div className="text-slate-800 py-1 font-bold rounded-lg border border-transparent font-mono">13</div>
-                      <div className="bg-emerald-500 text-white font-bold py-1 rounded-full font-mono flex items-center justify-center">14</div>
-                      <div className="bg-emerald-500 text-white font-bold py-1 rounded-full font-mono flex items-center justify-center">15</div>
-                      <div className="text-slate-800 py-1 font-bold rounded-lg border border-transparent font-mono">16</div>
-                      <div className="text-slate-800 py-1 font-bold rounded-lg border border-transparent font-mono">17</div>
-                      <div className="text-slate-800 py-1 font-bold rounded-lg border border-transparent font-mono">18</div>
-                      <div className="bg-emerald-500 text-white font-bold py-1 rounded-full font-mono flex items-center justify-center">19</div>
-                      {/* 20 (Normal) */}
-                      <div className="text-slate-800 py-1 font-bold rounded-lg border border-transparent font-mono">20</div>
-                      {/* TODAY (21 May - Highlighted Active) */}
-                      <div className="bg-emerald-500 text-white ring-2 ring-emerald-200 font-bold py-1 rounded-full font-mono flex items-center justify-center">21</div>
-                      <div className="text-slate-800 py-1 font-bold rounded-lg border border-transparent font-mono">22</div>
-                      <div className="text-slate-800 py-1 font-bold rounded-lg border border-transparent font-mono">23</div>
-                      <div className="text-slate-800 py-1 font-bold rounded-lg border border-transparent font-mono">24</div>
-                      <div className="text-slate-800 py-1 font-bold rounded-lg border border-transparent font-mono">25</div>
-                      <div className="text-slate-800 py-1 font-bold rounded-lg border border-transparent font-mono">26</div>
-                      <div className="text-slate-800 py-1 font-bold rounded-lg border border-transparent font-mono">27</div>
-                      <div className="text-slate-800 py-1 font-bold rounded-lg border border-transparent font-mono">28</div>
-                      <div className="text-slate-800 py-1 font-bold rounded-lg border border-transparent font-mono">29</div>
-                      <div className="text-slate-300 py-1 font-mono">30</div>
-                      <div className="text-slate-300 py-1 font-mono">31</div>
+                      {Array.from({ length: emptyDaysPre }).map((_, i) => (
+                        <div key={`empty-${i}`} className="text-transparent py-1 font-mono">-</div>
+                      ))}
+                      
+                      {Array.from({ length: daysInMonth }).map((_, i) => {
+                        const dayNumber = i + 1;
+                        const isToday = dayNumber === currentDay;
+                        const status = attendanceMap.get(dayNumber);
+                        
+                        let baseClass = "py-1 font-bold rounded-lg border border-transparent font-mono flex items-center justify-center ";
+                        if (status === 'present') {
+                          baseClass += "bg-emerald-500 text-white rounded-full";
+                        } else if (status === 'absent_sick') {
+                          baseClass += "bg-amber-100 text-amber-800 rounded-full";
+                        } else if (status === 'absent') {
+                          baseClass += "bg-slate-200 text-slate-600 rounded-full";
+                        } else {
+                          baseClass += "text-slate-800";
+                        }
+                        
+                        if (isToday) {
+                           baseClass += " ring-2 ring-emerald-200";
+                        }
+
+                        return (
+                          <div key={dayNumber} className={baseClass}>
+                            {dayNumber}
+                          </div>
+                        );
+                      })}
                     </div>
 
                     <div className="flex items-center justify-center space-x-3 text-[10px] text-gray-500 border-t border-gray-100 pt-2.5">
@@ -462,13 +578,13 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
                         <span>Уважительный</span>
                       </div>
                       <div className="flex items-center space-x-1">
-                        <span className="w-2.5 h-2.5 rounded-full bg-orange-400"></span>
+                        <span className="w-2.5 h-2.5 rounded-full bg-slate-200"></span>
                         <span>Пропуск/Болен</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Upcoming calendar events matching exact picture */}
+                  {/* Upcoming calendar events dynamically built */}
                   <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-4">
                     <div className="flex justify-between items-center border-b border-gray-100 pb-3">
                       <h3 className="font-bold text-slate-900 text-sm">Ближайшие события</h3>
@@ -476,11 +592,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
                     </div>
 
                     <div className="space-y-3.5">
-                      {[
-                        { day: '24', month: 'мая', title: 'Турнир "Кубок Импульса"', time: '10:00 - 16:00', loc: 'Манеж Спартак' },
-                        { day: '30', month: 'мая', title: 'Родительское собрание', time: '19:00 - 20:00', loc: 'Онлайн (Zoom)' },
-                        { day: '12', month: 'июня', title: 'Выездные сборы', time: '12 - 15 июня', loc: 'Култаево, база «Мяч»' }
-                      ].map((evt, id) => (
+                      {nextThreeDates.map((evt, id) => (
                         <div key={id} className="flex items-start space-x-3 text-xs">
                           <div className="flex-shrink-0 w-11 h-11 rounded-lg bg-emerald-50 text-center flex flex-col justify-center border border-emerald-100/40">
                             <span className="text-base font-black text-emerald-600 font-mono leading-none">{evt.day}</span>
@@ -513,7 +625,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
               exit={{ opacity: 0 }}
               className="bg-white rounded-2xl p-0 border border-slate-200 overflow-hidden shadow-sm"
             >
-              <ScheduleCalendar />
+              <ScheduleCalendar filteredGroupId={myGroup?.id || 'none'} />
             </motion.div>
           )}
 
@@ -526,7 +638,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
               className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm space-y-6"
             >
               <div className="flex justify-between items-center border-b pb-4">
-                <h3 className="text-lg font-bold text-slate-900">Исторический журнал посещений Максима</h3>
+                <h3 className="text-lg font-bold text-slate-900">Исторический журнал посещений: {myClient.childName}</h3>
                 <span className="text-xs text-slate-500 font-mono font-bold uppercase tracking-wider">{myClient?.groupName || 'Группа не назначена'}</span>
               </div>
 
@@ -703,20 +815,54 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
 
               {/* Chat log with custom scroll */}
               <div className="flex-1 p-4 overflow-y-auto bg-slate-50/50 space-y-4 text-xs font-sans">
-                {messages.map((msg, idx) => {
+                {visibleMessages.map((msg, idx) => {
                   const isMe = msg.senderRole === 'parent';
                   return (
                     <div key={idx} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-xs sm:max-w-md p-3 rounded-2xl ${
+                      <div className={`max-w-xs sm:max-w-md p-3 rounded-2xl group ${
                         isMe 
                           ? 'bg-emerald-600 text-white rounded-br-none' 
                           : 'bg-white text-gray-800 rounded-bl-none border border-gray-200'
                       }`}>
                         <div className="flex justify-between items-center mb-1 text-[9px] font-bold opacity-80">
                           <span>{msg.senderName}</span>
-                          <span className="font-mono ml-2">{msg.timestamp}</span>
+                          <div className="flex items-center space-x-2">
+                            {isMe && (
+                              <div className="hidden group-hover:flex items-center space-x-1 mr-2 bg-black/10 rounded px-1">
+                                <button onClick={() => { setEditingMessageId(msg.id); setEditMessageText(msg.text); }} className="p-1 hover:text-white transition">
+                                  <Edit2 className="w-2.5 h-2.5" />
+                                </button>
+                                <button type="button" onClick={() => deleteChatMessage(msg.id)} className="p-1 hover:text-rose-200 transition">
+                                  <Trash className="w-2.5 h-2.5" />
+                                </button>
+                              </div>
+                            )}
+                            <span className="font-mono">{msg.timestamp}</span>
+                          </div>
                         </div>
-                        <p className="leading-relaxed whitespace-pre-line">{msg.text}</p>
+
+                        {editingMessageId === msg.id ? (
+                          <div className="flex flex-col space-y-2 mt-2">
+                            <input 
+                              type="text" 
+                              className="text-xs px-2 py-1 bg-white text-gray-800 rounded outline-none w-full"
+                              value={editMessageText} 
+                              onChange={e => setEditMessageText(e.target.value)} 
+                            />
+                            <div className="flex justify-end space-x-2">
+                              <button onClick={() => setEditingMessageId(null)} className="text-[10px] bg-white/20 px-2 py-1 rounded">Отмена</button>
+                              <button onClick={() => { updateChatMessage(msg.id, editMessageText); setEditingMessageId(null); }} className="text-[10px] bg-white text-emerald-600 font-bold px-2 py-1 rounded">Сохр.</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="leading-relaxed whitespace-pre-line">{msg.text}</p>
+                        )}
+                        
+                        {isMe && msg.visibleTo && (
+                          <div className="mt-1 text-[8px] opacity-60">
+                            Видно: {msg.visibleTo.map(r => r === 'director' ? 'Директор' : r === 'manager' ? 'Менеджер' : r === 'trainer' ? 'Тренер' : r === 'parent' ? 'Родители' : r).join(', ')}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -724,37 +870,57 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
               </div>
 
               {/* Chat write panel */}
-              <form onSubmit={handleSendChat} className="p-3 border-t bg-white flex items-center space-x-2">
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    const sampleFiles = ['заявление_болеем.pdf', 'медицинский_чек.png', 'тренировка_максим.jpeg'];
-                    const picked = sampleFiles[Math.floor(Math.random() * sampleFiles.length)];
-                    addChatMessage({
-                      senderRole: 'parent',
-                      senderName: `${myClient.parentName} (Мама ${myClient.childName})`,
-                      text: `[Прикреплен файл]: ${picked}`
-                    });
-                  }}
-                  title="Прикрепить файл/фото"
-                  className="p-2.5 bg-slate-150 hover:bg-slate-200 rounded-xl text-gray-500 hover:text-gray-700 transition"
-                >
-                  <Upload className="w-4 h-4" />
-                </button>
-                <input 
-                  type="text" 
-                  placeholder="Напишите сообщение родителю, тренеру или админу..." 
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  className="flex-1 px-4 py-2.5 bg-slate-100 focus:bg-white border focus:border-emerald-500 rounded-xl text-xs text-gray-800 outline-none transition"
-                />
-                <button 
-                  type="submit"
-                  className="p-2.5 bg-emerald-500 hover:bg-emerald-600 rounded-xl text-white transition-all shadow-sm"
-                >
+              <div className="bg-white border-t">
+                <div className="px-3 py-2 flex items-center space-x-3 text-[10px] text-slate-500 border-b border-gray-50 overflow-x-auto">
+                  <span className="font-semibold shrink-0">Видят сообщение:</span>
+                  {(['manager', 'trainer', 'director'] as const).map(role => (
+                    <label key={role} className="flex items-center space-x-1 cursor-pointer whitespace-nowrap">
+                      <input 
+                        type="checkbox" 
+                        checked={chatVisibility.includes(role)}
+                        onChange={(e) => {
+                          if (e.target.checked) setChatVisibility([...chatVisibility, role]);
+                          else setChatVisibility(chatVisibility.filter(r => r !== role));
+                        }}
+                        className="rounded text-emerald-500 focus:ring-emerald-500"
+                      />
+                      <span>{role === 'manager' ? 'Менеджеры' : role === 'trainer' ? 'Тренеры' : 'Директор'}</span>
+                    </label>
+                  ))}
+                </div>
+                <form onSubmit={handleSendChat} className="p-3 flex items-center space-x-2">
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      const sampleFiles = ['заявление_болеем.pdf', 'медицинский_чек.png', 'тренировка.jpeg'];
+                      const picked = sampleFiles[Math.floor(Math.random() * sampleFiles.length)];
+                      addChatMessage({
+                        senderRole: 'parent',
+                        senderName: `${myClient.parentName} (Родитель: ${myClient.childName})`,
+                        text: `[Прикреплен файл]: ${picked}`,
+                        visibleTo: chatVisibility
+                      });
+                    }}
+                    title="Прикрепить файл/фото"
+                    className="p-2.5 bg-slate-150 hover:bg-slate-200 rounded-xl text-gray-500 hover:text-gray-700 transition"
+                  >
+                    <Upload className="w-4 h-4" />
+                  </button>
+                  <input 
+                    type="text" 
+                    placeholder="Напишите сообщение..." 
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    className="flex-1 px-4 py-2.5 bg-slate-100 focus:bg-white border focus:border-emerald-500 rounded-xl text-xs text-gray-800 outline-none transition"
+                  />
+                  <button 
+                    type="submit"
+                    className="p-2.5 bg-emerald-500 hover:bg-emerald-600 rounded-xl text-white transition-all shadow-sm"
+                  >
                   <Send className="w-4 h-4" />
                 </button>
               </form>
+              </div>
             </motion.div>
           )}
 

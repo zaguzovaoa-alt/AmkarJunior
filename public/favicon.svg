@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 260" fill="none">
+  <g stroke="#E31E24" strokeWidth="12" strokeLinecap="butt" strokeLinejoin="miter">
+    <path d="M67 10 L67 145 L43 229" />
+    <path d="M51 50 L51 145 L31 215" />
+    <path d="M35 80 L35 145 L19 201" />
+
+    <path d="M83 10 L83 145 L107 229" />
+    <path d="M99 50 L99 145 L119 215" />
+    <path d="M115 80 L115 145 L131 201" />
+
+    <path d="M62 138 L88 138" strokeWidth="10" />
+  </g>
+  
+  <polygon points="75,238 85,248 81,259 69,259 65,248" fill="#E31E24" />
+</svg>

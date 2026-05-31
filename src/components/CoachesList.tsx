@@ -7,6 +7,8 @@ import {
   Phone, Send, MessageCircle, Edit2, Save, MessageSquare
 } from 'lucide-react';
 
+import { compressImage } from '../utils/image';
+
 export const CoachesList: React.FC = () => {
   const { 
     coaches, 
@@ -248,19 +250,13 @@ export const CoachesList: React.FC = () => {
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 1.5 * 1024 * 1024) {
-        alert('Пожалуйста, выберите файл до 1.5 МБ для оптимальной производительности базы данных.');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
+      compressImage(file, (base64) => {
         if (isEdit) {
-          setEditCoachAvatarUrl(reader.result as string);
+          setEditCoachAvatarUrl(base64);
         } else {
-          setNewCoachAvatarUrl(reader.result as string);
+          setNewCoachAvatarUrl(base64);
         }
-      };
-      reader.readAsDataURL(file);
+      });
     }
   };
 

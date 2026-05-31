@@ -45,7 +45,7 @@ const RU_MONTHS = [
 
 const LOCATIONS = ['Манеж Спартак', 'Импульс Арена', 'Центральное поле', 'Спортзал Школы №10'];
 
-export const ScheduleCalendar: React.FC = () => {
+export const ScheduleCalendar: React.FC<{ filteredGroupId?: string; filteredCoachId?: string; }> = ({ filteredGroupId, filteredCoachId }) => {
   const { 
     groups, 
     coaches, 
@@ -65,7 +65,7 @@ export const ScheduleCalendar: React.FC = () => {
 
   // Filter states
   const [selectedGroupId, setSelectedGroupId] = useState<string>('all');
-  const [selectedCoachId, setSelectedCoachId] = useState<string>('all');
+  const [selectedCoachId, setSelectedCoachId] = useState<string>(filteredCoachId || 'all');
   const [selectedType, setSelectedType] = useState<string>('all');
 
   // Interactive state
@@ -264,12 +264,20 @@ export const ScheduleCalendar: React.FC = () => {
   // Apply filters to combined events list
   const filteredEvents = useMemo(() => {
     return allEvents.filter(ev => {
+      // Force filter by filteredGroupId if it's provided by ParentPortal
+      if (filteredGroupId && ev.groupId !== filteredGroupId && ev.groupId !== 'all') {
+        return false;
+      }
+      // Force filter by filteredCoachId if provided by TrainerCRM
+      if (filteredCoachId && ev.coachId !== filteredCoachId && ev.coachId !== 'all' && ev.coachId !== 'staff') {
+        return false; // Show only events belonging to this coach, cross-coach events etc.
+      }
       const matchGroup = selectedGroupId === 'all' || ev.groupId === selectedGroupId;
       const matchCoach = selectedCoachId === 'all' || ev.coachId === selectedCoachId;
       const matchType = selectedType === 'all' || ev.type === selectedType;
       return matchGroup && matchCoach && matchType;
     });
-  }, [allEvents, selectedGroupId, selectedCoachId, selectedType]);
+  }, [allEvents, selectedGroupId, selectedCoachId, selectedType, filteredGroupId, filteredCoachId]);
 
   // Month navigation handlers
   const handlePrevMonth = () => {
@@ -721,7 +729,7 @@ export const ScheduleCalendar: React.FC = () => {
           </div>
 
           {/* Quick Filter dropdowns */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 flex-grow max-w-2xl lg:ml-auto">
+          <div className={`grid grid-cols-1 ${filteredCoachId ? 'sm:grid-cols-2' : 'sm:grid-cols-3'} gap-2 flex-grow max-w-2xl lg:ml-auto`}>
             <div className="relative">
               <select
                 value={selectedGroupId}
@@ -736,19 +744,21 @@ export const ScheduleCalendar: React.FC = () => {
               <Layers className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-3 pointers-events-none" />
             </div>
 
-            <div className="relative">
-              <select
-                value={selectedCoachId}
-                onChange={(e) => setSelectedCoachId(e.target.value)}
-                className="w-full px-2.5 py-2 pl-7 border border-slate-200 rounded-xl text-xs font-semibold bg-white focus:outline-none focus:border-red-600 appearance-none cursor-pointer"
-              >
-                <option value="all">⚽ Все тренеры штаба</option>
-                {coaches.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-              <User className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-3 pointers-events-none" />
-            </div>
+            {!filteredCoachId && (
+              <div className="relative">
+                <select
+                  value={selectedCoachId}
+                  onChange={(e) => setSelectedCoachId(e.target.value)}
+                  className="w-full px-2.5 py-2 pl-7 border border-slate-200 rounded-xl text-xs font-semibold bg-white focus:outline-none focus:border-red-600 appearance-none cursor-pointer"
+                >
+                  <option value="all">⚽ Все тренеры штаба</option>
+                  {coaches.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <User className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-3 pointers-events-none" />
+              </div>
+            )}
 
             <div className="relative">
               <select

@@ -2,16 +2,29 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { collection, doc, getDoc, setDoc, onSnapshot, updateDoc, deleteDoc, getDocFromServer, query, getDocs } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { 
-  Lead, Client, CRMTask, TrainingGroup, Coach, FinanceRecord, ChatMessage, LeadSource, Payment, TrainingSessionProtocol 
+  Lead, Client, CRMTask, TrainingGroup, Coach, FinanceRecord, ChatMessage, LeadSource, Payment, TrainingSessionProtocol, FinanceCategory, FinancialPlan, CRMConfig
 } from '../types';
 
+// Types for User Profile
+export interface UserProfile {
+  name: string;
+  role: string;
+  avatarUrl: string;
+  phone: string;
+  email: string;
+}
+
 interface CRMContextType {
+  userProfile: UserProfile;
+  updateUserProfile: (profile: Partial<UserProfile>) => Promise<void>;
   leads: Lead[];
   clients: Client[];
   tasks: CRMTask[];
   groups: TrainingGroup[];
   coaches: Coach[];
   finances: FinanceRecord[];
+  financeCategories: FinanceCategory[];
+  financialPlans: FinancialPlan[];
   trainingSessions: TrainingSessionProtocol[];
   messages: ChatMessage[];
   calendarSyncEnabled: boolean;
@@ -29,7 +42,7 @@ interface CRMContextType {
   updateLeadStatus: (id: string, status: Lead['status']) => void;
   bookTrial: (leadId: string, coachId: string, groupName: string, date: string, time: string) => void;
   completeTrialAndMarkAttendance: (
-    clientId: string, 
+    leadId: string, 
     attended: boolean, 
     notes: string, 
     groupName: string, 
@@ -44,6 +57,8 @@ interface CRMContextType {
   addTask: (task: Omit<CRMTask, 'id' | 'status'>) => void;
   completeTask: (id: string) => void;
   addChatMessage: (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
+  updateChatMessage: (id: string, newText: string) => void;
+  deleteChatMessage: (id: string) => void;
   toggleCalendarSync: () => void;
   triggerManualCalendarSync: () => void;
   resetAllData: () => void;
@@ -66,6 +81,10 @@ interface CRMContextType {
   deleteClient: (id: string) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   deleteFinanceRecord: (id: string) => Promise<void>;
+  addFinanceCategory: (category: Omit<FinanceCategory, 'id'>) => Promise<void>;
+  deleteFinanceCategory: (id: string) => Promise<void>;
+  updateFinancialPlan: (plan: FinancialPlan) => Promise<void>;
+  addFinanceRecord: (record: Omit<FinanceRecord, 'id'>) => Promise<void>;
   updateClientNotes: (clientId: string, notes: string) => Promise<void>;
   updateClient: (clientId: string, updates: Partial<Omit<Client, 'id'>>) => Promise<void>;
   createGroup: (name: string, year: number, coachId: string, coachName: string, scheduleDays: string[]) => Promise<void>;
@@ -83,13 +102,13 @@ interface CRMContextType {
   updateWhatsappNotifications: (enabled: boolean) => Promise<void>;
   autoOverdueTasks: boolean;
   updateAutoOverdueTasks: (enabled: boolean) => Promise<void>;
+  crmConfig: CRMConfig;
+  updateCRMConfig: (config: Partial<CRMConfig>) => Promise<void>;
 }
 
 const CRMContext = createContext<CRMContextType | undefined>(undefined);
 
 // Initial realistic data pre-populated exactly matching the screenshots
-const INITIAL_LEADS: Lead[] = [];
-
 const INITIAL_COACHES: Coach[] = [];
 
 const INITIAL_GROUPS: TrainingGroup[] = [];
@@ -102,6 +121,20 @@ const INITIAL_FINANCES: FinanceRecord[] = [];
 
 const INITIAL_MESSAGES: ChatMessage[] = [];
 
+const INITIAL_LEADS: Lead[] = [];
+
+const INITIAL_FINANCE_CATEGORIES: FinanceCategory[] = [
+  { id: 'cat_in_ab', type: 'income', name: 'Абонементы', isSystem: true },
+  { id: 'cat_in_1tr', type: 'income', name: 'Разовые тренировки', isSystem: true },
+  { id: 'cat_in_ind', type: 'income', name: 'Индивидуальные тренировки' },
+  { id: 'cat_in_eq', type: 'income', name: 'Форма/Экипировка' },
+  { id: 'cat_ex_acq', type: 'expense', name: 'Эквайринг (Комиссия ЮKassa)', isSystem: true },
+  { id: 'cat_ex_rent', type: 'expense', name: 'Аренда' },
+  { id: 'cat_ex_sal', type: 'expense', name: 'Зарплата' },
+  { id: 'cat_ex_mar', type: 'expense', name: 'Маркетинг/Реклама' },
+  { id: 'cat_ex_inv', type: 'expense', name: 'Инвентарь/Оборудование' },
+];
+
 export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS);
   const [clients, setClients] = useState<Client[]>(INITIAL_CLIENTS);
@@ -109,6 +142,14 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [coaches, setCoaches] = useState<Coach[]>(INITIAL_COACHES);
   const [groups, setGroups] = useState<TrainingGroup[]>(INITIAL_GROUPS);
   const [finances, setFinances] = useState<FinanceRecord[]>(INITIAL_FINANCES);
+  const [financeCategories, setFinanceCategories] = useState<FinanceCategory[]>(() => {
+    const cached = localStorage.getItem('amkar_finance_categories');
+    return cached ? JSON.parse(cached) : INITIAL_FINANCE_CATEGORIES;
+  });
+  const [financialPlans, setFinancialPlans] = useState<FinancialPlan[]>(() => {
+    const cached = localStorage.getItem('amkar_financial_plans');
+    return cached ? JSON.parse(cached) : [];
+  });
   const [trainingSessions, setTrainingSessions] = useState<TrainingSessionProtocol[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
   const [firebaseReady, setFirebaseReady] = useState(false);
@@ -154,6 +195,58 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [autoOverdueTasks, setAutoOverdueTasks] = useState<boolean>(() => {
     return localStorage.getItem('amkar_auto_overdue_tasks') !== 'false';
   });
+
+  const [crmConfig, setCrmConfig] = useState<CRMConfig>(() => {
+    const cached = localStorage.getItem('amkar_crm_config');
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch (e) {}
+    }
+    return {
+      acquiringFeePct: 3.5,
+      price12: 5400,
+      price8: 4000,
+      price4: 2500,
+      price1: 550
+    };
+  });
+
+  const [userProfile, setUserProfile] = useState<UserProfile>(() => {
+    const cached = localStorage.getItem('amkar_user_profile');
+    if (cached) {
+      try { return JSON.parse(cached); } catch (e) {}
+    }
+    return {
+      name: 'Василий',
+      role: 'Менеджер / Администратор',
+      avatarUrl: 'https://i.pravatar.cc/100?img=11',
+      phone: '+7 (999) 123-45-67',
+      email: 'manager@amkar.ru'
+    };
+  });
+
+  const updateUserProfile = async (updates: Partial<UserProfile>) => {
+    const newProfile = { ...userProfile, ...updates };
+    setUserProfile(newProfile);
+    localStorage.setItem('amkar_user_profile', JSON.stringify(newProfile));
+    try {
+      const configDocRef = doc(db, '_config', 'initialized');
+      await setDoc(configDocRef, { userProfile: newProfile }, { merge: true });
+    } catch(e) { console.error('Failed to sync profile', e); }
+  };
+
+  const updateCRMConfig = async (configUpdates: Partial<CRMConfig>) => {
+    const newConfig = { ...crmConfig, ...configUpdates };
+    setCrmConfig(newConfig);
+    localStorage.setItem('amkar_crm_config', JSON.stringify(newConfig));
+    try {
+      const configDocRef = doc(db, '_config', 'initialized');
+      await setDoc(configDocRef, { crmConfig: newConfig }, { merge: true });
+    } catch (e) {
+      console.error('Failed to sync config to Firestore:', e);
+    }
+  };
 
   const updateSchoolName = async (name: string) => {
     setSchoolName(name);
@@ -217,7 +310,16 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const configDocRef = doc(db, '_config', 'initialized');
         const configDoc = await getDoc(configDocRef);
         
-        if (!configDoc.exists()) {
+        // Retrieve groups to verify if seeding is needed (e.g., if collections got cleared but config remained)
+        let shouldSeed = !configDoc.exists();
+        if (!shouldSeed) {
+          const testGroups = await getDocs(collection(db, 'groups'));
+          if (testGroups.empty) {
+            shouldSeed = true;
+          }
+        }
+        
+        if (shouldSeed) {
           console.log("Pre-populating Firestore database with default CRM demo datasets...");
           for (const item of INITIAL_COACHES) {
             await setDoc(doc(db, 'coaches', item.id), item);
@@ -225,11 +327,26 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           for (const item of INITIAL_GROUPS) {
             await setDoc(doc(db, 'groups', item.id), item);
           }
+          for (const item of INITIAL_CLIENTS) {
+            await setDoc(doc(db, 'clients', item.id), item);
+          }
+          for (const item of INITIAL_TASKS) {
+            await setDoc(doc(db, 'tasks', item.id), item);
+          }
+          for (const item of INITIAL_FINANCES) {
+            await setDoc(doc(db, 'finances', item.id), item);
+          }
+          for (const item of INITIAL_MESSAGES) {
+            await setDoc(doc(db, 'messages', item.id), item);
+          }
+          for (const item of INITIAL_LEADS) {
+            await setDoc(doc(db, 'leads', item.id), item);
+          }
           await setDoc(configDocRef, { 
             initialized: true,
             isProductionWiped: true,
             isProductionWipedFull: true,
-            schoolName: 'AMKAR JUNIOR',
+            schoolName: 'АМКАР ЮНИОР',
             whatsappNotifications: true,
             autoOverdueTasks: true
           });
@@ -263,6 +380,14 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (data.autoOverdueTasks !== undefined) {
               setAutoOverdueTasks(data.autoOverdueTasks);
               localStorage.setItem('amkar_auto_overdue_tasks', String(data.autoOverdueTasks));
+            }
+            if (data.crmConfig) {
+              setCrmConfig(data.crmConfig);
+              localStorage.setItem('amkar_crm_config', JSON.stringify(data.crmConfig));
+            }
+            if (data.userProfile) {
+              setUserProfile(data.userProfile);
+              localStorage.setItem('amkar_user_profile', JSON.stringify(data.userProfile));
             }
           }
         }
@@ -392,6 +517,53 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem('amkar_cal_sync_log', JSON.stringify(calendarSyncLog));
   }, [calendarSyncLog]);
 
+  useEffect(() => {
+    localStorage.setItem('amkar_finance_categories', JSON.stringify(financeCategories));
+  }, [financeCategories]);
+
+  useEffect(() => {
+    localStorage.setItem('amkar_financial_plans', JSON.stringify(financialPlans));
+  }, [financialPlans]);
+
+  // Hook to poll webhooks periodically
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    const pollWebhooks = async () => {
+      try {
+        const response = await fetch('/api/webhooks/poll');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.leads && data.leads.length > 0) {
+            data.leads.forEach((payload: any) => {
+              // Create a lead from webhook payload
+              const structuredLead = {
+                parentName: payload.parentName || payload.name || 'Родитель (из формы)',
+                parentPhone: payload.parentPhone || payload.phone || payload.contact || 'Не указан',
+                parentEmail: payload.parentEmail || payload.email || undefined,
+                childName: payload.childName || payload.child || 'Ребенок',
+                childSurname: payload.childSurname || payload.surname || '',
+                childBirthYear: parseInt(payload.childBirthYear || payload.year || '2015', 10),
+                childAge: payload.childAge || payload.age || 8,
+                source: payload.source || payload.utm_source || 'Веб-форма',
+                notes: payload.notes || payload.message || 'Заявка с сайта или формы',
+                timeString: new Date().toTimeString().slice(0, 5)
+              };
+              
+              // We call addLead to insert and create tasks
+              addLead(structuredLead);
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('Webhook poll failed:', e);
+      }
+    };
+    
+    interval = setInterval(pollWebhooks, 15000); // 15 seconds
+    pollWebhooks(); // initial check
+    return () => clearInterval(interval);
+  }, []);
+
   // Actions
   const addLead = async (leadData: Omit<Lead, 'id' | 'createdAt' | 'timeString' | 'status'>) => {
     const now = new Date();
@@ -461,56 +633,33 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const lead = leads.find(l => l.id === leadId);
     if (!lead) return;
 
-    const clientId = `cl_${Date.now()}`;
-    const newClient: Client = {
-      id: clientId,
-      parentName: lead.parentName,
-      parentPhone: lead.parentPhone,
-      parentEmail: lead.parentEmail,
-      childName: lead.childName,
-      childSurname: lead.childSurname,
-      childBirthYear: lead.childBirthYear,
-      childAge: lead.childAge,
-      status: 'trial',
-      abonement: 'none',
-      abonementStatus: 'Нет абонемента',
-      abonementSessionsLeft: 0,
-      groupName: groupName,
-      coachId: coachId,
-      coachName: coaches.find(c => c.id === coachId)?.name || 'Не указан',
-      medicalCertificateUrl: null,
-      insuranceUrl: null,
-      payments: [],
-      attendance: [],
-      progress: { technique: 4.0, tactics: 4.0, physical: 4.0, discipline: 4.0 },
-      achievements: [],
-      relationshipRisk: 'none',
-      managerBonusAccrued: 250,
-      notes: `Приглашен на пробную тренировку [${date} ${time}]. Источник: ${lead.source}.`
+    const group = groups.find(g => g.name === groupName);
+
+    const updatedLead: Lead = {
+      ...lead,
+      status: 'trial_booked',
+      trialDate: date,
+      trialTime: time,
+      trialGroupId: group?.id,
+      trialCoachId: coachId,
     };
 
-    // Instantly update local state so views reflect booking immediately
-    setClients(prev => [...prev, newClient]);
-    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status: 'trial_booked' as const } : l));
+    setLeads(prev => prev.map(l => l.id === leadId ? updatedLead : l));
 
     const trainerTaskId = `t_${Date.now()}_tr`;
     const trainerTask: CRMTask = {
       id: trainerTaskId,
-      title: `Провести пробную тренировку для ${newClient.childName} ${newClient.childSurname}`,
+      title: `Провести пробную тренировку для ${lead.childName} ${lead.childSurname}`,
       assignedTo: 'trainer',
       status: 'pending',
       dueDate: `${date} в ${time}`,
-      description: `Проверить навыки ребенка (возраст: ${newClient.childAge} лет). Прикрепить фото-подтверждение после окончания занятия и отметить посещаемость.`,
-      relatedClientId: newClient.id
+      description: `Проверить навыки ребенка (возраст: ${lead.childAge} лет). Оставить отзыв после тренировки.`,
+      relatedClientId: lead.id
     };
 
     setTasks(prev => [trainerTask, ...prev]);
 
-    // Safe background sync without blocking UI execution
-    setDoc(doc(db, 'clients', clientId), newClient).catch(err => {
-      console.warn("Failed to sync new client to Firestore:", err);
-    });
-    updateDoc(doc(db, 'leads', leadId), { status: 'trial_booked' }).catch(err => {
+    updateDoc(doc(db, 'leads', leadId), updatedLead as any).catch(err => {
       console.warn("Failed to update lead status in Firestore:", err);
     });
     setDoc(doc(db, 'tasks', trainerTaskId), trainerTask).catch(err => {
@@ -519,30 +668,36 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (calendarSyncEnabled) {
       setCalendarSyncLog(prev => [
-        `[${new Date().toLocaleTimeString()}] Добавлено событие "Пробная тренировка: ${newClient.childSurname} ${newClient.childName}" в Google Календарь (Календарь Тренера ${newClient.coachName}).`,
+        `[${new Date().toLocaleTimeString()}] Добавлено событие "Пробная тренировка: ${updatedLead.childSurname} ${updatedLead.childName}" в Google Календарь.`,
         ...prev
       ]);
     }
   };
 
   const completeTrialAndMarkAttendance = async (
-    clientId: string,
+    leadId: string,
     attended: boolean,
     coachNotes: string,
     groupName: string,
     coachName: string,
     fileAttached?: string
   ) => {
-    const client = clients.find(c => c.id === clientId);
-    if (!client) return;
+    const lead = leads.find(l => l.id === leadId);
+    if (!lead) return;
 
-    const updatedNotes = `${client.notes}\n[Тренер ${coachName} отметил]: ${coachNotes}. ${fileAttached ? 'Фотоотчет прикреплен: ' + fileAttached : ''}`;
-    const newAttendance = [{ date: 'Сегодня', status: attended ? 'present' : 'absent' as const, reason: attended ? undefined : 'Не пришел на пробное' }];
+    const newFeedback = `[Тренер ${coachName} отметил]: ${coachNotes}. ${fileAttached ? 'Фотоотчет прикреплен: ' + fileAttached : ''}`;
+    
+    // Update Lead status to trial_completed and append trainer feedback
+    const updatedLead: Lead = {
+      ...lead,
+      status: 'trial_completed',
+      trainerFeedback: newFeedback
+    };
     
     // Immediate local updates
-    setClients(prev => prev.map(c => c.id === clientId ? { ...c, attendance: newAttendance, notes: updatedNotes } : c));
+    setLeads(prev => prev.map(l => l.id === leadId ? updatedLead : l));
 
-    const label = `${client.childName} ${client.childSurname}`;
+    const label = `${lead.childName} ${lead.childSurname}`;
     const managerTaskId = `t_${Date.now()}_conv`;
     const managerTask: CRMTask = {
       id: managerTaskId,
@@ -550,8 +705,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       assignedTo: 'manager',
       status: 'new',
       dueDate: 'Сегодня',
-      description: `Пробная тренировка пройдена (${attended ? 'Присутствовал' : 'Пропустил'}). Связаться, собрать обратную связь и отправить ссылку на оплату абонемента. Тел: ${client.parentPhone}`,
-      relatedClientId: clientId
+      description: `Пробная тренировка пройдена (${attended ? 'Присутствовал' : 'Пропустил'}). Отзыв тренера: ${coachNotes}. Связаться и отправить ссылку на оплату. Тел: ${lead.parentPhone}`,
+      relatedLeadId: leadId
     };
 
     const directorTaskId = `t_${Date.now()}_dir_conv`;
@@ -567,10 +722,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTasks(prev => [managerTask, directorTask, ...prev]);
 
     // Safe background sync without blocking UI execution
-    updateDoc(doc(db, 'clients', clientId), {
-      attendance: newAttendance,
-      notes: updatedNotes
-    }).catch(err => {
+    updateDoc(doc(db, 'leads', leadId), updatedLead as any).catch(err => {
       console.warn("Failed to sync attendance in Firestore:", err);
     });
     setDoc(doc(db, 'tasks', managerTaskId), managerTask).catch(err => {
@@ -599,8 +751,9 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const processPayment = async (clientId: string, tariff: '12_sessions' | '8_sessions' | '4_sessions' | '1_session', amount: number) => {
-    const client = clients.find(c => c.id === clientId);
-    if (!client) return;
+    let client = clients.find(c => c.id === clientId);
+    let lead = leads.find(l => l.id === clientId);
+    if (!client && !lead) return;
 
     let textTariff = '';
     let sessions = 0;
@@ -612,15 +765,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const todayString = new Date().toISOString().substring(0, 10);
-    let autoGroup = client.groupName;
-    if (!autoGroup) {
-      if (groups.length > 0) {
-         autoGroup = groups[0].name;
-      } else {
-         autoGroup = null;
-      }
-    }
-
+    const targetMonth = todayString.substring(0, 7);
+    const financeId = `f_${Date.now()}`;
     const newPayment: Payment = {
       id: `p_${Date.now()}`,
       date: todayString,
@@ -629,64 +775,147 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: 'Оплачено'
     };
 
-    const updatedPayments = [newPayment, ...client.payments];
-
-    // Immediate local updates
-    setClients(prev => prev.map(c => c.id === clientId ? {
-      ...c,
-      status: 'active' as const,
-      abonement: tariff,
-      abonementStatus: 'Оплачено',
-      abonementSessionsLeft: sessions,
-      abonementExpirationDate: new Date(Date.now() + 30*24*60*60*1000).toISOString().substring(0, 10),
-      groupName: autoGroup,
-      payments: updatedPayments,
-      managerBonusAccrued: (c.managerBonusAccrued || 0) + 500
-    } : c));
-
-    const financeId = `f_${Date.now()}`;
     const newFinance: FinanceRecord = {
       id: financeId,
       type: 'income',
       category: 'Абонементы',
       amount: amount,
       date: todayString,
-      description: `Успешная оплата ЮKassa: ${textTariff} от клиента ID ${clientId}`,
-      groupName: client.groupName || undefined
+      description: `Успешная оплата ЮKassa: ${textTariff} от пользователя ID ${clientId}`,
+      targetMonth
     };
-    setFinances(prev => [newFinance, ...prev]);
 
-    const directorTaskId = `t_${Date.now()}_dir_paid`;
-    const clientLabel = `${client.childName} ${client.childSurname}`;
-    const directorNotification: CRMTask = {
-      id: directorTaskId,
-      title: `Доход: ${amount} ₽ получено от ${clientLabel}`,
-      assignedTo: 'director',
-      status: 'new',
-      dueDate: 'Сегодня',
-      description: `Успешный переход из пробного периода в активные. Оплачен: ${textTariff}`
+    const acquiringExpenseId = `f_${Date.now()}_acq`;
+    const acquiringFee = Math.round(amount * (crmConfig.acquiringFeePct / 100));
+    const acquiringFinance: FinanceRecord = {
+      id: acquiringExpenseId,
+      type: 'expense',
+      category: 'Эквайринг (Комиссия ЮKassa)',
+      amount: acquiringFee,
+      date: todayString,
+      description: `Эквайринг ${crmConfig.acquiringFeePct}% от оплаты абонемента ${textTariff} (клиент ID ${clientId})`,
+      targetMonth
     };
-    setTasks(prev => [directorNotification, ...prev]);
 
-    // Safe background sync without blocking UI execution
-    updateDoc(doc(db, 'clients', clientId), {
-      status: 'active',
-      abonement: tariff,
-      abonementStatus: 'Оплачено',
-      abonementSessionsLeft: sessions,
-      abonementExpirationDate: new Date(Date.now() + 30*24*60*60*1000).toISOString().substring(0, 10),
-      groupName: autoGroup,
-      payments: updatedPayments,
-      managerBonusAccrued: (client.managerBonusAccrued || 0) + 500
-    }).catch(err => {
-      console.warn("Failed to update client subscription in Firestore:", err);
-    });
-    setDoc(doc(db, 'finances', financeId), newFinance).catch(err => {
-      console.warn("Failed to sync finance record in Firestore:", err);
-    });
-    setDoc(doc(db, 'tasks', directorTaskId), directorNotification).catch(err => {
-      console.warn("Failed to sync director payment notification in Firestore:", err);
-    });
+    if (lead) {
+      const newClientId = `cl_${Date.now()}`;
+      const groupName = lead.trialGroupId ? groups.find(g => g.id === lead?.trialGroupId)?.name || null : groups[0]?.name || null;
+      
+      const newClient: Client = {
+        id: newClientId,
+        parentName: lead.parentName,
+        parentPhone: lead.parentPhone,
+        parentEmail: lead.parentEmail,
+        childName: lead.childName,
+        childSurname: lead.childSurname,
+        childBirthYear: lead.childBirthYear,
+        childAge: lead.childAge,
+        status: 'active',
+        abonement: tariff,
+        abonementStatus: 'Оплачено',
+        abonementSessionsLeft: sessions,
+        abonementExpirationDate: new Date(Date.now() + 30*24*60*60*1000).toISOString().substring(0, 10),
+        groupName: groupName,
+        coachId: lead.trialCoachId || coaches[0]?.id || '',
+        coachName: coaches.find(c => c.id === lead?.trialCoachId)?.name || 'Не указан',
+        medicalCertificateUrl: null,
+        insuranceUrl: null,
+        payments: [newPayment],
+        attendance: [],
+        progress: { technique: 4.0, tactics: 4.0, physical: 4.0, discipline: 4.0 },
+        achievements: [],
+        relationshipRisk: 'none',
+        managerBonusAccrued: 500,
+        notes: `Конвертирован из лида. Источник: ${lead.source}. ${lead.trainerFeedback ? 'Отзыв тренера на пробном: ' + lead.trainerFeedback : ''}`
+      };
+
+      setClients(prev => [...prev, newClient]);
+      setLeads(prev => prev.map(l => l.id === lead?.id ? { ...l, status: 'converted' } : l));
+      setFinances(prev => [
+        {...newFinance, groupName: groupName || undefined}, 
+        {...acquiringFinance, groupName: groupName || undefined},
+        ...prev
+      ]);
+
+      const directorTaskId = `t_${Date.now()}_dir_paid`;
+      const clientLabel = `${newClient.childName} ${newClient.childSurname}`;
+      const directorNotification: CRMTask = {
+        id: directorTaskId,
+        title: `Доход и конверсия: ${amount} ₽ получено от ${clientLabel}`,
+        assignedTo: 'director',
+        status: 'new',
+        dueDate: 'Сегодня',
+        description: `Успешный переход из пробного периода в активные. Оплачен: ${textTariff}`
+      };
+      setTasks(prev => [directorNotification, ...prev]);
+
+      setDoc(doc(db, 'clients', newClientId), newClient).catch(e => console.warn(e));
+      updateDoc(doc(db, 'leads', lead.id), { status: 'converted' }).catch(e => console.warn(e));
+      setDoc(doc(db, 'finances', financeId), {...newFinance, groupName: groupName || undefined}).catch(e => console.warn(e));
+      setDoc(doc(db, 'finances', acquiringExpenseId), {...acquiringFinance, groupName: groupName || undefined}).catch(e => console.warn(e));
+      setDoc(doc(db, 'tasks', directorTaskId), directorNotification).catch(e => console.warn(e));
+
+    } else if (client) {
+      let autoGroup = client.groupName;
+      if (!autoGroup) {
+        if (groups.length > 0) autoGroup = groups[0].name;
+        else autoGroup = null;
+      }
+      
+      const updatedPayments = [newPayment, ...client.payments];
+
+      setClients(prev => prev.map(c => c.id === clientId ? {
+        ...c,
+        status: 'active' as const,
+        abonement: tariff,
+        abonementStatus: 'Оплачено',
+        abonementSessionsLeft: sessions + (c.abonementSessionsLeft || 0),
+        abonementExpirationDate: new Date(Date.now() + 30*24*60*60*1000).toISOString().substring(0, 10),
+        groupName: autoGroup,
+        payments: updatedPayments,
+        managerBonusAccrued: (c.managerBonusAccrued || 0) + 100
+      } : c));
+
+      setFinances(prev => [
+        {...newFinance, groupName: autoGroup || undefined}, 
+        {...acquiringFinance, groupName: autoGroup || undefined},
+        ...prev
+      ]);
+
+      const directorTaskId = `t_${Date.now()}_dir_paid`;
+      const clientLabel = `${client.childName} ${client.childSurname}`;
+      const directorNotification: CRMTask = {
+        id: directorTaskId,
+        title: `Продление абонемента: ${amount} ₽ от ${clientLabel}`,
+        assignedTo: 'director',
+        status: 'new',
+        dueDate: 'Сегодня',
+        description: `Клиент оплатил: ${textTariff}`
+      };
+      setTasks(prev => [directorNotification, ...prev]);
+
+      updateDoc(doc(db, 'clients', clientId), {
+        status: 'active',
+        abonement: tariff,
+        abonementStatus: 'Оплачено',
+        abonementSessionsLeft: sessions + (client.abonementSessionsLeft || 0),
+        abonementExpirationDate: new Date(Date.now() + 30*24*60*60*1000).toISOString().substring(0, 10),
+        groupName: autoGroup,
+        payments: updatedPayments,
+        managerBonusAccrued: (client.managerBonusAccrued || 0) + 100
+      }).catch(err => {
+        console.warn("Failed to update client subscription in Firestore:", err);
+      });
+      setDoc(doc(db, 'finances', financeId), {...newFinance, groupName: autoGroup || undefined}).catch(err => {
+        console.warn("Failed to sync finance record in Firestore:", err);
+      });
+      setDoc(doc(db, 'finances', acquiringExpenseId), {...acquiringFinance, groupName: autoGroup || undefined}).catch(err => {
+        console.warn("Failed to sync expense record in Firestore:", err);
+      });
+      setDoc(doc(db, 'tasks', directorTaskId), directorNotification).catch(err => {
+        console.warn("Failed to sync director payment notification in Firestore:", err);
+      });
+    }
 
     if (calendarSyncEnabled) {
       setCalendarSyncLog(prev => [
@@ -898,6 +1127,20 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
+  const updateChatMessage = async (id: string, newText: string) => {
+    setMessages(prev => prev.map(m => m.id === id ? { ...m, text: newText } : m));
+    updateDoc(doc(db, 'messages', id), { text: newText }).catch(err => {
+      console.warn(`Failed to update message ${id} in Firestore:`, err);
+    });
+  };
+
+  const deleteChatMessage = async (id: string) => {
+    setMessages(prev => prev.filter(m => m.id !== id));
+    deleteDoc(doc(db, 'messages', id)).catch(err => {
+      console.warn(`Failed to delete message ${id} in Firestore:`, err);
+    });
+  };
+
   const toggleCalendarSync = () => {
     setCalendarSyncEnabled(prev => !prev);
     const isEnabled = !calendarSyncEnabled;
@@ -928,6 +1171,35 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ...prev
       ]);
     }, 1500);
+  };
+
+  const addFinanceCategory = async (category: Omit<FinanceCategory, 'id'>) => {
+    const id = `cat_${Date.now()}`;
+    const newCategory = { ...category, id };
+    setFinanceCategories(prev => [...prev, newCategory]);
+    // Would save to Firestore if needed
+  };
+
+  const deleteFinanceCategory = async (id: string) => {
+    setFinanceCategories(prev => prev.filter(c => c.id !== id));
+  };
+
+  const addFinanceRecord = async (record: Omit<FinanceRecord, 'id'>) => {
+    const id = `f_${Date.now()}`;
+    const newRecord = { ...record, id };
+    setFinances(prev => [newRecord, ...prev]);
+    setDoc(doc(db, 'finances', id), newRecord).catch(e => console.warn(e));
+  };
+
+  const updateFinancialPlan = async (plan: FinancialPlan) => {
+    setFinancialPlans(prev => {
+      const existing = prev.find(p => p.month === plan.month);
+      if (existing) {
+        return prev.map(p => p.month === plan.month ? plan : p);
+      }
+      return [...prev, plan];
+    });
+    // Would save to Firestore here
   };
 
   const resetAllData = async () => {
@@ -1393,22 +1665,25 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   return (
     <CRMContext.Provider value={{
-      leads, clients, tasks, groups, coaches, finances, trainingSessions, messages,
+      userProfile,
+      updateUserProfile,
+      leads, clients, tasks, groups, coaches, finances, financeCategories, financialPlans, trainingSessions, messages,
       calendarSyncEnabled, calendarSyncStatus, calendarSyncLog,
       currentRole, currentTab, setCurrentRole, setCurrentTab,
       firestoreError, dismissFirestoreError,
       addLead, updateLeadStatus, bookTrial, completeTrialAndMarkAttendance,
       sendPaymentLink, processPayment, uploadDocument, markAttendance, ratePlayer,
-      addTask, completeTask, addChatMessage, toggleCalendarSync, triggerManualCalendarSync,
+      addTask, completeTask, addChatMessage, updateChatMessage, deleteChatMessage, toggleCalendarSync, triggerManualCalendarSync,
       resetAllData,
       clearAllData,
       overwriteClients, overwriteLeads, overwriteFinances, overwriteCoaches,
       appendClients, appendLeads, appendFinances, appendCoaches,
-      deleteLead, deleteClient, deleteTask, deleteFinanceRecord, updateClientNotes, updateClient,
+      deleteLead, deleteClient, deleteTask, deleteFinanceRecord, addFinanceCategory, deleteFinanceCategory, addFinanceRecord, updateFinancialPlan, updateClientNotes, updateClient,
       createGroup, deleteGroup, updateGroup, assignClientToGroup,
       createCoach, deleteCoach, assignCoachToGroup, updateCoachContacts, updateCoach,
       schoolName, updateSchoolName, whatsappNotifications, updateWhatsappNotifications,
-      autoOverdueTasks, updateAutoOverdueTasks
+      autoOverdueTasks, updateAutoOverdueTasks,
+      crmConfig, updateCRMConfig
     }}>
       {children}
     </CRMContext.Provider>

@@ -5,6 +5,7 @@ import {
   Settings, Award, Sparkles, RefreshCw, Trophy
 } from 'lucide-react';
 import { useCRM } from '../context/CRMContext';
+import { AmkarLogo } from './AmkarLogo';
 
 interface SidebarProps {
   currentRole: 'manager' | 'trainer' | 'parent' | 'director';
@@ -22,8 +23,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { schoolName, leads, messages } = useCRM();
 
   const newLeadsCount = leads.filter(l => l.status === 'new').length;
-  const parentMessagesCount = messages.filter(m => m.senderRole === 'parent').length;
-  const finalMessageCount = messageCount !== undefined ? messageCount : parentMessagesCount;
+  // Calculate messages visible to the current role
+  const visibleMessagesCount = messages.filter(m => !m.visibleTo || m.visibleTo.includes(currentRole) || m.senderRole === currentRole).length;
+  const finalMessageCount = messageCount !== undefined ? messageCount : visibleMessagesCount;
 
   // Get visible menu items based on role
   const getMenuItems = () => {
@@ -36,8 +38,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           { id: 'parent_payments', label: 'Платежи', icon: DollarSign },
           { id: 'parent_messages', label: 'Сообщения', icon: MessageSquare, badge: finalMessageCount || undefined },
           { id: 'parent_knowledge', label: 'База знаний', icon: BookOpen },
-          { id: 'parent_gamification', label: 'Награды и Цели', icon: Trophy },
-          { id: 'parent_settings', label: 'Настройки', icon: Settings }
+          { id: 'parent_gamification', label: 'Награды и Цели', icon: Trophy }
         ];
       case 'trainer':
         return [
@@ -47,12 +48,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
           { id: 'trainer_attendance', label: 'Посещения', icon: CheckSquare },
           { id: 'trainer_progress', label: 'Успеваемость', icon: Award },
           { id: 'trainer_messages', label: 'Сообщения', icon: MessageSquare, badge: finalMessageCount || undefined },
-          { id: 'trainer_knowledge', label: 'Методика', icon: BookOpen },
-          { id: 'trainer_settings', label: 'Настройки', icon: Settings }
+          { id: 'trainer_knowledge', label: 'База знаний', icon: BookOpen }
+        ];
+      case 'director':
+        return [
+          { id: 'hq_home', label: 'Главная', icon: BarChart },
+          { id: 'hq_clients', label: 'Клиенты', icon: Users },
+          { id: 'hq_leads', label: 'Заявки', icon: FileText, badge: newLeadsCount || undefined },
+          { id: 'hq_coaches', label: 'Тренеры', icon: GraduationCap },
+          { id: 'hq_groups', label: 'Группы', icon: FolderPlus },
+          { id: 'director_users', label: 'Пользователи (Доступы)', icon: Users },
+          { id: 'hq_finances', label: 'Финансы', icon: DollarSign },
+          { id: 'hq_analytics', label: 'Бонусы и Аналитика', icon: Sparkles },
+          { id: 'hq_attendance', label: 'Посещения', icon: CheckSquare },
+          { id: 'hq_messages', label: 'Сообщения', icon: MessageSquare, badge: finalMessageCount || undefined },
+          { id: 'hq_calendar_sync', label: 'Google Календарь', icon: RefreshCw },
+          { id: 'hq_settings', label: 'Настройки', icon: Settings }
         ];
       case 'manager':
-      case 'director':
-      default:
         return [
           { id: 'hq_home', label: 'Главная', icon: BarChart },
           { id: 'hq_clients', label: 'Клиенты', icon: Users },
@@ -63,9 +76,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           { id: 'hq_analytics', label: 'Бонусы и Аналитика', icon: Sparkles },
           { id: 'hq_attendance', label: 'Посещения', icon: CheckSquare },
           { id: 'hq_messages', label: 'Сообщения', icon: MessageSquare, badge: finalMessageCount || undefined },
-          { id: 'hq_calendar_sync', label: 'Google Календарь', icon: RefreshCw },
-          { id: 'hq_settings', label: 'Настройки', icon: Settings }
+          { id: 'hq_calendar_sync', label: 'Google Календарь', icon: RefreshCw }
         ];
+      default:
+        return [];
     }
   };
 
@@ -74,17 +88,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <div id="crm-sidebar" className="w-64 bg-white border-r border-gray-100 flex flex-col h-full text-slate-800 min-h-[700px]">
       {/* Brand Header */}
-      <div className="p-6 pb-4 flex items-center space-x-3 text-left">
-        <div className="flex-shrink-0">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-900">
-            <path d="M12 2L2 22h20L12 2z"/>
-            <path d="M12 8v14"/>
-            <path d="M7 12l5-5 5 5"/>
-          </svg>
+      <div className="pt-8 pb-6 flex flex-col items-center justify-center text-center px-4">
+        <div className="flex-shrink-0 mb-4 h-14 w-14">
+          <AmkarLogo />
         </div>
         <div className="flex flex-col">
-          <div className="font-extrabold tracking-tight text-slate-900 text-sm leading-none uppercase">АМКАР ЮНИОР</div>
-          <div className="text-[10px] text-gray-400 tracking-wide mt-1">
+          <div className="font-extrabold tracking-[-0.02em] text-slate-900 text-[15px] leading-none uppercase">АМКАР ЮНИОР</div>
+          <div className="text-[9px] text-gray-500 tracking-widest mt-1.5 font-medium uppercase">
             ФУТБОЛЬНЫЙ КЛУБ
           </div>
         </div>

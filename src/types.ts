@@ -14,6 +14,13 @@ export interface Lead {
   timeString: string; // HH:MM
   status: 'new' | 'contacted' | 'trial_booked' | 'trial_completed' | 'converted' | 'lost';
   note?: string;
+  trialDate?: string;
+  trialTime?: string;
+  trialGroupId?: string;
+  trialCoachId?: string;
+  trainerFeedback?: string;
+  paymentLink?: string;
+  paymentStatus?: 'pending' | 'paid';
 }
 
 export type ClientStatus = 'active' | 'inactive' | 'left' | 'trial' | 'paused' | 'completed';
@@ -155,6 +162,35 @@ export interface FinanceRecord {
   date: string;
   description: string;
   groupName?: string;
+  targetMonth?: string; // YYYY-MM
+}
+
+export interface FinanceCategory {
+  id: string;
+  type: 'income' | 'expense';
+  name: string;
+  isSystem?: boolean;
+}
+
+export interface FinancialPlan {
+  month: string; // YYYY-MM
+  renew12Count: number;
+  renew8Count: number;
+  renew4Count: number;
+  new12Count: number;
+  new8Count: number;
+  new4Count: number;
+  price12: number;
+  price8: number;
+  price4: number;
+}
+
+export interface CRMConfig {
+  acquiringFeePct: number;
+  price12: number;
+  price8: number;
+  price4: number;
+  price1: number;
 }
 
 export interface ChatMessage {
@@ -166,4 +202,5 @@ export interface ChatMessage {
   fileUrl?: string;
   fileName?: string;
   fileType?: 'image' | 'document';
+  visibleTo?: ('manager' | 'trainer' | 'parent' | 'director')[];
 }

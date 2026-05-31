@@ -3,9 +3,13 @@ import { useCRM } from '../context/CRMContext';
 import { 
   Users, Search, UserPlus, Filter, Mail, Phone, Calendar, 
   Trash2, CreditCard, ChevronRight, Edit2, Check, AlertCircle, Sparkles, MessageSquare, Save,
-  Camera, Upload, Volume2, MicOff, PhoneOff, Mic, Loader2, BookOpen, Timer, TrendingDown, FileText
+  Camera, Upload, Volume2, MicOff, PhoneOff, Mic, Loader2, BookOpen, Timer, TrendingDown, FileText,
+  Settings, Shield
 } from 'lucide-react';
 import { Client, Lead, ClientStatus, CRMTask } from '../types';
+import { compressImage } from '../utils/image';
+import { PaymentLinkModal } from './PaymentLinkModal';
+import { ConfirmModal } from './ConfirmModal';
 
 interface ManagerCRMProps {
   activeTab: string;
@@ -13,12 +17,33 @@ interface ManagerCRMProps {
   onOpenPayment: (clientId: string) => void;
 }
 
+function pcmToBase64(pcmData: Float32Array) {
+  const buffer = new ArrayBuffer(pcmData.length * 2);
+  const view = new DataView(buffer);
+  let offset = 0;
+  for (let i = 0; i < pcmData.length; i++) {
+    const s = Math.max(-1, Math.min(1, pcmData[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    offset += 2;
+  }
+  return btoa(String.fromCharCode(...new Uint8Array(buffer)));
+}
+
 export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab, onOpenPayment }) => {
   const { 
     clients, leads, tasks, addLead, bookTrial, sendPaymentLink, addTask, completeTask, 
-    deleteClient, deleteLead, updateClientNotes, updateClient, schoolName, groups, assignClientToGroup 
+    deleteClient, deleteLead, updateClientNotes, updateClient, schoolName, groups, assignClientToGroup,
+    crmConfig,
+    messages,
+    userProfile, updateUserProfile
   } = useCRM();
-  
+
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [paymentModalData, setPaymentModalData] = useState<{clientId: string, clientName: string} | null>(null);
+
+  const [deleteLeadModal, setDeleteLeadModal] = useState<{isOpen: boolean, leadId: string, leadName: string} | null>(null);
+  const [deleteClientModal, setDeleteClientModal] = useState<{isOpen: boolean, clientId: string, clientName: string} | null>(null);
+
   // Search & Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all'); // all, active, trial, paused, completed
@@ -28,11 +53,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
   const [selectedClientId, setSelectedClientId] = useState<string>('cl1');
   const [isEditingRightCard, setIsEditingRightCard] = useState<boolean>(false);
   const [clientDetailTab, setClientDetailTab] = useState<'info' | 'abos' | 'visits' | 'payments' | 'history'>('info');
-  const [clientNotes, setClientNotes] = useState<{[key: string]: string}>({
-    cl1: 'Любит играть в защите, левша. Большие физические задатки.',
-    cl2: 'Интересуется вратарской позицией. Хорошо видит поле.',
-    cl3: 'Заморожен по семейным обстоятельствам до конца мая.'
-  });
+  const [clientNotes, setClientNotes] = useState<{[key: string]: string}>({});
 
   // Client form modal state
   const [selectedClientIds, setSelectedClientIds] = useState<Set<string>>(new Set());
@@ -67,6 +88,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
   const [editRiskUrgency, setEditRiskUrgency] = useState<'none' | 'intervene' | 'urgent'>('none');
   const [editRiskResolution, setEditRiskResolution] = useState<'none' | 'left' | 'thinking' | 'renewed' | 'refused' | 'resolved' | 'reconciled'>('none');
   const [editRiskComment, setEditRiskComment] = useState('');
+  const [editManagerBonus, setEditManagerBonus] = useState(0);
 
   // Dynamic set of all active/school groups present in DB or default presets (trimmed to avoid duplicates)
   const availableGroups = Array.from(new Set([
@@ -83,6 +105,132 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
   const [maxCallDuration, setMaxCallDuration] = useState(0);
   const [isMaxCallMuted, setIsMaxCallMuted] = useState(false);
   const [isMaxCallSpeaker, setIsMaxCallSpeaker] = useState(false);
+  
+  const [isNotificationsMenuOpen, setIsNotificationsMenuOpen] = useState(false);
+  const hasUnreadTasks = tasks.some(t => t.assignedTo === 'manager' && t.status === 'new');
+  const [notificationsHasUnreadLocallyCleared, setNotificationsHasUnreadLocallyCleared] = useState(false);
+  const showNotificationDot = hasUnreadTasks && !notificationsHasUnreadLocallyCleared;
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isPermissionsModalOpen, setIsPermissionsModalOpen] = useState(false);
+
+  // Profile Form States
+  const [tempProfileName, setTempProfileName] = useState('');
+  const [tempProfileRole, setTempProfileRole] = useState('');
+  const [tempProfileAvatar, setTempProfileAvatar] = useState('');
+  const [tempProfilePhone, setTempProfilePhone] = useState('');
+  const [tempProfileEmail, setTempProfileEmail] = useState('');
+
+  // Permissions Form States
+  const [permissions, setPermissions] = useState({
+    canEditClients: true,
+    canDeleteClients: false,
+    canViewFinances: true,
+    canEditFinances: false,
+    canManageGroups: true,
+    canManageCoaches: false
+  });
+
+  const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
+  const [filterAbonement, setFilterAbonement] = useState<string>('all');
+  const [filterBranch, setFilterBranch] = useState<string>('all');
+  
+  const [itemsPerPage, setItemsPerPage] = useState<number>(10);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
+  
+  const isMaxCallMutedRef = React.useRef(isMaxCallMuted);
+  React.useEffect(() => {
+    isMaxCallMutedRef.current = isMaxCallMuted;
+  }, [isMaxCallMuted]);
+
+  const wsRef = React.useRef<WebSocket | null>(null);
+  const audioCtxRef = React.useRef<AudioContext | null>(null);
+  const audioStreamRef = React.useRef<MediaStream | null>(null);
+  const nextStartTimeRef = React.useRef<number>(0);
+
+  const stopLiveAudio = () => {
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach(t => t.stop());
+      audioStreamRef.current = null;
+    }
+    if (audioCtxRef.current) {
+      audioCtxRef.current.close();
+      audioCtxRef.current = null;
+    }
+  };
+
+  const playAudioChunk = (base64Audio: string) => {
+    if (!audioCtxRef.current) return;
+    const audioCtx = audioCtxRef.current;
+    
+    const binaryString = atob(base64Audio);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    const int16Array = new Int16Array(bytes.buffer);
+    const audioBuffer = audioCtx.createBuffer(1, int16Array.length, 16000);
+    const channelData = audioBuffer.getChannelData(0);
+    for (let i = 0; i < int16Array.length; i++) {
+        channelData[i] = int16Array[i] / 32768.0;
+    }
+    const source = audioCtx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(audioCtx.destination);
+    
+    let nextStart = nextStartTimeRef.current;
+    if (nextStart < audioCtx.currentTime) {
+        nextStart = audioCtx.currentTime + 0.1;
+    }
+    source.start(nextStart);
+    nextStartTimeRef.current = nextStart + audioBuffer.duration;
+  };
+
+  const startLiveAudio = async () => {
+    stopLiveAudio();
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const socket = new WebSocket(`${protocol}//${location.host}/api/live`);
+    wsRef.current = socket;
+
+    socket.onopen = async () => {
+      try {
+        const audioCtx = new AudioContext({ sampleRate: 16000 });
+        audioCtxRef.current = audioCtx;
+        nextStartTimeRef.current = audioCtx.currentTime + 0.1;
+
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioStreamRef.current = stream;
+
+        const source = audioCtx.createMediaStreamSource(stream);
+        const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+        source.connect(processor);
+        processor.connect(audioCtx.destination);
+
+        processor.onaudioprocess = (e) => {
+          if (socket.readyState === WebSocket.OPEN && !isMaxCallMutedRef.current) {
+            const base64 = pcmToBase64(e.inputBuffer.getChannelData(0));
+            socket.send(JSON.stringify({ audio: base64 }));
+          }
+        };
+
+        socket.onmessage = (event) => {
+          const msg = JSON.parse(event.data);
+          if (msg.audio) playAudioChunk(msg.audio);
+          if (msg.interrupted) { 
+             nextStartTimeRef.current = audioCtxRef.current?.currentTime || 0;
+          }
+        };
+      } catch (err) {
+        console.error("Mic access denied or error:", err);
+      }
+    };
+  };
 
   React.useEffect(() => {
     let statusTimer: any;
@@ -126,12 +274,8 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
     setMaxCallDuration(0);
     setIsMaxCallingOpen(true);
 
-    const cleanPhone = (client.parentPhone || '').replace(/\D/g, '');
-    try {
-      window.location.href = `max://call?phone=${cleanPhone}`;
-    } catch (e) {
-      console.warn("Could not launch custom protocol max://", e);
-    }
+    // Initializing Gemini Live voice connection
+    startLiveAudio();
   };
 
   const handleStartEditClient = (client: Client) => {
@@ -155,6 +299,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
     setEditRiskUrgency(client.riskUrgency || 'none');
     setEditRiskResolution(client.riskResolution || 'none');
     setEditRiskComment(client.riskComment || '');
+    setEditManagerBonus(client.managerBonusAccrued || 0);
     setIsEditClientOpen(true);
   };
 
@@ -180,7 +325,8 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
         riskDetails: editRiskDetails,
         riskUrgency: editRiskUrgency,
         riskResolution: editRiskResolution,
-        riskComment: editRiskComment
+        riskComment: editRiskComment,
+        managerBonusAccrued: editManagerBonus
       });
       // also assign client to selected group effectively
       await assignClientToGroup(editClientId, editGroup || null);
@@ -214,7 +360,8 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
         riskDetails: editRiskDetails,
         riskUrgency: editRiskUrgency,
         riskResolution: editRiskResolution,
-        riskComment: editRiskComment
+        riskComment: editRiskComment,
+        managerBonusAccrued: editManagerBonus
       });
       // also assign client to selected group effectively
       await assignClientToGroup(selectedClient.id, editGroup || null);
@@ -228,12 +375,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
   const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setEditAvatarUrl(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    compressImage(file, (base64) => setEditAvatarUrl(base64));
   };
 
   const PRESET_AVATARS = [
@@ -330,14 +472,25 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
     const matchesSearch = 
       c.childName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.childSurname.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.parentName.toLowerCase().includes(searchTerm.toLowerCase());
+      c.parentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (c.parentPhone && c.parentPhone.includes(searchTerm));
 
     const matchesStatus = filterStatus === 'all' || c.status === filterStatus;
     const matchesGroup = filterGroup === 'all' || 
       (c.groupName && filterGroup && c.groupName.trim().toLowerCase() === filterGroup.trim().toLowerCase());
+    
+    const matchesAbonement = filterAbonement === 'all' ||
+      (filterAbonement === 'unpaid' && c.abonementStatus !== 'Оплачено') ||
+      (filterAbonement === 'paid' && c.abonementStatus === 'Оплачено') ||
+      (filterAbonement === 'none' && c.abonement === 'none');
 
-    return matchesSearch && matchesStatus && matchesGroup;
+    const matchesBranch = filterBranch === 'all' || (c.branch && c.branch === filterBranch);
+
+    return matchesSearch && matchesStatus && matchesGroup && matchesAbonement && matchesBranch;
   });
+
+  const totalPages = Math.ceil(filteredClients.length / itemsPerPage) || 1;
+  const paginatedClients = filteredClients.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50 text-gray-800 min-h-screen">
@@ -453,16 +606,37 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                             >
                               Пригласить на пробную
                             </button>
+                          ) : lead.status === 'trial_completed' ? (
+                            <button
+                              onClick={() => {
+                                setPaymentModalData({ clientId: lead.id, clientName: `${lead.childSurname} ${lead.childName}` });
+                                setPaymentModalOpen(true);
+                              }}
+                              className="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded font-bold text-[10px] transition group relative flex items-center space-x-1"
+                            >
+                              <CreditCard className="w-3.5 h-3.5" />
+                              <span>Выслать ссылку</span>
+                            </button>
                           ) : (
                             <span className="text-[11px] text-emerald-600 font-bold">✓ Отработан успешно</span>
                           )}
                           <button
-                            onClick={async () => {
-                              const confirmDel = window.confirm(`Вы уверены, что хотите окончательно удалить заявку от родителя ${lead.parentName} (${lead.childName})?`);
-                              if (confirmDel) {
-                                await deleteLead(lead.id);
-                                alert('Заявка успешно удалена из базы.');
-                              }
+                            title="Отправить ссылку на оплату"
+                            onClick={() => {
+                              setPaymentModalData({ clientId: lead.id, clientName: `${lead.childSurname} ${lead.childName}` });
+                              setPaymentModalOpen(true);
+                            }}
+                            className="p-1.5 text-emerald-500 hover:bg-emerald-50 hover:text-emerald-600 transition rounded"
+                          >
+                            <CreditCard className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setDeleteLeadModal({
+                                isOpen: true,
+                                leadId: lead.id,
+                                leadName: `${lead.parentName} (${lead.childName})`
+                              });
                             }}
                             className="p-1.5 text-red-500 hover:bg-red-50 rounded transition"
                             title="Удалить заявку"
@@ -493,7 +667,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
               <div className="flex items-center space-x-4">
                 <div className="relative">
                   <Search className="w-4 h-4 absolute left-3 top-2.5 text-gray-400" />
-                  <input type="text" placeholder="Поиск клиента..." className="pl-9 pr-4 py-2 bg-gray-50 hover:bg-gray-100 rounded-full text-xs font-medium border-none focus:ring-0 outline-none w-56 transition-colors text-gray-700" />
+                  <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Поиск клиента..." className="pl-9 pr-4 py-2 bg-gray-50 hover:bg-gray-100 rounded-full text-xs font-medium border-none focus:ring-0 outline-none w-56 transition-colors text-gray-700" />
                 </div>
                 <button 
                   onClick={() => setIsAddClientOpen(true)}
@@ -501,22 +675,68 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                 >
                   <span className="-ml-1 mr-1.5">+</span> Добавить клиента
                 </button>
-                <div className="relative cursor-pointer hover:bg-gray-50 p-2 rounded-full transition-colors ml-2">
-                  <span className="w-1.5 h-1.5 bg-red-500 rounded-full absolute top-2 right-2 ring-2 ring-white"></span>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-600">
-                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-                    <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-                  </svg>
-                </div>
-                <div className="flex items-center space-x-2.5 pl-2 cursor-pointer border-l border-gray-100">
-                  <img src="https://i.pravatar.cc/100?img=11" alt="avatar" className="w-9 h-9 rounded-full object-cover bg-gray-100 border border-gray-200" />
-                  <div className="text-left hidden md:block">
-                    <div className="font-bold text-gray-900 text-xs">Василий</div>
-                    <div className="text-[10px] text-gray-500">Администратор</div>
+                <div className="relative">
+                  <div className="relative cursor-pointer hover:bg-gray-50 p-2 rounded-full transition-colors ml-2" onClick={() => { setIsNotificationsMenuOpen(!isNotificationsMenuOpen); setNotificationsHasUnreadLocallyCleared(true); setIsProfileMenuOpen(false); }}>
+                    {showNotificationDot && <span className="w-1.5 h-1.5 bg-red-500 rounded-full absolute top-2 right-2 ring-2 ring-white"></span>}
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-600">
+                      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                      <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                    </svg>
                   </div>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400 hidden md:block">
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                  </svg>
+                  {isNotificationsMenuOpen && (
+                    <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-gray-100 p-4 z-50">
+                      <h4 className="font-bold text-gray-800 mb-2 border-b pb-2 text-sm">Уведомления</h4>
+                      {tasks.filter(t => t.assignedTo === 'manager' && t.status !== 'completed').slice(0, 5).map(task => (
+                        <p key={task.id} className="text-xs text-slate-600 py-1.5 border-b last:border-none border-gray-50">{task.title}</p>
+                      ))}
+                      {tasks.filter(t => t.assignedTo === 'manager' && t.status !== 'completed').length === 0 && (
+                         <p className="text-xs text-gray-400 py-1 italic">Нет новых уведомлений</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="relative">
+                  <div className="flex items-center space-x-2.5 pl-2 cursor-pointer border-l border-gray-100" onClick={() => { setIsProfileMenuOpen(!isProfileMenuOpen); setIsNotificationsMenuOpen(false); }}>
+                    <img src={userProfile.avatarUrl} alt="avatar" className="w-9 h-9 rounded-full object-cover bg-gray-100 border border-gray-200" />
+                    <div className="text-left hidden md:block">
+                      <div className="font-bold text-gray-900 text-xs">{userProfile.name}</div>
+                      <div className="text-[10px] text-gray-500 truncate max-w-[120px]">{userProfile.role}</div>
+                    </div>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400 hidden md:block">
+                      <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                  </div>
+                  {isProfileMenuOpen && (
+                    <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-100 py-2 z-50">
+                      <div 
+                        className="px-4 py-2 hover:bg-slate-50 cursor-pointer text-sm font-medium text-slate-700 flex items-center space-x-2"
+                        onClick={() => {
+                          setTempProfileName(userProfile.name);
+                          setTempProfileRole(userProfile.role);
+                          setTempProfileAvatar(userProfile.avatarUrl);
+                          setTempProfilePhone(userProfile.phone);
+                          setTempProfileEmail(userProfile.email);
+                          setIsProfileMenuOpen(false);
+                          setIsProfileModalOpen(true);
+                        }}
+                      >
+                         <Settings className="w-4 h-4 text-gray-400" />
+                         <span>Настройки профиля</span>
+                      </div>
+                      <div 
+                        className="px-4 py-2 hover:bg-slate-50 cursor-pointer text-sm font-medium text-slate-700 flex items-center space-x-2"
+                        onClick={() => {
+                          setIsProfileMenuOpen(false);
+                          setIsPermissionsModalOpen(true);
+                        }}
+                      >
+                         <Shield className="w-4 h-4 text-gray-400" />
+                         <span>Разграничение прав</span>
+                      </div>
+                      <div className="border-t my-1"></div>
+                      <div className="px-4 py-2 hover:bg-red-50 hover:text-red-600 cursor-pointer text-sm font-bold text-rose-600">Выйти</div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -616,10 +836,15 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                   
                   <div className="flex items-center space-x-2 shrink-0">
                     <select 
+                      value={filterBranch}
+                      onChange={(e) => setFilterBranch(e.target.value)}
                       className="py-2 pl-3 pr-8 bg-white border-none font-medium text-gray-500 text-[11px] rounded-full outline-none appearance-none cursor-pointer hover:bg-gray-50"
                       style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'10\' height=\'10\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpolyline points=\'6 9 12 15 18 9\'%3E%3C/polyline%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
                     >
-                      <option>Филиал: Все</option>
+                      <option value="all">Филиал: Все</option>
+                      {/* You can add real branches here if they exist, else just keep 'all' or simple options */}
+                      <option value="Манеж Спартак">Манеж Спартак</option>
+                      <option value="Импульс Арена">Импульс Арена</option>
                     </select>
 
                     <select 
@@ -648,19 +873,41 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                       <option value="left">Ушли / Выпускники</option>
                     </select>
 
-                    <button className="flex items-center space-x-1 py-2 px-3 text-[11px] font-bold text-gray-600 hover:text-black hover:bg-gray-50 rounded-full transition-colors ml-1">
+                    <button 
+                      onClick={() => setIsAdvancedFiltersOpen(!isAdvancedFiltersOpen)} 
+                      className={`flex items-center space-x-1 py-2 px-3 text-[11px] font-bold rounded-full transition-colors ml-1 ${isAdvancedFiltersOpen ? 'bg-black text-white hover:bg-gray-800' : 'text-gray-600 hover:text-black hover:bg-gray-50'}`}
+                    >
                       <Filter className="w-3.5 h-3.5" />
-                      <span>Фильтры</span>
+                      <span>{isAdvancedFiltersOpen ? 'Скрыть фильтры' : 'Все фильтры'}</span>
                     </button>
                   </div>
                 </div>
+
+                {/* Advanced filters area */}
+                {isAdvancedFiltersOpen && (
+                  <div className="grid md:grid-cols-3 gap-4 pt-3 pb-2 border-t border-gray-100">
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-400 mb-1">Статус оплаты абонемента</label>
+                      <select 
+                        value={filterAbonement}
+                        onChange={(e) => setFilterAbonement(e.target.value)}
+                        className="w-full py-2 px-3 bg-gray-50 border border-transparent rounded-lg text-xs font-medium focus:ring-2 focus:ring-black outline-none"
+                      >
+                        <option value="all">Все</option>
+                        <option value="paid">Оплачено</option>
+                        <option value="unpaid">Должники (Ожидает оплаты)</option>
+                        <option value="none">Нет абонемента</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
 
                 {/* Main Client list */}
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs text-slate-700 border-collapse">
                     <thead>
                       <tr className="text-gray-400 font-medium uppercase tracking-wide border-b border-gray-100 text-[9px]">
-                        <th className="p-3 whitespace-nowrap">
+                        <th className="p-2 md:p-3 whitespace-nowrap">
                           <input 
                             type="checkbox" 
                             className="rounded text-black focus:ring-black border-gray-300 mr-1" 
@@ -672,19 +919,20 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                                 setSelectedClientIds(new Set());
                               }
                             }}
-                          /> Клиент
+                          /> Аватар
                         </th>
-                        <th className="p-3">Ребенок</th>
-                        <th className="p-3">Группа</th>
-                        <th className="p-3">Филиал</th>
-                        <th className="p-3">Статус</th>
-                        <th className="p-3">Абонемент</th>
-                        <th className="p-3">Оплата</th>
-                        <th className="p-3">Действия</th>
+                        <th className="p-2 md:p-3">Данные ребёнка</th>
+                        <th className="p-2 md:p-3 hidden sm:table-cell">Данные родителя</th>
+                        <th className="p-2 md:p-3 hidden md:table-cell">Группа</th>
+                        <th className="p-2 md:p-3 hidden lg:table-cell">Филиал</th>
+                        <th className="p-2 md:p-3 hidden sm:table-cell">Статус</th>
+                        <th className="p-2 md:p-3 hidden lg:table-cell">Абонемент</th>
+                        <th className="p-2 md:p-3 hidden sm:table-cell">Оплата</th>
+                        <th className="p-2 md:p-3">Действия</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {filteredClients.map((client, idx) => {
+                      {paginatedClients.map((client, idx) => {
                         const isSelected = selectedClientId === client.id;
                         return (
                           <tr 
@@ -714,6 +962,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                               setEditRiskUrgency(client.riskUrgency || 'none');
                               setEditRiskResolution(client.riskResolution || 'none');
                               setEditRiskComment(client.riskComment || '');
+                              setEditManagerBonus(client.managerBonusAccrued || 0);
 
                               // prefill note
                               if (!clientNotes[client.id]) {
@@ -724,47 +973,49 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                               isSelected ? 'bg-gray-50/80 shadow-sm' : 'hover:bg-gray-50/50'
                             }`}
                           >
-                          <td className="p-3 flex items-center space-x-2.5">
-                            <input 
-                              type="checkbox" 
-                              className="rounded text-black focus:ring-black border-gray-300"
-                              checked={selectedClientIds.has(client.id)}
-                              onChange={(e) => {
-                                e.stopPropagation();
-                                const newSet = new Set(selectedClientIds);
-                                if (e.target.checked) {
-                                  newSet.add(client.id);
-                                } else {
-                                  newSet.delete(client.id);
-                                }
-                                setSelectedClientIds(newSet);
-                              }}
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                            <div className="h-8 w-8 rounded-full bg-slate-100 font-bold text-slate-700 text-xs flex items-center justify-center overflow-hidden border border-gray-200 shrink-0">
-                              {client.avatarUrl ? (
-                                <img src={client.avatarUrl} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                              ) : (
-                                client.parentName?.[0] || '?'
-                              )}
-                            </div>
-                            <div>
-                              <div className="font-bold text-gray-900 text-[11px] leading-tight">{client.parentName}</div>
-                              <div className="text-[10px] text-gray-500 font-medium leading-tight mt-0.5">{client.parentPhone}</div>
+                          <td className="p-2 md:p-3 align-middle">
+                            <div className="flex items-center space-x-2.5">
+                              <input 
+                                type="checkbox" 
+                                className="rounded text-black focus:ring-black border-gray-300"
+                                checked={selectedClientIds.has(client.id)}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  const newSet = new Set(selectedClientIds);
+                                  if (e.target.checked) {
+                                    newSet.add(client.id);
+                                  } else {
+                                    newSet.delete(client.id);
+                                  }
+                                  setSelectedClientIds(newSet);
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <div className="h-8 w-8 rounded-full bg-slate-100 font-bold text-slate-700 text-xs flex items-center justify-center overflow-hidden border border-gray-200 shrink-0">
+                                {client.avatarUrl ? (
+                                  <img src={client.avatarUrl} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                ) : (
+                                  client.childName?.[0] || '?'
+                                )}
+                              </div>
                             </div>
                           </td>
-                          <td className="p-3">
+                          <td className="p-2 md:p-3 align-middle">
                             <div className="font-bold text-gray-900 text-[11px] leading-tight">{client.childSurname} {client.childName}</div>
-                            <div className="text-[10px] text-gray-500 font-medium leading-tight mt-0.5">{client.childBirthYear} г.р.</div>
+                            <div className="text-[10px] text-gray-500 font-medium leading-tight mt-0.5">{client.childAge} лет ({client.childBirthYear} г.р.)</div>
                           </td>
-                          <td className="p-3">
+                          <td className="p-2 md:p-3 hidden sm:table-cell align-middle">
+                            <div className="font-bold text-gray-900 text-[11px] leading-tight">{client.parentName}</div>
+                            <div className="text-[10px] text-gray-500 font-medium leading-tight mt-0.5">{client.parentPhone}</div>
+                          </td>
+                          <td className="p-2 md:p-3 hidden md:table-cell align-middle">
                             <div className="font-bold text-gray-900 text-[11px] leading-tight">{client.groupName || 'Без группы'}</div>
                             {client.coachName && <div className="text-[10px] text-gray-500 font-medium leading-tight mt-0.5">Тренер: {client.coachName}</div>}
                           </td>
-                          <td className="p-3 text-[11px] font-bold text-gray-900">
-                             Импульс Арена
+                          <td className="p-2 md:p-3 hidden lg:table-cell text-[11px] font-bold text-gray-900 align-middle">
+                             {client.branch || 'Импульс Арена'}
                           </td>
-                            <td className="p-3">
+                            <td className="p-2 md:p-3 hidden sm:table-cell align-middle">
                               <div className="flex flex-col gap-1 items-start">
                                 <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide capitalize ${
                                   client.status === 'active' ? 'bg-emerald-50 text-emerald-600' :
@@ -784,7 +1035,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                                 )}
                               </div>
                             </td>
-                            <td className="p-3">
+                            <td className="p-2 md:p-3 hidden lg:table-cell align-middle">
                               <div className="font-bold text-gray-900 text-[11px] truncate max-w-[100px]">{client.abonement === 'none' ? '-' : (client.abonement === 'basic' ? 'Базовый' : 'Стандарт')}</div>
                               {client.status === 'paused' ? (
                                 <div className="text-[10px] text-amber-500 font-medium">заморожен</div>
@@ -794,7 +1045,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                                 </div>
                               )}
                             </td>
-                            <td className="p-3">
+                            <td className="p-2 md:p-3 hidden sm:table-cell align-middle">
                               <span className={`text-[10px] ${
                                 client.abonementStatus === 'Оплачено' ? 'text-emerald-500 font-medium' : 'text-amber-500 font-medium'
                               }`}>
@@ -804,9 +1055,21 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                                 {client.abonementSessionsLeft !== undefined ? `Остаток: ${client.abonementSessionsLeft} зан.` : ''}
                               </div>
                             </td>
-                            <td className="p-3 text-gray-400">
+                            <td className="p-2 md:p-3 align-middle flex justify-end space-x-1">
                                <button 
-                                 className="hover:text-black p-1 hover:bg-gray-100 rounded transition-colors"
+                                 className="hover:text-emerald-600 p-1 hover:bg-emerald-50 text-emerald-500 rounded transition-colors"
+                                 title="Отправить ссылку на оплату"
+                                 onClick={(e) => {
+                                   e.stopPropagation();
+                                   setPaymentModalData({ clientId: client.id, clientName: `${client.childSurname} ${client.childName}` });
+                                   setPaymentModalOpen(true);
+                                 }}
+                               >
+                                 <CreditCard className="w-4 h-4" />
+                               </button>
+                               <button 
+                                 className="text-gray-400 hover:text-black p-1 hover:bg-gray-100 rounded transition-colors"
+                                 title="Редактировать карточку"
                                  onClick={(e) => {
                                    e.stopPropagation();
                                    setSelectedClientId(client.id);
@@ -832,6 +1095,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                                    setEditRiskUrgency(client.riskUrgency || 'none');
                                    setEditRiskResolution(client.riskResolution || 'none');
                                    setEditRiskComment(client.riskComment || '');
+                                   setEditManagerBonus(client.managerBonusAccrued || 0);
 
                                    setIsEditingRightCard(true);
                                  }}
@@ -848,19 +1112,44 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
 
               {/* Pagination stub matching image bottom */}
               <div className="flex items-center justify-between pt-2">
-                <span className="text-[11px] text-gray-400 font-medium">Показано 1-{Math.min(filteredClients.length, 10)} из {filteredClients.length} клиентов</span>
+                <span className="text-[11px] text-gray-400 font-medium">Показано {filteredClients.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, filteredClients.length)} из {filteredClients.length} клиентов</span>
                 <div className="flex items-center space-x-1">
-                  <button className="w-7 h-7 flex items-center justify-center bg-black text-white rounded text-[11px] font-bold shadow-sm">1</button>
-                  {filteredClients.length > 10 && <button className="w-7 h-7 flex items-center justify-center hover:bg-gray-50 rounded text-[11px] font-medium text-gray-600 transition">2</button>}
-                  {filteredClients.length > 20 && <button className="w-7 h-7 flex items-center justify-center hover:bg-gray-50 rounded text-[11px] font-medium text-gray-600 transition">3</button>}
-                  {filteredClients.length > 30 && <span className="text-gray-400 mx-1">...</span>}
-                  <button className="w-7 h-7 flex items-center justify-center hover:bg-gray-50 rounded text-[11px] font-medium text-gray-600 transition"><ChevronRight className="w-3 h-3"/></button>
+                  <button 
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    className="w-7 h-7 flex items-center justify-center hover:bg-gray-50 rounded text-[11px] font-medium text-gray-600 transition disabled:opacity-30"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                  </button>
+                  {[...Array(totalPages)].map((_, i) => (
+                    <button 
+                      key={i}
+                      onClick={() => setCurrentPage(i + 1)}
+                      className={`w-7 h-7 flex items-center justify-center rounded text-[11px] font-bold shadow-sm transition ${currentPage === i + 1 ? 'bg-black text-white' : 'text-gray-600 hover:bg-gray-50'}`}
+                    >
+                      {i + 1}
+                    </button>
+                  ))}
+                  <button 
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    className="w-7 h-7 flex items-center justify-center hover:bg-gray-50 rounded text-[11px] font-medium text-gray-600 transition disabled:opacity-30"
+                  >
+                    <ChevronRight className="w-3 h-3"/>
+                  </button>
                   <div className="ml-4 flex items-center space-x-1 border-l border-gray-100 pl-4 py-1">
                     <span className="text-[11px] text-gray-400 font-medium hidden sm:inline-block">На странице:</span>
-                    <select className="text-[11px] font-bold text-gray-700 bg-transparent border border-gray-100 rounded px-2 appearance-none outline-none cursor-pointer pr-4 hover:border-gray-200 transition" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'10\' height=\'10\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpolyline points=\'6 9 12 15 18 9\'%3E%3C/polyline%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 4px center' }}>
-                      <option>10</option>
-                      <option>20</option>
-                      <option>50</option>
+                    <select 
+                      value={itemsPerPage}
+                      onChange={(e) => {
+                        setItemsPerPage(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="text-[11px] font-bold text-gray-700 bg-transparent border border-gray-100 rounded px-2 appearance-none outline-none cursor-pointer pr-4 hover:border-gray-200 transition" 
+                      style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'10\' height=\'10\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpolyline points=\'6 9 12 15 18 9\'%3E%3C/polyline%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 4px center' }}>
+                      <option value="10">10</option>
+                      <option value="20">20</option>
+                      <option value="50">50</option>
                     </select>
                   </div>
                 </div>
@@ -1302,8 +1591,8 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                                 <h5 className="font-bold">Выставить счет на оплату</h5>
                                 <p className="text-[10px] leading-relaxed">Отправьте платежную форму ЮKassa родителю в Личный кабинет:</p>
                                 <div className="grid grid-cols-2 gap-1 px-1">
-                                  <button onClick={() => handleSendBilling(selectedClient, 'Абонемент 12 зан.', 5400)} className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold p-1 rounded font-mono text-[9px] transition">12 зан. — 5400Р</button>
-                                  <button onClick={() => handleSendBilling(selectedClient, 'Абонемент 8 зан.', 4000)} className="bg-slate-900 hover:bg-slate-800 text-white font-bold p-1 rounded font-mono text-[9px] transition">8 зан. — 4000Р</button>
+                                  <button onClick={() => handleSendBilling(selectedClient, 'Абонемент 12 зан.', crmConfig.price12)} className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold p-1 rounded font-mono text-[9px] transition">12 зан. — {crmConfig.price12}Р</button>
+                                  <button onClick={() => handleSendBilling(selectedClient, 'Абонемент 8 зан.', crmConfig.price8)} className="bg-slate-900 hover:bg-slate-800 text-white font-bold p-1 rounded font-mono text-[9px] transition">8 зан. — {crmConfig.price8}Р</button>
                                 </div>
                               </div>
                             )}
@@ -1397,19 +1686,12 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
 
                       <div className="pt-2 border-t mt-1">
                         <button
-                          onClick={async () => {
-                            const confirmDelete = window.confirm(`⚠️ ВНИМАНИЕ: Вы действительно хотите окончательно УДАЛИТЬ ученика "${selectedClient.childSurname} ${selectedClient.childName}" из базы данных школы?`);
-                            if (confirmDelete) {
-                              const targetId = selectedClient.id;
-                              const remaining = clients.filter(c => c.id !== targetId);
-                              await deleteClient(targetId);
-                              alert('Профиль ученика успешно удален из базы данных.');
-                              if (remaining.length > 0) {
-                                setSelectedClientId(remaining[0].id);
-                              } else {
-                                setSelectedClientId('');
-                              }
-                            }
+                          onClick={() => {
+                            setDeleteClientModal({
+                              isOpen: true,
+                              clientId: selectedClient.id,
+                              clientName: `${selectedClient.childSurname} ${selectedClient.childName}`
+                            });
                           }}
                           className="w-full py-1.5 bg-red-50 hover:bg-red-100 text-red-650 font-bold text-[11px] rounded transition flex items-center justify-center space-x-1 border border-red-200"
                         >
@@ -1520,7 +1802,11 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                       }
 
                       return (
-                        <tr key={idx} className="hover:bg-slate-50/50 transition duration-150">
+                        <tr 
+                          key={idx} 
+                          onClick={() => handleStartEditClient(client)}
+                          className="hover:bg-slate-50/50 transition duration-150 cursor-pointer"
+                        >
                           <td className="p-3">
                             <div className="font-bold text-slate-800">{client.childSurname} {client.childName}</div>
                             <div className="text-[10px] text-gray-500 font-mono mt-0.5">{client.groupName || 'Без группы'} • {client.parentName}</div>
@@ -1857,6 +2143,18 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                 </div>
 
                 <div className="space-y-1">
+                  <label className="block text-gray-550 font-bold uppercase tracking-wider text-[9px]">Премия менеджера (руб)</label>
+                  <input 
+                    type="number" 
+                    min="0"
+                    placeholder="Например: 500" 
+                    className="w-full p-2.5 bg-slate-50 border rounded-xl focus:bg-white focus:ring-1 focus:ring-emerald-500 outline-none text-xs font-bold text-emerald-600" 
+                    value={editManagerBonus} 
+                    onChange={(e) => setEditManagerBonus(parseInt(e.target.value) || 0)} 
+                  />
+                </div>
+
+                <div className="space-y-1">
                   <label className="block text-gray-550 font-bold uppercase tracking-wider text-[9px]">Активный комментарий к ситуации</label>
                   <textarea 
                     rows={2} 
@@ -2026,7 +2324,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                 {maxCallStatus !== 'ended' ? (
                   <button 
                     type="button"
-                    onClick={() => setMaxCallStatus('ended')}
+                    onClick={() => { setMaxCallStatus('ended'); stopLiveAudio(); }}
                     className="h-14 w-14 rounded-full bg-rose-600 hover:bg-rose-700 text-white shadow-lg shadow-rose-600/30 font-black cursor-pointer flex items-center justify-center mx-auto transform hover:scale-105 active:scale-95 transition"
                     title="Завершить вызов"
                   >
@@ -2041,6 +2339,241 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
           </div>
         </div>
       )}
+
+{/* Profile Settings Modal */}
+      {isProfileModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col transform transition-all relative">
+            <div className="bg-slate-50 p-6 border-b border-gray-100 flex justify-between items-center relative">
+              <div className="flex items-center space-x-3">
+                <div className="h-10 w-10 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center">
+                  <Settings className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-gray-900 text-lg tracking-tight">Настройки профиля</h3>
+                  <p className="text-xs font-medium text-gray-500 mt-0.5">Личные данные и контакты</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsProfileModalOpen(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-200 text-gray-400 absolute right-4 top-6 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6 text-left font-sans text-xs">
+              <div className="flex items-center space-x-5">
+                <div className="relative group h-20 w-20 rounded-full border border-slate-200 flex items-center justify-center text-slate-700 font-bold overflow-hidden shadow-sm">
+                  {tempProfileAvatar ? (
+                    <img src={tempProfileAvatar} alt="Аватар профиля" className="w-full h-full object-cover" />
+                  ) : (
+                    "?"
+                  )}
+                  <label className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition">
+                    <Camera className="w-6 h-6" />
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          compressImage(file, (base64) => setTempProfileAvatar(base64));
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-gray-900 pb-1">Аватар</h4>
+                  <p className="text-gray-500 text-[10px]">JPG, PNG до 2MB. 1:1.</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                   <label className="block text-gray-500 font-bold uppercase tracking-wider text-[10px] mb-1">ФИО</label>
+                   <input type="text" value={tempProfileName} onChange={(e) => setTempProfileName(e.target.value)} className="w-full py-2 px-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:border-indigo-500 focus:bg-white transition-colors outline-none" />
+                </div>
+                <div>
+                   <label className="block text-gray-500 font-bold uppercase tracking-wider text-[10px] mb-1">Должность</label>
+                   <input type="text" value={tempProfileRole} onChange={(e) => setTempProfileRole(e.target.value)} className="w-full py-2 px-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:border-indigo-500 focus:bg-white transition-colors outline-none" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                     <label className="block text-gray-500 font-bold uppercase tracking-wider text-[10px] mb-1">Телефон</label>
+                     <input type="text" value={tempProfilePhone} onChange={(e) => setTempProfilePhone(e.target.value)} className="w-full py-2 px-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:border-indigo-500 focus:bg-white transition-colors outline-none" />
+                  </div>
+                  <div>
+                     <label className="block text-gray-500 font-bold uppercase tracking-wider text-[10px] mb-1">Email</label>
+                     <input type="email" value={tempProfileEmail} onChange={(e) => setTempProfileEmail(e.target.value)} className="w-full py-2 px-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:border-indigo-500 focus:bg-white transition-colors outline-none" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 bg-slate-50 border-t border-gray-100 flex justify-end space-x-3">
+              <button 
+                type="button" 
+                onClick={() => setIsProfileModalOpen(false)}
+                className="px-5 py-2.5 rounded-xl font-bold bg-white text-gray-700 hover:bg-gray-100 border border-gray-200 transition-colors"
+              >
+                Отмена
+              </button>
+              <button 
+                title="Сохранить изменения"
+                type="button"
+                onClick={() => {
+                  updateUserProfile({
+                    name: tempProfileName,
+                    role: tempProfileRole,
+                    avatarUrl: tempProfileAvatar,
+                    phone: tempProfilePhone,
+                    email: tempProfileEmail
+                  });
+                  setIsProfileModalOpen(false);
+                }}
+                className="px-5 py-2.5 rounded-xl font-bold bg-black text-white hover:bg-gray-800 transition-all flex items-center space-x-2 shadow-md shadow-gray-200"
+              >
+                <Save className="w-4 h-4" />
+                <span>Сохранить</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Permissions Modal */}
+      {isPermissionsModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col transform transition-all relative">
+            <div className="bg-slate-50 p-6 border-b border-gray-100 flex justify-between items-center relative">
+              <div className="flex items-center space-x-3">
+                <div className="h-10 w-10 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center">
+                  <Shield className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-gray-900 text-lg tracking-tight">Права доступа</h3>
+                  <p className="text-xs font-medium text-gray-500 mt-0.5">Ограничения вашего профиля</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsPermissionsModalOpen(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-200 text-gray-400 absolute right-4 top-6 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-left font-sans text-xs">
+              <p className="text-gray-500 mb-4 pb-2 border-b">Ваш уровень: <span className="font-bold text-gray-800">{userProfile.role}</span></p>
+
+              <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
+                <label className="flex items-center justify-between p-3 rounded-xl border border-gray-100 hover:bg-slate-50 transition cursor-pointer">
+                  <div>
+                    <div className="font-bold text-gray-800">Редактирование клиентов</div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">Создание, изменение данных клиентов</div>
+                  </div>
+                  <input type="checkbox" checked={permissions.canEditClients} onChange={(e) => setPermissions({...permissions, canEditClients: e.target.checked})} className="rounded text-rose-600 focus:ring-rose-500 h-4 w-4 border-gray-300" />
+                </label>
+                
+                <label className="flex items-center justify-between p-3 rounded-xl border border-gray-100 hover:bg-slate-50 transition cursor-pointer">
+                  <div>
+                    <div className="font-bold text-gray-800">Удаление клиентов</div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">Безвозвратное удаление карточек</div>
+                  </div>
+                  <input type="checkbox" checked={permissions.canDeleteClients} onChange={(e) => setPermissions({...permissions, canDeleteClients: e.target.checked})} className="rounded text-rose-600 focus:ring-rose-500 h-4 w-4 border-gray-300" />
+                </label>
+
+                <label className="flex items-center justify-between p-3 rounded-xl border border-gray-100 hover:bg-slate-50 transition cursor-pointer">
+                  <div>
+                    <div className="font-bold text-gray-800">Доступ к финансам</div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">Просмотр отчетов и планов</div>
+                  </div>
+                  <input type="checkbox" checked={permissions.canViewFinances} onChange={(e) => setPermissions({...permissions, canViewFinances: e.target.checked})} className="rounded text-rose-600 focus:ring-rose-500 h-4 w-4 border-gray-300" />
+                </label>
+
+                <label className="flex items-center justify-between p-3 rounded-xl border border-gray-100 hover:bg-slate-50 transition cursor-pointer">
+                  <div>
+                    <div className="font-bold text-gray-800">Редактирование финансов</div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">Внесение расходов/доходов</div>
+                  </div>
+                  <input type="checkbox" checked={permissions.canEditFinances} onChange={(e) => setPermissions({...permissions, canEditFinances: e.target.checked})} className="rounded text-rose-600 focus:ring-rose-500 h-4 w-4 border-gray-300" />
+                </label>
+                
+                <label className="flex items-center justify-between p-3 rounded-xl border border-gray-100 hover:bg-slate-50 transition cursor-pointer">
+                  <div>
+                    <div className="font-bold text-gray-800">Управление группами</div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">Создание, закрытие тренировочных групп</div>
+                  </div>
+                  <input type="checkbox" checked={permissions.canManageGroups} onChange={(e) => setPermissions({...permissions, canManageGroups: e.target.checked})} className="rounded text-rose-600 focus:ring-rose-500 h-4 w-4 border-gray-300" />
+                </label>
+
+                <label className="flex items-center justify-between p-3 rounded-xl border border-gray-100 hover:bg-slate-50 transition cursor-pointer">
+                  <div>
+                    <div className="font-bold text-gray-800">Управление тренерами</div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">Назначение ставок и прием/увольнение</div>
+                  </div>
+                  <input type="checkbox" checked={permissions.canManageCoaches} onChange={(e) => setPermissions({...permissions, canManageCoaches: e.target.checked})} className="rounded text-rose-600 focus:ring-rose-500 h-4 w-4 border-gray-300" />
+                </label>
+              </div>
+            </div>
+
+            <div className="p-6 bg-slate-50 border-t border-gray-100 flex justify-end">
+              <button 
+                type="button"
+                onClick={() => setIsPermissionsModalOpen(false)}
+                className="px-5 py-2.5 rounded-xl font-bold bg-black text-white hover:bg-gray-800 transition-all shadow-md shadow-gray-200"
+              >
+                Закрыть
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {paymentModalData && (
+        <PaymentLinkModal
+          isOpen={paymentModalOpen}
+          onClose={() => setPaymentModalOpen(false)}
+          clientId={paymentModalData.clientId}
+          clientName={paymentModalData.clientName}
+        />
+      )}
+
+      <ConfirmModal
+        isOpen={deleteLeadModal !== null && deleteLeadModal.isOpen}
+        onClose={() => setDeleteLeadModal(null)}
+        onConfirm={async () => {
+          if (deleteLeadModal?.leadId) {
+            await deleteLead(deleteLeadModal.leadId);
+          }
+        }}
+        title="Удалить заявку?"
+        message={`Вы уверены, что хотите окончательно удалить заявку от родителя ${deleteLeadModal?.leadName || ''}? Это действие нельзя отменить.`}
+        confirmText="Удалить"
+      />
+
+      <ConfirmModal
+        isOpen={deleteClientModal !== null && deleteClientModal.isOpen}
+        onClose={() => setDeleteClientModal(null)}
+        onConfirm={async () => {
+          if (deleteClientModal?.clientId) {
+            const targetId = deleteClientModal.clientId;
+            const remaining = clients.filter(c => c.id !== targetId);
+            await deleteClient(targetId);
+            if (remaining.length > 0) {
+              setSelectedClientId(remaining[0].id);
+            } else {
+              setSelectedClientId('');
+            }
+          }
+        }}
+        title="Удалить ученика?"
+        message={`⚠️ ВНИМАНИЕ: Вы действительно хотите окончательно УДАЛИТЬ ученика "${deleteClientModal?.clientName || ''}" из базы данных школы? Это действие необратимо и удалит всю связанную историю, абонементы и платежи.`}
+        confirmText="Удалить ученика"
+      />
 
     </div>
   );

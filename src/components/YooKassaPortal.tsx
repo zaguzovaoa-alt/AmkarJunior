@@ -8,18 +8,18 @@ interface YooKassaPortalProps {
 }
 
 export const YooKassaPortal: React.FC<YooKassaPortalProps> = ({ clientId, onClose }) => {
-  const { clients, processPayment } = useCRM();
+  const { clients, leads, processPayment, crmConfig } = useCRM();
   
   // Selected client target
   const defaultClientId = clientId || 'cl1';
-  const targetClient = clients.find(c => c.id === defaultClientId) || clients[0];
+  const targetClient = clients.find(c => c.id === defaultClientId) || leads?.find(l => l.id === defaultClientId) || clients[0];
 
   // Tariff selection
   const tariffs = [
-    { key: '12_sessions' as const, title: 'Абонемент на 12 занятий', price: 5400, popular: true, note: 'Самый выгодный тариф' },
-    { key: '8_sessions' as const, title: 'Абонемент на 8 занятий', price: 4000, popular: false, note: 'Классический вариант' },
-    { key: '4_sessions' as const, title: 'Абонемент на 4 занятия', price: 2100, popular: false, note: 'Для занятий по выходным' },
-    { key: '1_session' as const, title: 'Разовая тренировка', price: 550, popular: false, note: 'Для проверки навыков' }
+    { key: '12_sessions' as const, title: 'Абонемент на 12 занятий', price: crmConfig.price12, popular: true, note: 'Самый выгодный тариф' },
+    { key: '8_sessions' as const, title: 'Абонемент на 8 занятий', price: crmConfig.price8, popular: false, note: 'Классический вариант' },
+    { key: '4_sessions' as const, title: 'Абонемент на 4 занятия', price: crmConfig.price4, popular: false, note: 'Для занятий по выходным' },
+    { key: '1_session' as const, title: 'Разовая тренировка', price: crmConfig.price1, popular: false, note: 'Для проверки навыков' }
   ];
 
   const [selectedTariffKey, setSelectedTariffKey] = useState<'12_sessions' | '8_sessions' | '4_sessions' | '1_session'>('12_sessions');

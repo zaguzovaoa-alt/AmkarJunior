@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { CRMProvider, useCRM } from './context/CRMContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthScreen } from './components/AuthScreen';
 import { Sidebar } from './components/Sidebar';
 import { ParentPortal } from './components/ParentPortal';
 import { TrainerCRM } from './components/TrainerCRM';
@@ -11,8 +13,10 @@ import { GoogleCalendarSync } from './components/GoogleCalendarSync';
 import { YooKassaPortal } from './components/YooKassaPortal';
 import { HQSettings } from './components/HQSettings';
 import { GroupsModule } from './components/GroupsModule';
+import { DirectorUsers } from './components/DirectorUsers';
 import { Shield, RefreshCw } from 'lucide-react';
 import firebaseConfig from '../firebase-applet-config.json';
+
 
 function DashboardContainer() {
   const { currentRole, currentTab, setCurrentTab, setCurrentRole, firestoreError, dismissFirestoreError } = useCRM();
@@ -27,6 +31,8 @@ function DashboardContainer() {
         if (currentTab === 'director_finances' || currentTab === 'hq_finances') return <FinanceModule />;
         if (currentTab === 'director_coaches' || currentTab === 'hq_coaches') return <CoachesList />;
         if (currentTab === 'director_sync' || currentTab === 'hq_calendar_sync') return <GoogleCalendarSync />;
+        if (currentTab === 'hq_attendance') return <TrainerCRM activeTab="trainer_attendance" setActiveTab={setCurrentTab} />;
+        if (currentTab === 'hq_messages') return <TrainerCRM activeTab="trainer_messages" setActiveTab={setCurrentTab} />;
         if (currentTab === 'hq_clients' || currentTab === 'hq_analytics') {
           return (
             <ManagerCRM 
@@ -47,6 +53,7 @@ function DashboardContainer() {
         }
         if (currentTab === 'hq_settings') return <HQSettings />;
         if (currentTab === 'director_groups' || currentTab === 'hq_groups') return <GroupsModule />;
+        if (currentTab === 'director_users') return <DirectorUsers />;
         return <DirectorCRM />;
 
       case 'manager':
@@ -73,6 +80,8 @@ function DashboardContainer() {
         if (currentTab === 'manager_sync' || currentTab === 'hq_calendar_sync') return <GoogleCalendarSync />;
         if (currentTab === 'manager_coaches' || currentTab === 'hq_coaches') return <CoachesList />;
         if (currentTab === 'manager_groups' || currentTab === 'hq_groups') return <GroupsModule />;
+        if (currentTab === 'hq_attendance') return <TrainerCRM activeTab="trainer_attendance" setActiveTab={setCurrentTab} />;
+        if (currentTab === 'hq_messages') return <TrainerCRM activeTab="trainer_messages" setActiveTab={setCurrentTab} />;
         if (currentTab === 'hq_home') return <DirectorCRM />;
         return (
           <ManagerCRM 
@@ -89,6 +98,8 @@ function DashboardContainer() {
         if (currentTab === 'trainer_attendance' || currentTab === 'hq_attendance') return <TrainerCRM activeTab="trainer_attendance" setActiveTab={setCurrentTab} />;
         if (currentTab === 'trainer_progress') return <TrainerCRM activeTab="trainer_progress" setActiveTab={setCurrentTab} />;
         if (currentTab === 'trainer_messages' || currentTab === 'hq_messages') return <TrainerCRM activeTab="trainer_messages" setActiveTab={setCurrentTab} />;
+        if (currentTab === 'trainer_groups') return <TrainerCRM activeTab="trainer_groups" setActiveTab={setCurrentTab} />;
+        if (currentTab === 'trainer_knowledge') return <TrainerCRM activeTab="trainer_knowledge" setActiveTab={setCurrentTab} />;
         return <TrainerCRM activeTab="trainer_home" setActiveTab={setCurrentTab} />;
 
       case 'parent':
@@ -283,10 +294,48 @@ service cloud.firestore {
   );
 }
 
+function AuthGateway() {
+  const { user, appUser, loading, logout } = useAuth();
+  const { currentRole, setCurrentRole } = useCRM();
+
+  // Sync Firebase appUser role to the CRM mock state when the user logs in
+  React.useEffect(() => {
+    if (appUser && appUser.role) {
+      setCurrentRole(appUser.role);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appUser?.uid]);
+
+  if (loading) {
+    return <div className="min-h-screen bg-slate-900" />;
+  }
+
+  if (!user || !appUser) {
+    return <AuthScreen />;
+  }
+
+  return (
+    <>
+      <DashboardContainer />
+      {/* Global Logout Button */}
+      <div className="fixed bottom-4 right-4 z-50">
+        <button 
+          onClick={logout}
+          className="bg-white/90 shadow-md backdrop-blur px-3 py-1.5 rounded-full text-[10px] uppercase font-bold text-slate-500 hover:text-red-500 hover:bg-white transition"
+        >
+          ВЫЙТИ ({appUser.role})
+        </button>
+      </div>
+    </>
+  );
+}
+
 export default function App() {
   return (
-    <CRMProvider>
-      <DashboardContainer />
-    </CRMProvider>
+    <AuthProvider>
+      <CRMProvider>
+        <AuthGateway />
+      </CRMProvider>
+    </AuthProvider>
   );
 }

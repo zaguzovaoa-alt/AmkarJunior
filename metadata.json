@@ -1,6 +1,6 @@
 {
   "name": "АМКАР ЮНИОР CRM",
   "description": "Интеллектуальная CRM-система футбольной школы ‘АМКАР ЮНИОР’ для полной автоматизации цепочки клиента, работы тренеров, менеджеров и личного кабинета родителей с геймификацией и аналитикой.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

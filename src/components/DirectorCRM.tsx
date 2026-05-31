@@ -165,7 +165,8 @@ export const DirectorCRM: React.FC = () => {
     : 0;
 
   // New Staging States for Data Loader
-  const [activeSection, setActiveSection] = useState<'metrics' | 'import'>('metrics');
+  const [activeSection, setActiveSection] = useState<'metrics' | 'import' | 'training_sessions'>('metrics');
+  const [selectedSessionDetail, setSelectedSessionDetail] = useState<any | null>(null);
   const [importType, setImportType] = useState<'clients' | 'leads' | 'finances' | 'coaches'>('clients');
   const [rawText, setRawText] = useState('');
   const [dragActive, setDragActive] = useState(false);
@@ -178,6 +179,8 @@ export const DirectorCRM: React.FC = () => {
   const [rawGrid, setRawGrid] = useState<string[][]>([]);
   const [colMappings, setColMappings] = useState<string[]>([]);
   const [parsedData, setParsedData] = useState<any[]>([]);
+
+  const [fullScreenPhoto, setFullScreenPhoto] = useState<string | null>(null);
 
   // Split raw text into clean grid of cells (supporting Tabs, Semicolons, and Commas)
   const parseTextToGrid = (text: string): string[][] => {
@@ -989,59 +992,308 @@ export const DirectorCRM: React.FC = () => {
 
         </div>
       ) : activeSection === 'training_sessions' ? (
-        <div className="p-6 max-w-7xl mx-auto space-y-6">
-          <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-            <div className="flex border-b pb-3 mb-4 items-center justify-between">
-              <div>
-                <h3 className="font-extrabold text-slate-950 text-sm">Журнал проведенных тренировок</h3>
-                <p className="text-[10px] text-gray-400">Объективный контроль утвержденных тренерами ведомостей</p>
+        <div className="p-6 max-w-7xl mx-auto space-y-6 text-left">
+          
+          {/* Top analytical cards for training reports */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden">
+              <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">Проведено тренировок</span>
+              <div className="text-3xl font-black text-slate-900 mt-1 font-display tracking-tight">
+                {trainingSessions.length}
               </div>
+              <div className="text-[10px] text-emerald-600 font-semibold mt-1">Все табели утверждены</div>
             </div>
-            
-            <div className="space-y-4">
-              {trainingSessions.length === 0 ? (
-                <div className="text-center py-8 text-gray-400 text-xs">Нет данных о проведенных тренировках.</div>
-              ) : (
-                trainingSessions.map((session) => (
-                  <div key={session.id} className="border border-gray-200 rounded-xl p-4 bg-slate-50 flex flex-col md:flex-row gap-4 justify-between items-start">
-                    <div className="space-y-2">
-                       <div className="flex items-center space-x-2">
-                         <span className="font-bold text-slate-900">{session.groupName}</span>
-                         <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold">{new Date(session.date).toLocaleDateString('ru-RU')}</span>
-                       </div>
-                       <div className="text-[11px] text-slate-600 font-medium">
-                         <span className="text-gray-400">Тренер: </span>{session.coachName}
-                       </div>
-                       <div className="flex space-x-4 text-[11px] pt-1">
-                         <span className="text-emerald-600 font-bold">✓ {session.presentCount} присут.</span>
-                         <span className="text-blue-500 font-bold">🤒 {session.sickCount} бол.</span>
-                         <span className="text-amber-500 font-bold">⚠️ {session.absentCount} пропуск.</span>
-                       </div>
-                    </div>
 
-                    <div className="flex-1 md:mx-4 bg-white p-3 border border-gray-100 rounded-lg text-xs min-h-[4rem]">
-                      <span className="block text-[10px] text-gray-400 uppercase font-bold mb-1 tracking-wider">Заметки тренера</span>
-                      <p className="text-slate-800 font-medium italic">"{session.notes || 'Без комментариев'}"</p>
-                    </div>
+            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden">
+              <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">Ср. Явка учеников</span>
+              <div className="text-3xl font-black text-slate-900 mt-1 font-display tracking-tight">
+                {(() => {
+                  const total = trainingSessions.reduce((sum, s) => sum + s.presentCount + s.sickCount + s.absentCount, 0);
+                  const present = trainingSessions.reduce((sum, s) => sum + s.presentCount, 0);
+                  return total > 0 ? Math.round((present / total) * 100) : 88;
+                })()}%
+              </div>
+              <div className="text-[10px] text-gray-400 font-semibold mt-1">Целевой показатель: 85%</div>
+            </div>
 
-                    <div className="w-full md:w-auto mt-2 md:mt-0">
-                      {session.photoUrl ? (
-                         <div className="flex flex-col items-center bg-white p-2 rounded-lg border border-gray-200 shadow-sm cursor-pointer hover:border-emerald-400 transition" title="Фотоотчет">
-                           <Camera className="w-5 h-5 text-emerald-500 mb-1" />
-                           <span className="text-[9px] text-emerald-600 font-bold">Снимок прикреплен</span>
-                         </div>
-                      ) : (
-                         <div className="flex flex-col items-center bg-slate-100 p-2 rounded-lg border border-dashed border-gray-300">
-                           <Camera className="w-5 h-5 text-gray-400 mb-1" />
-                           <span className="text-[9px] text-gray-500 font-bold">Без фотоотчета</span>
-                         </div>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
+            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden">
+              <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">Списано занятий</span>
+              <div className="text-3xl font-black text-slate-900 mt-1 font-display tracking-tight">
+                {trainingSessions.reduce((sum, s) => sum + s.presentCount, 0)} ед.
+              </div>
+              <div className="text-[10px] text-emerald-600 font-semibold mt-1">Вычет из баланса пакетов</div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden">
+              <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">Сохранено по болезни</span>
+              <div className="text-3xl font-black text-indigo-600 mt-1 font-display tracking-tight">
+                {trainingSessions.reduce((sum, s) => sum + s.sickCount, 0)} зан.
+              </div>
+              <div className="text-[10px] text-indigo-500 font-semibold mt-1">Заморозка по мед. справкам</div>
             </div>
           </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* Main Log table of sessions */}
+            <div className="lg:col-span-2 space-y-4">
+              <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+                <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                  <div>
+                    <h3 className="font-extrabold text-slate-950 text-sm">Журнал и табели тренировок</h3>
+                    <p className="text-[10px] text-gray-400">Нажмите на строку тренировки для просмотра полного протокола и фотоподтверждения</p>
+                  </div>
+                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded">Живая синхронизация</span>
+                </div>
+
+                <div className="space-y-3">
+                  {trainingSessions.length === 0 ? (
+                    <div className="text-center py-12">
+                      <Calendar className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                      <p className="text-xs text-gray-400 font-medium">Тренеры еще не заполнили ни одной ведомости за сегодня.</p>
+                    </div>
+                  ) : (
+                    trainingSessions.map((session) => (
+                      <div 
+                        key={session.id} 
+                        onClick={() => setSelectedSessionDetail(session)}
+                        className="group border border-gray-100 rounded-xl p-3.5 bg-slate-50 hover:bg-white hover:border-emerald-500/30 hover:shadow-sm transition cursor-pointer flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center space-x-2">
+                            <span className="font-extrabold text-slate-900 group-hover:text-emerald-600 transition text-[13px]">{session.groupName}</span>
+                            <span className="px-2 py-0.5 rounded-full bg-slate-200 text-slate-800 text-[9px] font-bold font-mono">
+                              {session.dateString}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 font-medium">
+                            <span className="text-gray-400">Инструктор:</span> {session.coachName}
+                          </p>
+                          <div className="flex space-x-3 text-[10px] pt-1">
+                            <span className="text-emerald-650 font-bold bg-emerald-50 px-1.5 py-0.5 rounded">✓ {session.presentCount} присут.</span>
+                            {session.sickCount > 0 && (
+                              <span className="text-blue-650 font-bold bg-blue-50 px-1.5 py-0.5 rounded">🤒 {session.sickCount} больн.</span>
+                            )}
+                            {session.absentCount > 0 && (
+                              <span className="text-amber-650 font-bold bg-amber-50 px-1.5 py-0.5 rounded">⚠️ {session.absentCount} отсут.</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Notes snippet */}
+                        <div className="flex-1 max-w-sm text-xs bg-white/70 group-hover:bg-white p-2 rounded-lg border border-gray-150/50 truncate italic text-gray-500 text-left">
+                          "{session.notes || 'Без текстовой заметки'}"
+                        </div>
+
+                        {/* Photo status */}
+                        <div className="shrink-0 flex items-center space-x-2">
+                          {session.photoUrl ? (
+                            <div className="h-10 w-10 rounded-lg overflow-hidden border border-gray-200 shadow-3xs relative group-hover:border-emerald-400 transition">
+                              <img src={session.photoUrl} alt="report" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              <div className="absolute inset-0 bg-emerald-500/10 flex items-center justify-center">
+                                <Camera className="w-3.5 h-3.5 text-white drop-shadow-sm" />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="h-10 w-10 rounded-lg bg-gray-100 border border-dashed border-gray-350 flex items-center justify-center">
+                              <Camera className="w-4 h-4 text-gray-400" />
+                            </div>
+                          )}
+                          <div className="text-[10px] text-right font-bold text-gray-400 group-hover:text-emerald-600 transition">
+                            Детали →
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Sidebar analytics */}
+            <div className="space-y-6">
+              
+              {/* Group Attendance Stats board */}
+              <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+                <h3 className="font-extrabold text-slate-950 text-sm">Посещаемость по группам</h3>
+                
+                <div className="space-y-3.5">
+                  {Array.from(new Set(trainingSessions.map(s => s.groupName))).map((gpName) => {
+                    const gSessions = trainingSessions.filter(s => s.groupName === gpName);
+                    const totalPlayers = gSessions.reduce((sum, s) => sum + s.presentCount + s.sickCount + s.absentCount, 0);
+                    const present = gSessions.reduce((sum, s) => sum + s.presentCount, 0);
+                    const rate = totalPlayers > 0 ? Math.round((present / totalPlayers) * 100) : 90;
+
+                    return (
+                      <div key={gpName} className="space-y-1">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-bold text-slate-800">{gpName}</span>
+                          <span className="font-mono font-bold text-slate-900">{rate}% явки</span>
+                        </div>
+                        <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              rate >= 90 ? 'bg-emerald-500' : (rate >= 80 ? 'bg-indigo-500' : 'bg-amber-500')
+                            }`} 
+                            style={{ width: `${rate}%` }}
+                          ></div>
+                        </div>
+                        <div className="flex justify-between text-[10px] text-gray-400">
+                          <span>Утверждено зарядок: {gSessions.length}</span>
+                          <span>{present} посещений</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {Array.from(new Set(trainingSessions.map(s => s.groupName))).length === 0 && (
+                    <p className="text-xs text-gray-400">Групповые данные не сформированы.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Coach KPI status card */}
+              <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-5 rounded-2xl text-white space-y-4 text-left shadow-md">
+                <div className="flex items-center space-x-2">
+                  <Trophy className="w-5 h-5 text-amber-400" />
+                  <span className="font-bold text-[13px] text-white">Дисциплина тренеров</span>
+                </div>
+                <p className="text-[11px] text-slate-350 leading-relaxed">
+                  Все тренеры обязаны сдавать электронные ведомости в течение 1 часа после окончания занятий.
+                </p>
+
+                <div className="space-y-2 pt-1 font-sans text-xs">
+                  {coaches.map((c) => {
+                    const sessionsByCoach = trainingSessions.filter(s => s.coachId === c.id || s.coachName.includes(c.name));
+                    return (
+                      <div key={c.id} className="flex justify-between items-center py-1.5 border-b border-white/10">
+                        <span className="font-medium text-slate-200">{c.name}</span>
+                        <span className="bg-emerald-500/20 text-emerald-400 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                          {sessionsByCoach.length} отчетов сдано
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          {/* Interactive Protocol Dialog Modal */}
+          {selectedSessionDetail && (
+            <div className="fixed inset-0 bg-slate-950/60 flex items-center justify-center p-4 z-50 animate-fade-in">
+              <div className="bg-white rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl border border-gray-100 animate-scale-in">
+                
+                {/* Modal Header */}
+                <div className="p-5 bg-slate-950 text-white flex justify-between items-center">
+                  <div>
+                    <h3 className="font-extrabold text-sm">{selectedSessionDetail.groupName}</h3>
+                    <p className="text-[10px] text-emerald-400 font-semibold font-mono">
+                      Протокол тренировки от {selectedSessionDetail.dateString}
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => setSelectedSessionDetail(null)}
+                    className="p-1 hover:bg-white/10 rounded-full text-white transition font-bold text-sm"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Modal Body */}
+                <div className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+                  
+                  {/* Photo & Notes Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <span className="block text-[10px] text-gray-400 uppercase font-black tracking-wider mb-2">
+                        Официальный фотоотчет
+                      </span>
+                      {selectedSessionDetail.photoUrl ? (
+                        <div 
+                          className="h-44 w-full rounded-2xl overflow-hidden border border-gray-100 shadow-3xs relative cursor-pointer group"
+                          onClick={() => setFullScreenPhoto(selectedSessionDetail.photoUrl)}
+                        >
+                          <img 
+                            src={selectedSessionDetail.photoUrl} 
+                            alt="soccer drill" 
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
+                            referrerPolicy="no-referrer"
+                          />
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition flex items-center justify-center">
+                            <span className="opacity-0 group-hover:opacity-100 text-white font-bold bg-black/50 px-3 py-1 rounded-full text-xs">УВЕЛИЧИТЬ</span>
+                          </div>
+                          <div className="absolute bottom-2 right-2 bg-emerald-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow">
+                            Фото подтверждено
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="h-44 w-full rounded-2xl bg-gray-50 border-2 border-dashed border-gray-200 flex flex-col items-center justify-center">
+                          <Camera className="w-8 h-8 text-gray-300 mb-1" />
+                          <span className="text-xs text-gray-400 font-medium">Фотоотчет не приложен</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col h-full justify-between">
+                      <div>
+                        <span className="block text-[10px] text-gray-400 uppercase font-black tracking-wider mb-2">
+                          Заметки и разбор тренера
+                        </span>
+                        <div className="bg-amber-50/50 border border-amber-200/50 p-4 rounded-2xl min-h-[110px] text-xs text-slate-800 leading-relaxed font-sans italic">
+                          "{selectedSessionDetail.notes || 'Тренер не оставил комментариев по этой тренировке.'}"
+                        </div>
+                      </div>
+                      <div className="pt-2 text-xs font-semibold text-slate-500">
+                        Отправитель: <span className="text-slate-900 font-bold">{selectedSessionDetail.coachName}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Attendance Check List */}
+                  <div>
+                    <span className="block text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-2">
+                      Ведомость посещений ({selectedSessionDetail.records?.length || 0} уч.)
+                    </span>
+                    <div className="divide-y divide-gray-100 border border-gray-100 rounded-2xl overflow-hidden bg-slate-50">
+                      {(selectedSessionDetail.records || []).map((rec: any, index: number) => (
+                        <div key={index} className="px-4 py-2.5 flex justify-between items-center text-xs">
+                          <span className="font-extrabold text-slate-800">{rec.clientName || rec.clientId}</span>
+                          <div>
+                            {rec.status === 'present' ? (
+                              <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[9px] uppercase tracking-wide">
+                                Присутствовал
+                              </span>
+                            ) : rec.status === 'absent_sick' ? (
+                              <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold text-[9px] uppercase tracking-wide">
+                                🤒 Болен {rec.reason ? `(${rec.reason})` : ''}
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold text-[9px] uppercase tracking-wide">
+                                ⚠️ Пропуск {rec.reason ? `(${rec.reason})` : ''}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Modal Footer */}
+                <div className="p-4 bg-slate-50 border-t flex justify-end">
+                  <button 
+                    onClick={() => setSelectedSessionDetail(null)}
+                    className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition"
+                  >
+                    Закрыть отчет
+                  </button>
+                </div>
+
+              </div>
+            </div>
+          )}
+
         </div>
       ) : (
         // BULK UPLOAD / CRM IMPORT AND TABLE VIEW MODULE
@@ -1506,6 +1758,30 @@ export const DirectorCRM: React.FC = () => {
 
           </div>
 
+        </div>
+      )}
+
+      {/* Full Screen Photo Viewer Modal */}
+      {fullScreenPhoto && (
+        <div 
+          className="fixed inset-0 bg-slate-950/95 flex items-center justify-center z-[100] cursor-pointer p-2 sm:p-10 animate-fade-in"
+          onClick={() => setFullScreenPhoto(null)}
+        >
+          <button 
+            type="button" 
+            className="absolute top-4 right-4 sm:top-8 sm:right-8 w-12 h-12 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center transition"
+            onClick={(e) => { e.stopPropagation(); setFullScreenPhoto(null); }}
+          >
+            <span className="text-xl font-bold">✕</span>
+          </button>
+          
+          <img 
+            src={fullScreenPhoto} 
+            alt="Отчет во весь экран" 
+            className="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl animate-scale-in" 
+            referrerPolicy="no-referrer"
+            onClick={(e) => e.stopPropagation()} 
+          />
         </div>
       )}
 
