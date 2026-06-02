@@ -122,27 +122,15 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
 
 
 
-  const handleStartMaxCall = (client: Client) => {
-    const cleanPhone = client.parentPhone.replace(/\D/g, '');
+  const getMaxCallUrl = (phone: string) => {
+    const cleanPhone = phone.replace(/\D/g, '');
     let maxPhone = cleanPhone;
     if (maxPhone.startsWith('8') && maxPhone.length === 11) {
       maxPhone = '7' + maxPhone.substring(1);
     } else if (maxPhone.startsWith('9') && maxPhone.length === 10) {
       maxPhone = '7' + maxPhone;
     }
-    
-    // Create an anchor element to properly trigger custom URL schemes out of iframes
-    const link = document.createElement('a');
-    link.href = `max://call?phone=+${maxPhone}`;
-    link.target = '_top'; // Attempt to break out of iframe block
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    // Fallback opening
-    setTimeout(() => {
-      window.open(`max://call?phone=+${maxPhone}`, '_parent');
-    }, 300);
+    return `max://call?phone=+${maxPhone}`;
   };
 
   const handleStartEditClient = (client: Client) => {
@@ -1514,13 +1502,14 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
 
                       {/* Help actions */}
                       <div className="flex gap-2 pt-1 border-t">
-                        <button 
-                          onClick={() => handleStartMaxCall(selectedClient)}
+                        <a 
+                          href={getMaxCallUrl(selectedClient.parentPhone)}
+                          target="_self"
                           className="flex-1 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 text-center rounded font-extrabold text-[11px] flex items-center justify-center space-x-1.5 transition border border-indigo-200"
                         >
                           <Phone className="w-3.5 h-3.5" />
                           <span>Позвонить в MAX</span>
-                        </button>
+                        </a>
                         <button 
                           onClick={() => {
                             const cleanPhone = selectedClient.parentPhone.replace(/\D/g, '');
