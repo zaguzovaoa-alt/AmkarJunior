@@ -1504,7 +1504,8 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                       <div className="flex gap-2 pt-1 border-t">
                         <a 
                           href={getMaxCallUrl(selectedClient.parentPhone)}
-                          target="_self"
+                          target="_blank"
+                          rel="noopener noreferrer"
                           className="flex-1 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 text-center rounded font-extrabold text-[11px] flex items-center justify-center space-x-1.5 transition border border-indigo-200"
                         >
                           <Phone className="w-3.5 h-3.5" />
