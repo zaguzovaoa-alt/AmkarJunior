@@ -14,6 +14,7 @@ import { YooKassaPortal } from './components/YooKassaPortal';
 import { HQSettings } from './components/HQSettings';
 import { GroupsModule } from './components/GroupsModule';
 import { DirectorUsers } from './components/DirectorUsers';
+import { JoinPage } from './components/JoinPage';
 import { Shield, RefreshCw } from 'lucide-react';
 import firebaseConfig from '../firebase-applet-config.json';
 
@@ -258,6 +259,8 @@ service cloud.firestore {
           </div>
 
           <div className="flex items-center space-x-3 select-none">
+            <InstallAppPrompt />
+            
             {/* Quick action: Open secure payment portal for default sandbox */}
             {currentRole === 'parent' && (
               <button 
@@ -269,7 +272,7 @@ service cloud.firestore {
             )}
 
             {/* Quick administrative role helper indicator */}
-            <div className="flex items-center space-x-1 px-2.5 py-1 bg-slate-100 border rounded-lg">
+            <div className="flex items-center space-x-1 px-2.5 py-1 bg-slate-100 border rounded-lg hidden sm:flex">
               <Shield className="w-3.5 h-3.5 text-slate-550" />
               <span className="text-[10px] text-gray-550 font-bold uppercase tracking-wide">Доступ разрешен</span>
             </div>
@@ -330,7 +333,27 @@ function AuthGateway() {
   );
 }
 
+import { InstallAppPrompt } from './components/InstallAppPrompt';
+
 export default function App() {
+  const [currentPath, setCurrentPath] = useState(window.location.pathname);
+
+  React.useEffect(() => {
+    const handleLocationChange = () => {
+      setCurrentPath(window.location.pathname);
+    };
+    window.addEventListener('popstate', handleLocationChange);
+    return () => window.removeEventListener('popstate', handleLocationChange);
+  }, []);
+
+  if (currentPath === '/join' || currentPath === '/payment') {
+    return (
+      <CRMProvider>
+        <JoinPage />
+      </CRMProvider>
+    );
+  }
+
   return (
     <AuthProvider>
       <CRMProvider>

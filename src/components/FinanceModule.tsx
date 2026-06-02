@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useCRM } from '../context/CRMContext';
 import { 
   TrendingUp, TrendingDown, DollarSign, Wallet, AlertOctagon, 
   ArrowUpRight, ArrowDownRight, ClipboardList, CheckSquare, Trash2,
-  Plus, Settings, PieChart, FileText, BarChart
+  Plus, Settings, PieChart, FileText, BarChart, Calendar, User, ArrowRight
 } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RePieChart, Pie, Cell, Legend } from 'recharts';
 
 export const FinanceModule: React.FC = () => {
   const { 
@@ -104,6 +105,49 @@ export const FinanceModule: React.FC = () => {
   const planCount = plan.renew12Count + plan.renew8Count + plan.renew4Count + plan.new12Count + plan.new8Count + plan.new4Count;
   const avgCheck = planCount > 0 ? planRevenue / planCount : 0;
 
+  // New Dashboard calculations
+  const dashboardData = useMemo(() => {
+    // Top Stats metrics
+    const currentM = finances.filter(f => (f.targetMonth || f.date.substring(0, 7)) === currentMonthStr);
+    const mIncomes = currentM.filter(f => f.type === 'income').reduce((acc, f) => acc + Number(f.amount || 0), 0);
+    const mExpenses = currentM.filter(f => f.type === 'expense').reduce((acc, f) => acc + Number(f.amount || 0), 0);
+    const mProfit = mIncomes - mExpenses;
+    
+    // Group monthly for LineChart
+    const monthsMap = new Map<string, {name: string, Доходы: number, Расходы: number}>();
+    finances.forEach(f => {
+      const tm = f.targetMonth || f.date.substring(0, 7);
+      if (!monthsMap.has(tm)) monthsMap.set(tm, { name: tm, Доходы: 0, Расходы: 0 });
+      const stat = monthsMap.get(tm)!;
+      if (f.type === 'income') stat.Доходы += Number(f.amount || 0);
+      else stat.Расходы += Number(f.amount || 0);
+    });
+    
+    // Sort ascending by month string
+    const dynamicChartData = Array.from(monthsMap.values()).sort((a,b) => a.name.localeCompare(b.name)).slice(-6); // Last 6 months
+    // Map nice month names
+    const monthNames = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
+    dynamicChartData.forEach(d => {
+      const [year, m] = d.name.split('-');
+      d.name = `${monthNames[Number(m)-1]} ${year}`;
+    });
+
+    // Pie chart for expenses
+    const pieMap = new Map<string, number>();
+    currentM.filter(f => f.type === 'expense').forEach(f => {
+      pieMap.set(f.category, (pieMap.get(f.category) || 0) + Number(f.amount || 0));
+    });
+    let pieData = Array.from(pieMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+    
+    const COLORS = ['#ef4444', '#f97316', '#8b5cf6', '#3b82f6', '#10b981', '#e5e7eb'];
+    pieData = pieData.map((item, index) => ({
+      ...item,
+      color: COLORS[index % COLORS.length]
+    }));
+
+    return { mIncomes, mExpenses, mProfit, dynamicChartData, pieData };
+  }, [finances, currentMonthStr]);
+
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50 text-gray-800 min-h-screen">
       <div className="p-6 bg-white border-b border-gray-200">
@@ -143,23 +187,213 @@ export const FinanceModule: React.FC = () => {
 
       <div className="p-6 max-w-7xl mx-auto space-y-6">
         {activeTab === 'dashboard' && (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-             <div className="bg-white p-4.5 rounded-2xl border border-gray-100 shadow-sm">
-                <span className="text-gray-400 font-bold text-xs uppercase">Выручка (All Time)</span>
-                <div className="text-2xl font-black text-emerald-600 mt-1">{totalIncomes.toLocaleString()} ₽</div>
-             </div>
-             <div className="bg-white p-4.5 rounded-2xl border border-gray-100 shadow-sm">
-                <span className="text-gray-400 font-bold text-xs uppercase">Расходы (All Time)</span>
-                <div className="text-2xl font-black text-orange-600 mt-1">{totalExpenses.toLocaleString()} ₽</div>
-             </div>
-             <div className="bg-white p-4.5 rounded-2xl border border-gray-100 shadow-sm">
-                <span className="text-gray-400 font-bold text-xs uppercase">Общая Прибыль</span>
-                <div className="text-2xl font-black text-slate-900 mt-1">{operatingProfit.toLocaleString()} ₽</div>
-             </div>
-             <div className="bg-white p-4.5 rounded-2xl border border-gray-100 shadow-sm">
-                <span className="text-gray-400 font-bold text-xs uppercase">Дебиторская долг.</span>
-                <div className="text-2xl font-black text-amber-500 mt-1">{totalDebts.toLocaleString()} ₽</div>
-             </div>
+          <div className="space-y-6">
+            
+            {/* Top Stats */}
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+               <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                       <span className="text-gray-600 font-medium text-sm">Выручка</span>
+                       <div className="w-6 h-6 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center"><TrendingUp className="w-3.5 h-3.5" /></div>
+                    </div>
+                    <div className="text-2xl font-black text-slate-900">{totalIncomes.toLocaleString()} ₽</div>
+                  </div>
+                  <div className="text-emerald-500 text-xs font-bold mt-3">+0% <span className="text-gray-400 font-normal">к прошлому</span></div>
+               </div>
+               
+               <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                       <span className="text-gray-600 font-medium text-sm">Поступления</span>
+                       <div className="w-6 h-6 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center"><ArrowDownRight className="w-3.5 h-3.5" /></div>
+                    </div>
+                    <div className="text-2xl font-black text-slate-900">{dashboardData.mIncomes.toLocaleString()} ₽</div>
+                  </div>
+                  <div className="text-emerald-500 text-xs font-bold mt-3">+0% <span className="text-gray-400 font-normal">к прошлому</span></div>
+               </div>
+
+               <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                       <span className="text-gray-600 font-medium text-sm">Расходы</span>
+                       <div className="w-6 h-6 bg-red-50 text-red-500 rounded-full flex items-center justify-center"><ArrowUpRight className="w-3.5 h-3.5" /></div>
+                    </div>
+                    <div className="text-2xl font-black text-slate-900">{dashboardData.mExpenses.toLocaleString()} ₽</div>
+                  </div>
+                  <div className="text-emerald-500 text-xs font-bold mt-3">-0% <span className="text-gray-400 font-normal">к прошлому</span></div>
+               </div>
+
+               <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                       <span className="text-gray-600 font-medium text-sm">Прибыль</span>
+                       <div className="w-6 h-6 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center"><Wallet className="w-3.5 h-3.5" /></div>
+                    </div>
+                    <div className="text-2xl font-black text-slate-900">{dashboardData.mProfit.toLocaleString()} ₽</div>
+                  </div>
+                  <div className="text-emerald-500 text-xs font-bold mt-3">+0% <span className="text-gray-400 font-normal">к прошлому</span></div>
+               </div>
+
+               <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                       <span className="text-gray-600 font-medium text-sm truncate pr-2">Долги/задолженность</span>
+                       <div className="w-6 h-6 bg-orange-50 text-orange-500 rounded-full flex items-center justify-center flex-shrink-0"><AlertOctagon className="w-3.5 h-3.5" /></div>
+                    </div>
+                    <div className="text-2xl font-black text-slate-900">{totalDebts.toLocaleString()} ₽</div>
+                  </div>
+                  <div className="text-emerald-500 text-xs font-bold mt-3">-0% <span className="text-gray-400 font-normal">к прошлому</span></div>
+               </div>
+            </div>
+
+            {/* Charts Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+              
+              {/* Line Chart */}
+              <div className="lg:col-span-3 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                 <div className="flex justify-between items-center mb-6">
+                    <h3 className="font-bold text-slate-900 text-sm">Динамика доходов и расходов</h3>
+                    <select className="text-xs border-none outline-none bg-transparent text-gray-500 font-medium cursor-pointer">
+                      <option>По месяцам</option>
+                    </select>
+                 </div>
+                 <div className="h-64 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={dashboardData.dynamicChartData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} dy={10} />
+                        <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} tickFormatter={(val) => val === 0 ? '0 ₽' : `${val / 1000}k ₽`} />
+                        <Tooltip 
+                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)' }}
+                            formatter={(value: number) => [`${value.toLocaleString()} ₽`]} 
+                        />
+                        <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                        <Line type="monotone" name="Доходы" dataKey="Доходы" stroke="#10b981" strokeWidth={2} dot={{ r: 3, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 5 }} />
+                        <Line type="monotone" name="Расходы" dataKey="Расходы" stroke="#ef4444" strokeWidth={2} dot={{ r: 3, fill: '#ef4444', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 5 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                 </div>
+              </div>
+
+              {/* Pie Chart */}
+              <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                 <h3 className="font-bold text-slate-900 text-sm mb-4">Структура расходов <span className="text-gray-400 font-normal">({currentMonthStr})</span></h3>
+                 {dashboardData.pieData.length > 0 ? (
+                   <div className="flex flex-col md:flex-row items-center justify-between">
+                     <div className="w-48 h-48 relative">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <RePieChart>
+                            <Pie
+                              data={dashboardData.pieData}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={50}
+                              outerRadius={80}
+                              paddingAngle={2}
+                              dataKey="value"
+                              stroke="none"
+                            >
+                              {dashboardData.pieData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip formatter={(value: number) => `${value.toLocaleString()} ₽`} />
+                          </RePieChart>
+                        </ResponsiveContainer>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                          <span className="text-lg font-black text-slate-900">{dashboardData.mExpenses.toLocaleString()} ₽</span>
+                          <span className="text-[9px] text-gray-500 uppercase tracking-widest font-bold">Всего</span>
+                        </div>
+                     </div>
+                     <div className="flex-1 mt-4 md:mt-0 md:ml-4 w-full">
+                       <ul className="space-y-3">
+                         {dashboardData.pieData.slice(0,5).map((item, id) => (
+                            <li key={id} className="flex justify-between items-center text-xs">
+                              <div className="flex items-center">
+                                <span className="w-2.5 h-2.5 rounded-full mr-2" style={{backgroundColor: item.color}}></span>
+                                <span className="text-gray-600 font-medium truncate max-w-[100px]">{item.name}</span>
+                              </div>
+                              <div className="text-slate-800 font-bold ml-2">
+                                {item.value.toLocaleString()} <span className="text-[10px] text-gray-400 font-normal">({Math.round((item.value/dashboardData.mExpenses)*100)}%)</span>
+                              </div>
+                            </li>
+                         ))}
+                       </ul>
+                     </div>
+                   </div>
+                 ) : (
+                    <div className="h-48 flex items-center justify-center text-sm text-gray-400">Нет расходов за месяц</div>
+                 )}
+              </div>
+            </div>
+
+            {/* Bottom Lists */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+               
+               {/* Recent Operations */}
+               <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                  <div className="flex justify-between items-center mb-6">
+                    <h3 className="font-bold text-slate-900 text-sm">Последние операции</h3>
+                    <button className="text-xs text-blue-600 font-medium" onClick={() => setActiveTab('cashflow')}>Все операции</button>
+                  </div>
+                  <div className="space-y-2">
+                     {finances.slice(-5).reverse().map(f => (
+                        <div key={f.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0 hover:bg-slate-50 transition px-2 rounded-lg -mx-2 cursor-pointer">
+                           <div className="flex items-center space-x-3">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${f.type === 'income' ? 'bg-emerald-50 text-emerald-500' : 'bg-red-50 text-red-500'}`}>
+                                 {f.type === 'income' ? <ArrowDownRight className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
+                              </div>
+                              <div>
+                                 <div className="text-sm font-bold text-slate-800">{f.category}</div>
+                                 <div className="text-[10px] text-gray-500">{f.description || (f.type === 'income'?'Поступление':'Расход')}</div>
+                              </div>
+                           </div>
+                           <div className="text-right">
+                              <div className={`text-sm font-black font-mono ${f.type === 'income' ? 'text-emerald-500' : 'text-red-500'}`}>
+                                 {f.type === 'income' ? '+' : '-'}{f.amount.toLocaleString()} ₽
+                              </div>
+                              <div className="text-[10px] text-gray-400">{f.date}</div>
+                           </div>
+                        </div>
+                     ))}
+                     {finances.length === 0 && <div className="text-sm text-gray-400 text-center py-4">Операций пока нет</div>}
+                  </div>
+               </div>
+
+               {/* Accounts Receivable */}
+               <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                  <div className="flex justify-between items-center mb-6">
+                    <h3 className="font-bold text-slate-900 text-sm">Дебиторская задолженность</h3>
+                    <button className="text-xs text-blue-600 font-medium" onClick={() => {}}>Все</button>
+                  </div>
+                  <div className="space-y-2">
+                     {unpaidClients.slice(0, 5).map(c => (
+                        <div key={c.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0 hover:bg-slate-50 transition px-2 rounded-lg -mx-2 cursor-pointer">
+                           <div className="flex items-center space-x-3">
+                              {c.avatarUrl ? (
+                                <img src={c.avatarUrl} alt="avatar" className="w-8 h-8 rounded-full border border-gray-100 object-cover" />
+                              ) : (
+                                <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-bold text-xs">
+                                  {c.childSurname.charAt(0)}{c.childName.charAt(0)}
+                                </div>
+                              )}
+                              <div>
+                                 <div className="text-sm font-bold text-slate-800">{c.childSurname} {c.childName}</div>
+                                 <div className="text-[10px] text-gray-500">{c.groupName || 'Без группы'}</div>
+                              </div>
+                           </div>
+                           <div className="text-right flex items-center space-x-4">
+                              <div className="text-sm font-black font-mono text-red-500 w-16 text-right">4 500 ₽</div>
+                              <div className="text-[10px] bg-red-50 text-red-600 font-bold px-2 py-0.5 rounded uppercase tracking-widest hidden sm:block">Просрочено</div>
+                           </div>
+                        </div>
+                     ))}
+                     {unpaidClients.length === 0 && <div className="text-sm text-gray-400 text-center py-4">Должников нет</div>}
+                  </div>
+               </div>
+            </div>
+
           </div>
         )}
 

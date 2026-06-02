@@ -71,7 +71,6 @@ export interface Client {
   groupName: string | null; // e.g., 'Группа 2014' or null
   coachId: string | null;
   coachName: string | null;
-  branch?: string; // e.g. "Манеж Спартак", "Импульс Арена"
   medicalCertificateUrl: string | null; // file name or base64 or status
   insuranceUrl: string | null;
   payments: Payment[];

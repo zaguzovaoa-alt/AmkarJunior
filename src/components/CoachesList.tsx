@@ -682,8 +682,8 @@ export const CoachesList: React.FC = () => {
 
       {/* CREATE NEW COACH MODAL */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-neutral-900/45 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-md w-full border shadow-2xl p-6 relative animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 bg-neutral-900/45 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 z-50">
+          <div className="bg-white rounded-2xl max-w-md w-full border shadow-2xl p-5 sm:p-6 relative max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
             <button
               onClick={() => setShowCreateModal(false)}
               className="absolute top-4 right-4 p-1 rounded-lg hover:bg-slate-50 text-gray-400 hover:text-gray-600 transition"
@@ -913,8 +913,8 @@ export const CoachesList: React.FC = () => {
 
       {/* FULL COACH EDIT MODAL */}
       {showEditModal && selectedCoachToEdit && (
-        <div className="fixed inset-0 bg-neutral-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-md w-full border border-slate-100 shadow-2xl p-6 relative animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 bg-neutral-900/40 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 z-50">
+          <div className="bg-white rounded-2xl max-w-md w-full border border-slate-100 shadow-2xl p-5 sm:p-6 relative max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
             <button
               onClick={() => {
                 setShowEditModal(false);

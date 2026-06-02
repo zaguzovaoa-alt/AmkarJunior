@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useCRM } from '../context/CRMContext';
 import { ScheduleCalendar } from './ScheduleCalendar';
+import { parseScheduleString, RU_WEEKDAYS_MAP } from '../utils/scheduleParser';
 import { 
   Calendar, Check, User, AlertCircle, TrendingUp, CreditCard, 
   MessageSquare, BookOpen, Download, HelpCircle, Trophy, ArrowRight, Upload, Clock, Phone, Send, Eye, Edit2, Trash
@@ -88,17 +89,35 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
     }
   });
 
-  const nextThreeDates = [];
-  for(let i=1; i<=3; i++) {
-    const td = new Date(today.getTime() + 1000 * 60 * 60 * 24 * i);
-    nextThreeDates.push({
-      day: td.getDate().toString(),
-      month: td.toLocaleDateString('ru-RU', { month: 'short' }).replace('.', ''),
-      title: i === 1 ? 'Тренировка' : i === 2 ? 'Турнир "Кубок"' : 'Собрание',
-      time: i === 1 ? nextTime : i === 2 ? '10:00 - 15:00' : '19:00 - 20:00',
-      loc: i === 1 ? (myClient.branch || 'Манеж') : i === 2 ? 'Стадион Звезда' : 'Онлайн (Zoom)'
-    });
-  }
+  const nextThreeDates = React.useMemo(() => {
+    const list: Array<{day: string, month: string, title: string, time: string, loc: string, dateObj: Date}> = [];
+    if (!myGroup || !myGroup.scheduleDays) return list;
+
+    // Check next 21 days for schedule hits
+    for (let i = 1; i <= 21; i++) {
+      const td = new Date(today.getTime() + 1000 * 60 * 60 * 24 * i);
+      const dayAbbrId = td.getDay();
+
+      myGroup.scheduleDays.forEach((sched: string) => {
+        const slots = parseScheduleString(sched);
+        slots.forEach(slot => {
+          if (RU_WEEKDAYS_MAP[slot.day] === dayAbbrId) {
+            list.push({
+              dateObj: td,
+              day: td.getDate().toString(),
+              month: td.toLocaleDateString('ru-RU', { month: 'short' }).replace('.', ''),
+              title: 'Тренировка',
+              time: slot.time,
+              loc: slot.location || myClient.branch || 'Основное поле'
+            });
+          }
+        });
+      });
+    }
+
+    list.sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+    return list.slice(0, 3);
+  }, [myGroup, today, myClient.branch]);
 
   const handleSendChat = (e: React.FormEvent) => {
     e.preventDefault();
@@ -238,6 +257,26 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
               exit={{ opacity: 0 }}
               className="space-y-6"
             >
+              {(myClient.abonementSessionsLeft <= 2 || myClient.abonementStatus === 'Ожидает оплаты') && myClient.abonement !== 'none' && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm animate-pulse">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-red-100 text-red-600 rounded-full flex items-center justify-center flex-shrink-0">
+                      <AlertCircle className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-red-900 text-sm">Внимание! Абонемент заканчивается или ожидает оплаты.</h4>
+                      <p className="text-xs text-red-700 mt-0.5">Осталось оплаченных занятий: <span className="font-bold text-red-900 text-sm">{myClient.abonementSessionsLeft}</span>. Пожалуйста, продлите абонемент, чтобы не прерывать тренировки.</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setActiveTab('parent_finances')}
+                    className="bg-red-600 hover:bg-red-700 text-white px-5 py-2 text-xs font-bold rounded-lg shadow-md transition-all active:scale-95 flex-shrink-0 whitespace-nowrap"
+                  >
+                    Продлить абонемент
+                  </button>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
                 {/* COLUMN 1 & 2: Main Dashboard Widgets */}
@@ -588,26 +627,37 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
                   <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-4">
                     <div className="flex justify-between items-center border-b border-gray-100 pb-3">
                       <h3 className="font-bold text-slate-900 text-sm">Ближайшие события</h3>
-                      <button className="text-xs font-bold text-emerald-600 hover:text-emerald-500 transition">Все события</button>
+                      <button 
+                        onClick={() => setActiveTab('parent_schedule')}
+                        className="text-xs font-bold text-emerald-600 hover:text-emerald-500 transition"
+                      >
+                        Все события
+                      </button>
                     </div>
 
                     <div className="space-y-3.5">
-                      {nextThreeDates.map((evt, id) => (
-                        <div key={id} className="flex items-start space-x-3 text-xs">
-                          <div className="flex-shrink-0 w-11 h-11 rounded-lg bg-emerald-50 text-center flex flex-col justify-center border border-emerald-100/40">
-                            <span className="text-base font-black text-emerald-600 font-mono leading-none">{evt.day}</span>
-                            <span className="text-[8px] text-emerald-500 font-bold tracking-tight uppercase">{evt.month}</span>
-                          </div>
-                          <div className="space-y-0.5">
-                            <div className="font-bold text-slate-800">{evt.title}</div>
-                            <div className="text-[10px] text-gray-400 font-mono flex items-center space-x-1.5">
-                              <span>{evt.time}</span>
-                              <span>•</span>
-                              <span>{evt.loc}</span>
+                      {nextThreeDates.length > 0 ? (
+                        nextThreeDates.map((evt, id) => (
+                          <div key={id} className="flex items-start space-x-3 text-xs">
+                            <div className="flex-shrink-0 w-11 h-11 rounded-lg bg-emerald-50 text-center flex flex-col justify-center border border-emerald-100/40">
+                              <span className="text-base font-black text-emerald-600 font-mono leading-none">{evt.day}</span>
+                              <span className="text-[8px] text-emerald-500 font-bold tracking-tight uppercase">{evt.month}</span>
+                            </div>
+                            <div className="space-y-0.5">
+                              <div className="font-bold text-slate-800">{evt.title}</div>
+                              <div className="text-[10px] text-gray-400 font-mono flex items-center space-x-1.5">
+                                <span>{evt.time}</span>
+                                <span>•</span>
+                                <span>{evt.loc}</span>
+                              </div>
                             </div>
                           </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-4 text-xs text-gray-400 max-w-[200px] mx-auto leading-relaxed">
+                          Ближайших регулярных тренировок не запланировано.
                         </div>
-                      ))}
+                      )}
                     </div>
                   </div>
 
@@ -1011,9 +1061,9 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
 
               {/* Read Popup Dialog */}
               {selectedArticle && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-                  <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden border shadow-xl">
-                    <div className="p-5 border-b flex justify-between items-center bg-slate-50">
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 z-50">
+                  <div className="bg-white rounded-3xl w-full max-w-lg flex flex-col max-h-[90vh] overflow-hidden border shadow-xl">
+                    <div className="p-5 border-b flex justify-between items-start shrink-0 bg-slate-50">
                       <div>
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700 uppercase">
                           {selectedArticle.category}
@@ -1022,15 +1072,15 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
                       </div>
                       <button 
                         onClick={() => setSelectedArticle(null)}
-                        className="p-1 text-gray-400 hover:text-gray-600 font-bold"
+                        className="p-1 text-gray-400 hover:text-gray-600 font-bold ml-2"
                       >
                         ✕
                       </button>
                     </div>
-                    <div className="p-5 text-xs text-slate-700 leading-relaxed whitespace-pre-line text-left">
+                    <div className="p-5 sm:p-6 text-xs text-slate-700 leading-relaxed whitespace-pre-line text-left overflow-y-auto flex-1">
                       {selectedArticle.content}
                     </div>
-                    <div className="p-4 bg-slate-50 border-t flex justify-between items-center">
+                    <div className="p-4 sm:p-5 bg-slate-50 border-t flex justify-between items-center shrink-0">
                       <span className="text-[11px] text-gray-400">Просмотров: {selectedArticle.views}</span>
                       <button 
                         onClick={() => setSelectedArticle(null)} 

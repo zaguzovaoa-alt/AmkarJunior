@@ -9,6 +9,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { compressImage } from '../utils/image';
 import { PaymentLinkModal } from './PaymentLinkModal';
+import { parseScheduleString } from '../utils/scheduleParser';
 
 interface TrainerCRMProps {
   activeTab: string;
@@ -191,6 +192,85 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
     setSelectedPlayerForRating(null);
   };
 
+  // Get today's active scheduled groups
+  const shortDays = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
+  const todayVal = new Date().getDay();
+  const todayShortDay = shortDays[todayVal];
+  
+  const todaysGroups = myGroups.map(g => {
+    let todayTime: string | null = null;
+    let todayLocation: string | undefined = undefined;
+    
+    const allParsed = g.scheduleDays.flatMap(s => parseScheduleString(s));
+    const todaySlot = allParsed.find(p => p.day === todayShortDay);
+
+    if (todaySlot) {
+       todayTime = todaySlot.time;
+       todayLocation = todaySlot.location;
+    }
+
+    if (todayTime) {
+      return { ...g, todayTime, todayLocation };
+    }
+    return null;
+  }).filter((g): g is TrainingGroup & {todayTime: string, todayLocation?: string} => g !== null)
+  .sort((a, b) => a.todayTime.localeCompare(b.todayTime));
+
+  // Get current week attendance stats
+  const getWeekDates = () => {
+    const now = new Date();
+    const dayOfWeek = now.getDay() === 0 ? 6 : now.getDay() - 1; // Mon=0, Sun=6
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - dayOfWeek);
+    monday.setHours(0, 0, 0, 0);
+    
+    const dates = [];
+    for (let i = 0; i < 7; i++) {
+        const d = new Date(monday);
+        d.setDate(monday.getDate() + i);
+        dates.push(d);
+    }
+    return dates;
+  };
+  const weekDates = getWeekDates();
+  const weekChartDays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+
+  const mySessions = trainingSessions?.filter(s => s.coachId === myCoach.id || s.coachName.includes(myCoach.name)) || [];
+  
+  const dailyAttendance = weekDates.map((date, idx) => {
+    const dateStr = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+    
+    const daySessions = mySessions.filter(s => 
+       s.dateString?.includes(dateStr) || 
+       s.date?.includes(dateStr) || 
+       s.dateString?.includes(date.toLocaleDateString('ru-RU')) ||
+       s.date?.includes(date.toLocaleDateString('ru-RU'))
+    );
+    
+    let totalPlayers = 0;
+    let presentPlayers = 0;
+    let isPast = date < new Date(new Date().setHours(0,0,0,0));
+    let isToday = date.toDateString() === new Date().toDateString();
+    
+    daySessions.forEach(session => {
+        totalPlayers += session.presentCount + session.absentCount + session.sickCount;
+        presentPlayers += session.presentCount;
+    });
+    
+    let percentage = 0;
+    if (totalPlayers > 0) {
+        percentage = Math.round((presentPlayers / totalPlayers) * 100);
+    }
+    
+    return {
+        label: weekChartDays[idx],
+        percentage,
+        hasData: totalPlayers > 0,
+        isPast,
+        isToday
+    };
+  });
+
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50 text-gray-800 min-h-screen">
       
@@ -198,7 +278,16 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
       <div className="p-6 bg-white border-b border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-950 font-sans tracking-tight">
-            Добрый день, {myCoach.name ? (myCoach.name.split(' ')[1] || myCoach.name.split(' ')[0] || 'Тренер') : 'Тренер'}!
+            Добрый день, {(() => {
+              const parts = myCoach.name.trim().split(/\s+/);
+              if (myCoach.name.includes('Пьянченко') && !myCoach.name.includes('Василий')) {
+                return 'Василий Пьянченко';
+              }
+              if (parts.length >= 2) {
+                return `${parts[1]} ${parts[0]}`; // Имя Фамилия
+              }
+              return myCoach.name;
+            })()}!
           </h1>
           <p className="text-gray-500 text-sm">Панель управления тренера. Координируйте нагрузку и оценивайте результаты учеников.</p>
         </div>
@@ -207,7 +296,6 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse"></span>
           <div className="text-xs text-left">
             <span className="font-extrabold text-emerald-700">{myCoach.role}</span>
-            <div className="text-[10px] text-emerald-500 font-bold uppercase tracking-wider">Филиал Спартак</div>
           </div>
         </div>
       </div>
@@ -281,18 +369,22 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
                   </div>
 
                   <div className="space-y-3">
-                    {myGroups.length > 0 ? (
-                      myGroups.map((g, idx) => {
-                        const firstSchedule = g.scheduleDays[0] || '17:00';
-                        const timeStr = firstSchedule.split(' ')[1] || firstSchedule;
-                        const endTimeHour = parseInt(timeStr.split(':')[0]) + 1;
-                        const endTimeStr = `${endTimeHour}:30`;
-                        const placeStr = g.name.toLowerCase().includes('школа 135') ? 'Манеж Спартак' : 'Импульс Арена';
+                    {todaysGroups.length > 0 ? (
+                      todaysGroups.map((g) => {
+                        let endTimeStr = "18:30";
+                        if (g.todayTime && g.todayTime.includes(':')) {
+                            const [hh, mm] = g.todayTime.split(':');
+                            const endH = (parseInt(hh, 10) + 1).toString().padStart(2, '0');
+                            endTimeStr = `${endH}:${mm}`;
+                        } else if (g.todayTime && g.todayTime.includes('-')) {
+                            endTimeStr = g.todayTime.split('-')[1].trim();
+                            g.todayTime = g.todayTime.split('-')[0].trim();
+                        }
                         return (
                           <div key={g.id} className="p-0 border-b last:border-0 border-gray-100 flex items-center justify-between py-3">
                             <div className="w-24 text-left">
-                                <div className="text-xs font-bold font-mono text-slate-800">{timeStr} – {endTimeStr}</div>
-                                <div className="text-[10px] text-gray-400 mt-1">{placeStr}</div>
+                                <div className="text-xs font-bold font-mono text-slate-800">{g.todayTime} – {endTimeStr}</div>
+                                {g.todayLocation && <div className="text-[10px] text-gray-400 mt-1 truncate">{g.todayLocation}</div>}
                             </div>
                             <div className="flex-1 px-4 text-left">
                                 <div className="font-bold text-slate-850 text-xs">{g.name}</div>
@@ -310,20 +402,6 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
                         Нет назначенных групп или тренировок на сегодня.
                       </div>
                     )}
-
-                    <div className="p-0 border-b last:border-0 border-gray-100 flex items-center justify-between py-3">
-                        <div className="w-24 text-left">
-                            <div className="text-xs font-bold font-mono text-slate-800">21:00 – 22:00</div>
-                            <div className="text-[10px] text-gray-400 mt-1">Онлайн (Zoom)</div>
-                        </div>
-                        <div className="flex-1 px-4 text-left">
-                            <div className="font-bold text-slate-850 text-xs">Родительское собрание</div>
-                            <div className="text-[10px] text-gray-400 mt-1">Все родители групп</div>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                            <span className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Запланировано</span>
-                        </div>
-                    </div>
                   </div>
                   
                   <div className="pt-2 flex justify-center">
@@ -342,45 +420,32 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
                     <div className="flex-1">
                         <h3 className="font-extrabold text-slate-950 text-sm mb-4">Посещаемость на этой неделе</h3>
                         <div className="flex items-end justify-between h-32 pl-2">
-                            {/* Graphic simulation */}
-                            <div className="w-8 flex flex-col items-center gap-2">
-                                <span className="text-[9px] font-bold text-gray-400">82%</span>
-                                <div className="w-full bg-slate-700 rounded-t-sm" style={{height: '82%'}}></div>
-                                <span className="text-[10px] font-bold text-gray-500">Пн</span>
-                            </div>
-                            <div className="w-8 flex flex-col items-center gap-2">
-                                <span className="text-[9px] font-bold text-gray-400">76%</span>
-                                <div className="w-full bg-slate-700 rounded-t-sm" style={{height: '76%'}}></div>
-                                <span className="text-[10px] font-bold text-gray-500">Вт</span>
-                            </div>
-                            <div className="w-8 flex flex-col items-center gap-2">
-                                <span className="text-[9px] font-bold text-emerald-500">88%</span>
-                                <div className="w-full bg-emerald-500 rounded-t-sm" style={{height: '88%'}}></div>
-                                <span className="text-[10px] font-bold text-gray-500">Ср</span>
-                            </div>
-                            <div className="w-8 flex flex-col items-center gap-2">
-                                <div className="w-full bg-gray-100 rounded-t-sm" style={{height: '50%'}}></div>
-                                <span className="text-[10px] font-bold text-gray-400">Чт</span>
-                            </div>
-                            <div className="w-8 flex flex-col items-center gap-2">
-                                <div className="w-full bg-gray-100 rounded-t-sm" style={{height: '50%'}}></div>
-                                <span className="text-[10px] font-bold text-gray-400">Пт</span>
-                            </div>
-                            <div className="w-8 flex flex-col items-center gap-2">
-                                <div className="w-full bg-gray-100 rounded-t-sm" style={{height: '50%'}}></div>
-                                <span className="text-[10px] font-bold text-gray-400">Сб</span>
-                            </div>
-                            <div className="w-8 flex flex-col items-center gap-2">
-                                <div className="w-full bg-gray-100 rounded-t-sm" style={{height: '50%'}}></div>
-                                <span className="text-[10px] font-bold text-gray-400">Вс</span>
-                            </div>
+                            {dailyAttendance.map((day, i) => (
+                                <div key={i} className="w-8 flex flex-col items-center gap-2">
+                                    <span className={`text-[9px] font-bold ${!day.hasData && !day.isPast ? 'text-transparent' : day.percentage > 0 ? (day.isToday ? 'text-emerald-500' : 'text-slate-600') : 'text-gray-400'}`}>
+                                        {day.hasData ? `${day.percentage}%` : (day.isPast ? '0%' : '-')}
+                                    </span>
+                                    <div 
+                                        className={`w-full rounded-t-sm transition-all duration-500 ${day.hasData ? (day.isToday ? 'bg-emerald-500' : 'bg-slate-700') : (day.isPast ? 'bg-gray-200' : 'bg-gray-100')}`} 
+                                        style={{height: day.hasData ? `${day.percentage}%` : (day.isPast ? '5%' : '50%'), opacity: (!day.hasData && !day.isPast) ? 0.3 : 1}}
+                                    ></div>
+                                    <span className={`text-[10px] font-bold ${day.isToday ? 'text-emerald-600' : 'text-gray-500'}`}>{day.label}</span>
+                                </div>
+                            ))}
                         </div>
                     </div>
                     <div className="w-px bg-gray-100 hidden md:block"></div>
                     <div className="w-full md:w-32 flex flex-col justify-center space-y-4">
                         <div>
-                            <div className="text-[10px] text-gray-400 font-medium">Средняя посещаемость</div>
-                            <div className="text-2xl font-black text-slate-900 leading-none">87%</div>
+                            <div className="text-[10px] text-gray-400 font-medium">Ср. посещаемость (нед)</div>
+                            <div className="text-2xl font-black text-slate-900 leading-none">
+                                {(()=>{
+                                    const validDays = dailyAttendance.filter(d => d.hasData);
+                                    if(validDays.length === 0) return '0%';
+                                    const avg = validDays.reduce((sum, d) => sum + d.percentage, 0) / validDays.length;
+                                    return `${Math.round(avg)}%`;
+                                })()}
+                            </div>
                             <div className="text-[9px] font-bold text-emerald-500 mt-1">+5% к прошлой неделе</div>
                         </div>
                         <div>

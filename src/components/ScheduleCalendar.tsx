@@ -1089,10 +1089,6 @@ export const ScheduleCalendar: React.FC<{ filteredGroupId?: string; filteredCoac
                                 <User className="w-3.5 h-3.5 text-gray-400" />
                                 <span>Тренер: <strong>{ev.coachName}</strong></span>
                               </span>
-                              <span className="flex items-center space-x-1 font-medium">
-                                <MapPin className="w-3.5 h-3.5 text-gray-400" />
-                                <span>Локация: {ev.location}</span>
-                              </span>
                             </div>
                           </div>
                         </div>
@@ -1127,8 +1123,8 @@ export const ScheduleCalendar: React.FC<{ filteredGroupId?: string; filteredCoac
 
       {/* CREATE NEW EVENT/SCHEDULE SLOT MODAL */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-neutral-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 text-left select-none">
-          <div className="bg-white rounded-2xl max-w-md w-full border border-slate-100 shadow-2xl p-6 relative animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 bg-neutral-900/40 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 z-50 text-left select-none">
+          <div className="bg-white rounded-2xl max-w-md w-full border border-slate-100 shadow-2xl p-5 sm:p-6 relative max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
             <button
               onClick={() => setShowAddModal(false)}
               className="absolute top-4 right-4 p-1 rounded-lg hover:bg-slate-50 text-gray-400 hover:text-gray-600 transition"
@@ -1235,19 +1231,6 @@ export const ScheduleCalendar: React.FC<{ filteredGroupId?: string; filteredCoac
                     ))}
                   </select>
                 </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase font-mono block">Локация / Корт</label>
-                  <select
-                    value={newEventLocation}
-                    onChange={(e) => setNewEventLocation(e.target.value)}
-                    className="w-full px-2.5 py-1.8 border rounded-xl text-xs font-semibold bg-white focus:outline-none focus:border-red-600"
-                  >
-                    {LOCATIONS.map((loc) => (
-                      <option key={loc} value={loc}>{loc}</option>
-                    ))}
-                  </select>
-                </div>
               </div>
 
               {newEventType === 'regular' && (
@@ -1288,8 +1271,8 @@ export const ScheduleCalendar: React.FC<{ filteredGroupId?: string; filteredCoac
 
       {/* EVENT DETAILS VIEW MODAL */}
       {showEventDetailsModal && (
-        <div className="fixed inset-0 bg-neutral-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 text-left">
-          <div className="bg-white rounded-2xl max-w-sm w-full border border-slate-100 shadow-2xl p-6 relative animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 bg-neutral-900/40 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 z-50 text-left">
+          <div className="bg-white rounded-2xl max-w-sm w-full border border-slate-100 shadow-2xl p-5 sm:p-6 relative max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
             <button
               onClick={() => setShowEventDetailsModal(null)}
               className="absolute top-4 right-4 p-1 rounded-lg hover:bg-slate-50 text-gray-400 hover:text-gray-600 transition"
@@ -1323,13 +1306,6 @@ export const ScheduleCalendar: React.FC<{ filteredGroupId?: string; filteredCoac
                   <div>
                     <span className="font-semibold block text-slate-800">{showEventDetailsModal.coachName}</span>
                     <span className="text-[10px] text-gray-405 block font-medium">Роль: Ведущий тренер занятия</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center space-x-2.5">
-                  <MapPin className="w-4.5 h-4.5 text-gray-400" />
-                  <div>
-                    <span className="font-semibold block text-slate-800">{showEventDetailsModal.location}</span>
                   </div>
                 </div>
               </div>

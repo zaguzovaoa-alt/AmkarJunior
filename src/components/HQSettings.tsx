@@ -293,13 +293,6 @@ export const HQSettings: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-slate-600 uppercase">Филиалы в ежедневном учете</label>
-                  <div className="p-2 border rounded-xl text-xs font-semibold bg-slate-50 text-slate-700">
-                    Манеж Спартак, Импульс Арена
-                  </div>
-                </div>
-
                 {/* Auto triggers toggles */}
                 <div className="md:col-span-2 space-y-3 pt-2">
                   <label className="flex items-start space-x-3 cursor-pointer">

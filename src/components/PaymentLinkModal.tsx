@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, CreditCard, Link, Check } from 'lucide-react';
+import { X, CreditCard, Link, Check, Send } from 'lucide-react';
 import { useCRM } from '../context/CRMContext';
 
 interface PaymentLinkModalProps {
@@ -24,7 +24,7 @@ export const PaymentLinkModal: React.FC<PaymentLinkModalProps> = ({ isOpen, onCl
   };
 
   const tariffs = [
-    { id: '1_session', title: 'Разовая платная тренировка', price: prices.price1 },
+    { id: '1_session', title: 'Разовая тренировка', price: prices.price1 },
     { id: '4_sessions', title: 'Абонемент на 4 занятия', price: prices.price4 },
     { id: '8_sessions', title: 'Абонемент на 8 занятий', price: prices.price8 },
     { id: '12_sessions', title: 'Абонемент на 12 занятий', price: prices.price12 }
@@ -36,17 +36,36 @@ export const PaymentLinkModal: React.FC<PaymentLinkModalProps> = ({ isOpen, onCl
     alert('Ссылка на оплату сформирована логикой CRM (имитация)! Оплата будет ожидать ответа от платежного шлюза.');
     onClose();
   };
+  
+  const getShareLink = () => {
+    const tariff = tariffs.find(t => t.id === selectedTariff)!;
+    return `https://amkarjunior.ru/payment?client=${clientId}&tariff=${selectedTariff}&amount=${tariff.price}`;
+  };
+  
+  const getShareText = () => {
+    const tariff = tariffs.find(t => t.id === selectedTariff)!;
+    return `Здравствуйте! Ссылка для оплаты услуг АМКАР ЮНИОР для ученика (${clientName}): ${tariff.title} (${tariff.price.toLocaleString('ru-RU')} ₽) - ${getShareLink()}`;
+  };
 
   const handleCopyLink = () => {
-    const tariff = tariffs.find(t => t.id === selectedTariff)!;
-    const fakeLink = `${window.location.origin}/payment?client=${clientId}&tariff=${selectedTariff}&amount=${tariff.price}`;
-    
-    navigator.clipboard.writeText(fakeLink).then(() => {
+    navigator.clipboard.writeText(getShareLink()).then(() => {
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2000);
     }).catch(err => {
       console.error('Failed to copy text: ', err);
     });
+  };
+  
+  const handleShareTelegram = () => {
+    window.open(`https://t.me/share/url?url=${encodeURIComponent(getShareLink())}&text=${encodeURIComponent(`Оплата услуг АМКАР ЮНИОР: ${clientName}`)}`, '_blank');
+  };
+  
+  const handleShareWhatsApp = () => {
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(getShareText())}`, '_blank');
+  };
+  
+  const handleShareVK = () => {
+    window.open(`https://vk.com/share.php?url=${encodeURIComponent(getShareLink())}&title=${encodeURIComponent(`Оплата услуг АМКАР ЮНИОР: ${clientName}`)}`, '_blank');
   };
 
   if (!isOpen) return null;
@@ -74,7 +93,7 @@ export const PaymentLinkModal: React.FC<PaymentLinkModalProps> = ({ isOpen, onCl
                 <div 
                   key={t.id}
                   onClick={() => setSelectedTariff(t.id as any)}
-                  className={`p-4 rounded-xl border-2 cursor-pointer transition flex justify-between items-center ${
+                  className={`p-3.5 rounded-xl border-2 cursor-pointer transition flex justify-between items-center ${
                     selectedTariff === t.id ? 'border-emerald-500 bg-emerald-50' : 'border-gray-100 hover:border-emerald-200'
                   }`}
                 >
@@ -93,13 +112,41 @@ export const PaymentLinkModal: React.FC<PaymentLinkModalProps> = ({ isOpen, onCl
                 <span>Отправить ссылку в ЛК родителя</span>
               </button>
               
-              <button 
-                onClick={handleCopyLink}
-                className="w-full py-3.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 font-bold rounded-xl flex justify-center items-center space-x-2 transition"
-              >
-                {copiedLink ? <Check className="w-5 h-5" /> : <Link className="w-5 h-5" />}
-                <span>{copiedLink ? 'Скопировано!' : 'Скопировать прямую ссылку'}</span>
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button 
+                  onClick={handleCopyLink}
+                  className="py-3 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold rounded-xl flex justify-center items-center space-x-2 transition text-sm"
+                >
+                  {copiedLink ? <Check className="w-4 h-4" /> : <Link className="w-4 h-4" />}
+                  <span>{copiedLink ? 'Скопировано!' : 'Копировать'}</span>
+                </button>
+                
+                <button 
+                  onClick={handleShareWhatsApp}
+                  className="py-3 bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#25D366] font-bold rounded-xl flex justify-center items-center space-x-2 transition text-sm"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>WhatsApp</span>
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-2">
+                 <button 
+                  onClick={handleShareTelegram}
+                  className="py-3 bg-[#0088cc]/10 hover:bg-[#0088cc]/20 text-[#0088cc] font-bold rounded-xl flex justify-center items-center space-x-2 transition text-sm"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>Telegram</span>
+                </button>
+                
+                <button 
+                  onClick={handleShareVK}
+                  className="py-3 bg-[#0077FF]/10 hover:bg-[#0077FF]/20 text-[#0077FF] font-bold rounded-xl flex justify-center items-center space-x-2 transition text-sm"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>ВКонтакте</span>
+                </button>
+              </div>
             </div>
           </div>
         </motion.div>
@@ -107,3 +154,4 @@ export const PaymentLinkModal: React.FC<PaymentLinkModalProps> = ({ isOpen, onCl
     </AnimatePresence>
   );
 };
+

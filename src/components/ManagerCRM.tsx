@@ -17,17 +17,6 @@ interface ManagerCRMProps {
   onOpenPayment: (clientId: string) => void;
 }
 
-function pcmToBase64(pcmData: Float32Array) {
-  const buffer = new ArrayBuffer(pcmData.length * 2);
-  const view = new DataView(buffer);
-  let offset = 0;
-  for (let i = 0; i < pcmData.length; i++) {
-    const s = Math.max(-1, Math.min(1, pcmData[i]));
-    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
-    offset += 2;
-  }
-  return btoa(String.fromCharCode(...new Uint8Array(buffer)));
-}
 
 export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab, onOpenPayment }) => {
   const { 
@@ -96,16 +85,6 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
     ...(clients || []).map(c => c.groupName?.trim()).filter(Boolean) as string[],
   ])).sort();
 
-  // MAX Messenger Call state
-  const [isMaxCallingOpen, setIsMaxCallingOpen] = useState(false);
-  const [maxCallTargetName, setMaxCallTargetName] = useState('');
-  const [maxCallTargetPhone, setMaxCallTargetPhone] = useState('');
-  const [maxCallTargetAvatar, setMaxCallTargetAvatar] = useState('');
-  const [maxCallStatus, setMaxCallStatus] = useState<'connecting' | 'ringing' | 'active' | 'ended'>('connecting');
-  const [maxCallDuration, setMaxCallDuration] = useState(0);
-  const [isMaxCallMuted, setIsMaxCallMuted] = useState(false);
-  const [isMaxCallSpeaker, setIsMaxCallSpeaker] = useState(false);
-  
   const [isNotificationsMenuOpen, setIsNotificationsMenuOpen] = useState(false);
   const hasUnreadTasks = tasks.some(t => t.assignedTo === 'manager' && t.status === 'new');
   const [notificationsHasUnreadLocallyCleared, setNotificationsHasUnreadLocallyCleared] = useState(false);
@@ -139,143 +118,31 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
   const [currentPage, setCurrentPage] = useState<number>(1);
 
   
-  const isMaxCallMutedRef = React.useRef(isMaxCallMuted);
-  React.useEffect(() => {
-    isMaxCallMutedRef.current = isMaxCallMuted;
-  }, [isMaxCallMuted]);
 
-  const wsRef = React.useRef<WebSocket | null>(null);
-  const audioCtxRef = React.useRef<AudioContext | null>(null);
-  const audioStreamRef = React.useRef<MediaStream | null>(null);
-  const nextStartTimeRef = React.useRef<number>(0);
 
-  const stopLiveAudio = () => {
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-    if (audioStreamRef.current) {
-      audioStreamRef.current.getTracks().forEach(t => t.stop());
-      audioStreamRef.current = null;
-    }
-    if (audioCtxRef.current) {
-      audioCtxRef.current.close();
-      audioCtxRef.current = null;
-    }
-  };
 
-  const playAudioChunk = (base64Audio: string) => {
-    if (!audioCtxRef.current) return;
-    const audioCtx = audioCtxRef.current;
-    
-    const binaryString = atob(base64Audio);
-    const len = binaryString.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-    }
-    const int16Array = new Int16Array(bytes.buffer);
-    const audioBuffer = audioCtx.createBuffer(1, int16Array.length, 16000);
-    const channelData = audioBuffer.getChannelData(0);
-    for (let i = 0; i < int16Array.length; i++) {
-        channelData[i] = int16Array[i] / 32768.0;
-    }
-    const source = audioCtx.createBufferSource();
-    source.buffer = audioBuffer;
-    source.connect(audioCtx.destination);
-    
-    let nextStart = nextStartTimeRef.current;
-    if (nextStart < audioCtx.currentTime) {
-        nextStart = audioCtx.currentTime + 0.1;
-    }
-    source.start(nextStart);
-    nextStartTimeRef.current = nextStart + audioBuffer.duration;
-  };
-
-  const startLiveAudio = async () => {
-    stopLiveAudio();
-    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const socket = new WebSocket(`${protocol}//${location.host}/api/live`);
-    wsRef.current = socket;
-
-    socket.onopen = async () => {
-      try {
-        const audioCtx = new AudioContext({ sampleRate: 16000 });
-        audioCtxRef.current = audioCtx;
-        nextStartTimeRef.current = audioCtx.currentTime + 0.1;
-
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        audioStreamRef.current = stream;
-
-        const source = audioCtx.createMediaStreamSource(stream);
-        const processor = audioCtx.createScriptProcessor(4096, 1, 1);
-        source.connect(processor);
-        processor.connect(audioCtx.destination);
-
-        processor.onaudioprocess = (e) => {
-          if (socket.readyState === WebSocket.OPEN && !isMaxCallMutedRef.current) {
-            const base64 = pcmToBase64(e.inputBuffer.getChannelData(0));
-            socket.send(JSON.stringify({ audio: base64 }));
-          }
-        };
-
-        socket.onmessage = (event) => {
-          const msg = JSON.parse(event.data);
-          if (msg.audio) playAudioChunk(msg.audio);
-          if (msg.interrupted) { 
-             nextStartTimeRef.current = audioCtxRef.current?.currentTime || 0;
-          }
-        };
-      } catch (err) {
-        console.error("Mic access denied or error:", err);
-      }
-    };
-  };
-
-  React.useEffect(() => {
-    let statusTimer: any;
-    let durationInterval: any;
-
-    if (isMaxCallingOpen) {
-      if (maxCallStatus === 'connecting') {
-        statusTimer = setTimeout(() => {
-          setMaxCallStatus('ringing');
-        }, 1500);
-      } else if (maxCallStatus === 'ringing') {
-        statusTimer = setTimeout(() => {
-          setMaxCallStatus('active');
-        }, 2000);
-      } else if (maxCallStatus === 'active') {
-        durationInterval = setInterval(() => {
-          setMaxCallDuration(prev => prev + 1);
-        }, 1000);
-      } else if (maxCallStatus === 'ended') {
-        statusTimer = setTimeout(() => {
-          setIsMaxCallingOpen(false);
-        }, 1500);
-      }
-    } else {
-      setMaxCallDuration(0);
-      setIsMaxCallMuted(false);
-      setIsMaxCallSpeaker(false);
-    }
-
-    return () => {
-      clearTimeout(statusTimer);
-      clearInterval(durationInterval);
-    };
-  }, [isMaxCallingOpen, maxCallStatus]);
 
   const handleStartMaxCall = (client: Client) => {
-    setMaxCallTargetName(`${client.parentName || 'Родитель'} (${client.childName || 'Ученик'})`);
-    setMaxCallTargetPhone(client.parentPhone || '');
-    setMaxCallTargetAvatar(client.avatarUrl || '');
-    setMaxCallStatus('connecting');
-    setMaxCallDuration(0);
-    setIsMaxCallingOpen(true);
-
-    // Initializing Gemini Live voice connection
-    startLiveAudio();
+    const cleanPhone = client.parentPhone.replace(/\D/g, '');
+    let maxPhone = cleanPhone;
+    if (maxPhone.startsWith('8') && maxPhone.length === 11) {
+      maxPhone = '7' + maxPhone.substring(1);
+    } else if (maxPhone.startsWith('9') && maxPhone.length === 10) {
+      maxPhone = '7' + maxPhone;
+    }
+    
+    // Create an anchor element to properly trigger custom URL schemes out of iframes
+    const link = document.createElement('a');
+    link.href = `max://call?phone=+${maxPhone}`;
+    link.target = '_top'; // Attempt to break out of iframe block
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Fallback opening
+    setTimeout(() => {
+      window.open(`max://call?phone=+${maxPhone}`, '_parent');
+    }, 300);
   };
 
   const handleStartEditClient = (client: Client) => {
@@ -492,6 +359,11 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
   const totalPages = Math.ceil(filteredClients.length / itemsPerPage) || 1;
   const paginatedClients = filteredClients.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
+  const expiringAbonements = clients.filter(c => 
+    c.status === 'active' && c.abonement && c.abonement !== 'none' && 
+    (c.abonementSessionsLeft <= 2 || c.abonementStatus === 'Ожидает оплаты')
+  ).length;
+
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50 text-gray-800 min-h-screen">
       
@@ -677,7 +549,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                 </button>
                 <div className="relative">
                   <div className="relative cursor-pointer hover:bg-gray-50 p-2 rounded-full transition-colors ml-2" onClick={() => { setIsNotificationsMenuOpen(!isNotificationsMenuOpen); setNotificationsHasUnreadLocallyCleared(true); setIsProfileMenuOpen(false); }}>
-                    {showNotificationDot && <span className="w-1.5 h-1.5 bg-red-500 rounded-full absolute top-2 right-2 ring-2 ring-white"></span>}
+                    {(showNotificationDot || expiringAbonements > 0) && <span className="w-1.5 h-1.5 bg-red-500 rounded-full absolute top-2 right-2 ring-2 ring-white"></span>}
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-600">
                       <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                       <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
@@ -689,7 +561,12 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                       {tasks.filter(t => t.assignedTo === 'manager' && t.status !== 'completed').slice(0, 5).map(task => (
                         <p key={task.id} className="text-xs text-slate-600 py-1.5 border-b last:border-none border-gray-50">{task.title}</p>
                       ))}
-                      {tasks.filter(t => t.assignedTo === 'manager' && t.status !== 'completed').length === 0 && (
+                      {expiringAbonements > 0 && (
+                        <div className="text-[11px] font-bold text-red-600 bg-red-50 p-2 rounded mt-2 cursor-pointer" onClick={() => { setFilterAbonement('unpaid'); setIsNotificationsMenuOpen(false); }}>
+                           Внимание! {expiringAbonements} абонементов истекают или требуют оплаты.
+                        </div>
+                      )}
+                      {(tasks.filter(t => t.assignedTo === 'manager' && t.status !== 'completed').length === 0 && expiringAbonements === 0) && (
                          <p className="text-xs text-gray-400 py-1 italic">Нет новых уведомлений</p>
                       )}
                     </div>
@@ -836,18 +713,6 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                   
                   <div className="flex items-center space-x-2 shrink-0">
                     <select 
-                      value={filterBranch}
-                      onChange={(e) => setFilterBranch(e.target.value)}
-                      className="py-2 pl-3 pr-8 bg-white border-none font-medium text-gray-500 text-[11px] rounded-full outline-none appearance-none cursor-pointer hover:bg-gray-50"
-                      style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'10\' height=\'10\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpolyline points=\'6 9 12 15 18 9\'%3E%3C/polyline%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
-                    >
-                      <option value="all">Филиал: Все</option>
-                      {/* You can add real branches here if they exist, else just keep 'all' or simple options */}
-                      <option value="Манеж Спартак">Манеж Спартак</option>
-                      <option value="Импульс Арена">Импульс Арена</option>
-                    </select>
-
-                    <select 
                       value={filterGroup}
                       onChange={(e) => setFilterGroup(e.target.value)}
                       className="py-2 pl-3 pr-8 bg-white border-none font-medium text-gray-500 text-[11px] rounded-full outline-none appearance-none cursor-pointer hover:bg-gray-50"
@@ -924,7 +789,6 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                         <th className="p-2 md:p-3">Данные ребёнка</th>
                         <th className="p-2 md:p-3 hidden sm:table-cell">Данные родителя</th>
                         <th className="p-2 md:p-3 hidden md:table-cell">Группа</th>
-                        <th className="p-2 md:p-3 hidden lg:table-cell">Филиал</th>
                         <th className="p-2 md:p-3 hidden sm:table-cell">Статус</th>
                         <th className="p-2 md:p-3 hidden lg:table-cell">Абонемент</th>
                         <th className="p-2 md:p-3 hidden sm:table-cell">Оплата</th>
@@ -1011,9 +875,6 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                           <td className="p-2 md:p-3 hidden md:table-cell align-middle">
                             <div className="font-bold text-gray-900 text-[11px] leading-tight">{client.groupName || 'Без группы'}</div>
                             {client.coachName && <div className="text-[10px] text-gray-500 font-medium leading-tight mt-0.5">Тренер: {client.coachName}</div>}
-                          </td>
-                          <td className="p-2 md:p-3 hidden lg:table-cell text-[11px] font-bold text-gray-900 align-middle">
-                             {client.branch || 'Импульс Арена'}
                           </td>
                             <td className="p-2 md:p-3 hidden sm:table-cell align-middle">
                               <div className="flex flex-col gap-1 items-start">
@@ -1476,10 +1337,6 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                         </div>
                         <div className="space-y-4 text-[11px]">
                           <div>
-                            <div className="text-gray-400 font-medium mb-1">Филиал</div>
-                            <div className="font-bold text-gray-900">Импульс Арена</div>
-                          </div>
-                          <div>
                             <div className="text-gray-400 font-medium mb-1">Группа</div>
                             <div className="font-bold text-gray-900">{selectedClient.groupName || 'Без группы'}</div>
                             {selectedClient.coachName && (
@@ -1842,17 +1699,17 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
 
       {/* Add Client (Lead) modal drawer dialog */}
       {isAddClientOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden border shadow-xl">
-            <div className="p-5 bg-slate-900 text-white flex justify-between items-center text-left">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 z-50">
+          <div className="bg-white rounded-3xl w-full max-w-md max-h-full flex flex-col overflow-hidden border shadow-xl">
+            <div className="p-5 bg-slate-900 text-white flex justify-between items-center text-left shrink-0">
               <div>
                 <h3 className="font-extrabold text-white text-sm">Создание новой входящей заявки</h3>
                 <p className="text-[10px] text-gray-400 mt-0.5">Ручной ввод лида при входящем звонке / визите.</p>
               </div>
-              <button onClick={() => setIsAddClientOpen(false)} className="text-white hover:text-slate-300 font-bold">✕</button>
+              <button onClick={() => setIsAddClientOpen(false)} className="text-white hover:text-slate-300 font-bold p-1">✕</button>
             </div>
 
-            <form onSubmit={handleAddNewLead} className="p-6 space-y-4 text-left font-sans text-xs">
+            <form onSubmit={handleAddNewLead} className="p-5 sm:p-6 space-y-4 text-left font-sans text-xs overflow-y-auto">
               <div className="space-y-1">
                 <label className="block text-gray-500 font-semibold uppercase tracking-wider">ФИО Законного представителя (Родителя)</label>
                 <input required type="text" placeholder="Например, Иванова Мария" className="w-full p-2.5 bg-slate-50 border rounded-xl" value={newParentName} onChange={(e) => setNewParentName(e.target.value)} />
@@ -1910,17 +1767,17 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
 
       {/* Edit Client modal dialog */}
       {isEditClientOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden border shadow-xl my-8">
-            <div className="p-5 bg-slate-900 text-white flex justify-between items-center text-left">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 z-50">
+          <div className="bg-white rounded-3xl w-full max-w-lg flex flex-col max-h-full overflow-hidden border shadow-xl">
+            <div className="p-5 bg-slate-900 text-white flex justify-between items-center text-left shrink-0">
               <div>
                 <h3 className="font-extrabold text-white text-sm">Редактирование профиля ученика</h3>
                 <p className="text-[10px] text-gray-400 mt-0.5">Полное обновление регистрационных данных и аватара футболиста.</p>
               </div>
-              <button type="button" onClick={() => setIsEditClientOpen(false)} className="text-white hover:text-slate-300 font-bold">✕</button>
+              <button type="button" onClick={() => setIsEditClientOpen(false)} className="text-white hover:text-slate-300 font-bold p-1">✕</button>
             </div>
 
-            <form onSubmit={handleSaveClientEdit} className="p-6 space-y-4 text-left font-sans text-xs">
+            <form onSubmit={handleSaveClientEdit} className="p-5 sm:p-6 space-y-4 text-left font-sans text-xs overflow-y-auto">
               
               {/* Avatar Section */}
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3.5">
@@ -2180,171 +2037,11 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
         </div>
       )}
 
-      {/* MAX Messenger Voice Calling Immersive HUD Overlay */}
-      {isMaxCallingOpen && (
-        <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-300">
-          <div className="relative bg-slate-900 border border-slate-800 text-white w-full max-w-sm rounded-[36px] overflow-hidden shadow-2xl p-7 flex flex-col items-center justify-between min-h-[460px] text-center animate-in zoom-in-95 duration-200">
-            
-            {/* Top pill for Branding */}
-            <div className="w-full flex justify-between items-center px-2">
-              <span className="text-[10px] font-black uppercase text-indigo-400 bg-indigo-950/80 border border-indigo-900 px-3 py-1 rounded-full flex items-center gap-1.5 tracking-widest">
-                <span className={`h-2 w-2 rounded-full bg-indigo-500 ${maxCallStatus !== 'ended' ? 'animate-pulse' : ''}`} />
-                MAX Secure Voice Call
-              </span>
-              <span className="text-[10px] font-semibold text-slate-500 font-mono">256-bit AES</span>
-            </div>
-
-            {/* Main content Area: Caller Info */}
-            <div className="my-auto space-y-6 flex flex-col items-center">
-              
-              {/* Avatar circle with pulsing glow */}
-              <div className="relative h-28 w-28 flex items-center justify-center">
-                
-                {/* Multi glow rings for active conversation */}
-                {maxCallStatus === 'active' && !isMaxCallMuted && (
-                  <>
-                    <div className="absolute inset-0 rounded-full border border-indigo-500/30 animate-ping" />
-                    <div className="absolute -inset-4 rounded-full border border-indigo-500/10 animate-pulse" />
-                  </>
-                )}
-                {maxCallStatus === 'ringing' && (
-                  <div className="absolute -inset-2 rounded-full border border-slate-500/20 animate-ping" />
-                )}
-
-                <div className="relative h-24 w-24 rounded-full bg-slate-800 border-2 border-indigo-500 shadow-xl overflow-hidden flex items-center justify-center text-white text-3xl font-black">
-                  {maxCallTargetAvatar ? (
-                    <img src={maxCallTargetAvatar} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    maxCallTargetName[0] || '?'
-                  )}
-                </div>
-              </div>
-
-              {/* Name and State description */}
-              <div className="space-y-2">
-                <h3 className="font-extrabold text-white text-lg tracking-tight px-4">{maxCallTargetName}</h3>
-                <p className="text-xs transition font-mono text-indigo-300 select-none">
-                  {maxCallTargetPhone}
-                </p>
-                
-                {/* State translation badging */}
-                <div className="pt-2 text-center">
-                  {maxCallStatus === 'connecting' && (
-                    <div className="inline-flex items-center space-x-1 py-1 px-3 bg-slate-800 border border-slate-700 rounded-full text-[10px] font-bold text-slate-300">
-                      <Loader2 className="w-3 h-3 animate-spin text-indigo-400" />
-                      <span>Инициализация MAX шлюза...</span>
-                    </div>
-                  )}
-
-                  {maxCallStatus === 'ringing' && (
-                    <div className="inline-flex items-center space-x-1.5 py-1 px-3 bg-indigo-950/40 border border-indigo-900 rounded-full text-[10px] font-bold text-indigo-300 animate-pulse">
-                      <Phone className="w-3 h-3" />
-                      <span>Идет гудок в приложении MAX...</span>
-                    </div>
-                  )}
-
-                  {maxCallStatus === 'active' && (
-                    <div className="inline-flex flex-col items-center space-y-2">
-                      <div className="inline-flex items-center space-x-1.5 py-1 px-3.5 bg-emerald-950/60 border border-emerald-900 rounded-full text-[10px] font-bold text-emerald-400">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
-                        <span>Разговор через MAX</span>
-                      </div>
-                      
-                      {/* Live Call Duration */}
-                      <span className="block text-3xl font-black tracking-widest font-mono text-white pt-1">
-                        {Math.floor(maxCallDuration / 60).toString().padStart(2, '0')}:{(maxCallDuration % 60).toString().padStart(2, '0')}
-                      </span>
-
-                      {/* Animated Soundwave bars */}
-                      {!isMaxCallMuted && (
-                        <div className="flex items-end justify-center space-x-1.5 h-6 pt-2">
-                          {[0.7, 1.4, 0.5, 1.9, 1.2, 0.6, 1.5, 0.9, 1.7, 0.4].map((delay, i) => (
-                            <div 
-                              key={i} 
-                              className="w-1 bg-gradient-to-t from-indigo-500 to-emerald-400 rounded-full animate-bounce" 
-                              style={{ 
-                                height: `${Math.random() * 20 + 4}px`, 
-                                animationDuration: `${delay}s`,
-                                animationIterationCount: 'infinite'
-                              }} 
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {maxCallStatus === 'ended' && (
-                    <div className="inline-flex items-center space-x-1.5 py-1 px-3 bg-red-950/60 border border-red-900 rounded-full text-[10px] font-bold text-red-400">
-                      <PhoneOff className="w-3 h-3" />
-                      <span>Звонок завершен</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Calling Function Actions Row */}
-            <div className="w-full space-y-6 pt-4 border-t border-slate-800/80">
-              
-              <div className="flex items-center justify-around w-full max-w-[240px] mx-auto">
-                {/* Mute Mic */}
-                <button 
-                  type="button"
-                  onClick={() => setIsMaxCallMuted(!isMaxCallMuted)}
-                  disabled={maxCallStatus === 'ended'}
-                  className={`h-11 w-11 rounded-full flex items-center justify-center transition border ${
-                    isMaxCallMuted 
-                      ? 'bg-amber-600 border-amber-500 text-white' 
-                      : 'bg-slate-800/60 hover:bg-slate-850 border-slate-700 text-slate-300'
-                  }`}
-                  title={isMaxCallMuted ? "Включить микрофон" : "Выключить микрофон"}
-                >
-                  {isMaxCallMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                </button>
-
-                {/* Speaker Toggle */}
-                <button 
-                  type="button"
-                  onClick={() => setIsMaxCallSpeaker(!isMaxCallSpeaker)}
-                  disabled={maxCallStatus === 'ended'}
-                  className={`h-11 w-11 rounded-full flex items-center justify-center transition border ${
-                    isMaxCallSpeaker 
-                      ? 'bg-indigo-600 border-indigo-500 text-white' 
-                      : 'bg-slate-800/60 hover:bg-slate-850 border-slate-700 text-slate-300'
-                  }`}
-                  title={isMaxCallSpeaker ? "Выключить динамик" : "Включить громкую связь"}
-                >
-                  <Volume2 className={`w-4 h-4 ${isMaxCallSpeaker ? 'animate-pulse' : ''}`} />
-                </button>
-              </div>
-
-              {/* End/Hangup Red Action */}
-              <div className="pb-1">
-                {maxCallStatus !== 'ended' ? (
-                  <button 
-                    type="button"
-                    onClick={() => { setMaxCallStatus('ended'); stopLiveAudio(); }}
-                    className="h-14 w-14 rounded-full bg-rose-600 hover:bg-rose-700 text-white shadow-lg shadow-rose-600/30 font-black cursor-pointer flex items-center justify-center mx-auto transform hover:scale-105 active:scale-95 transition"
-                    title="Завершить вызов"
-                  >
-                    <PhoneOff className="w-6 h-6 animate-pulse" />
-                  </button>
-                ) : (
-                  <div className="h-14 flex items-center justify-center" />
-                )}
-              </div>
-            </div>
-
-          </div>
-        </div>
-      )}
-
 {/* Profile Settings Modal */}
       {isProfileModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col transform transition-all relative">
-            <div className="bg-slate-50 p-6 border-b border-gray-100 flex justify-between items-center relative">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 sm:p-6">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl flex flex-col max-h-full overflow-hidden transform transition-all relative">
+            <div className="bg-slate-50 p-5 sm:p-6 border-b border-gray-100 flex justify-between items-center relative shrink-0">
               <div className="flex items-center space-x-3">
                 <div className="h-10 w-10 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center">
                   <Settings className="w-5 h-5" />
@@ -2362,7 +2059,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
               </button>
             </div>
 
-            <div className="p-6 space-y-6 text-left font-sans text-xs">
+            <div className="p-5 sm:p-6 space-y-6 text-left font-sans text-xs overflow-y-auto flex-1">
               <div className="flex items-center space-x-5">
                 <div className="relative group h-20 w-20 rounded-full border border-slate-200 flex items-center justify-center text-slate-700 font-bold overflow-hidden shadow-sm">
                   {tempProfileAvatar ? (
@@ -2413,7 +2110,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
               </div>
             </div>
 
-            <div className="p-6 bg-slate-50 border-t border-gray-100 flex justify-end space-x-3">
+            <div className="p-5 sm:p-6 bg-slate-50 border-t border-gray-100 flex justify-end space-x-3 shrink-0">
               <button 
                 type="button" 
                 onClick={() => setIsProfileModalOpen(false)}
@@ -2446,9 +2143,9 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
 
       {/* Permissions Modal */}
       {isPermissionsModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col transform transition-all relative">
-            <div className="bg-slate-50 p-6 border-b border-gray-100 flex justify-between items-center relative">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 sm:p-6">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl flex flex-col max-h-full overflow-hidden transform transition-all relative">
+            <div className="bg-slate-50 p-5 sm:p-6 border-b border-gray-100 flex justify-between items-center relative shrink-0">
               <div className="flex items-center space-x-3">
                 <div className="h-10 w-10 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center">
                   <Shield className="w-5 h-5" />
@@ -2520,7 +2217,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
               </div>
             </div>
 
-            <div className="p-6 bg-slate-50 border-t border-gray-100 flex justify-end">
+            <div className="p-5 sm:p-6 bg-slate-50 border-t border-gray-100 flex justify-end shrink-0">
               <button 
                 type="button"
                 onClick={() => setIsPermissionsModalOpen(false)}

@@ -3,7 +3,7 @@ import { useCRM } from '../context/CRMContext';
 import { 
   Users, CreditCard, Share2, ClipboardList, CheckSquare, 
   TrendingUp, Activity, Check, Calendar, ArrowUpRight, Trophy,
-  Trash2, Upload, FileText, CheckCircle2, AlertCircle, Plus, Info, Sparkles, FolderDown, Save, X, Camera
+  Trash2, Upload, FileText, CheckCircle2, AlertCircle, Plus, Info, Sparkles, FolderDown, Save, X, Camera, Star, UserPlus, PhoneCall, CalendarCheck, Target, Crown, Flag, MessageCircle
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -71,21 +71,33 @@ export const DirectorCRM: React.FC = () => {
          (c.progress?.physical || 0) +
          (c.progress?.discipline || 0)) / 4
       ) || 0;
+      
+      const attendance = c.attendance || [];
+      const presentCount = attendance.filter(a => a.status === 'present').length;
+      const attendanceScore = attendance.length > 0 ? (presentCount / attendance.length) * 5 : 0;
+      
+      // If progress is empty, use attendance as a partial fallback for rating, but prioritize actual progress
+      const finalScore = avgScore > 0 ? avgScore : attendanceScore;
+
       return {
+        id: c.id,
         name: `${c.childSurname} ${c.childName}`,
         group: c.groupName || 'Без группы',
-        rating: avgScore > 0 ? avgScore.toFixed(1) : '5.0',
+        rating: finalScore.toFixed(1),
         medals: `${c.achievements?.length || 0} ${
           c.achievements?.length === 1 
             ? 'награда' 
             : (c.achievements?.length >= 2 && c.achievements?.length <= 4 ? 'награды' : 'наград')
         }`,
         avatar: c.childName ? c.childName[0] : 'У',
-        score: avgScore
+        score: finalScore,
+        avgScore: avgScore,
+        attendanceScore: attendanceScore
       };
     })
+    .filter(c => c.score > 0)
     .sort((a, b) => b.score - a.score)
-    .slice(0, 3);
+    .slice(0, 5);
 
   const upcomingSessions = (groups || []).flatMap(g => {
     return (g.scheduleDays || []).map(dayTime => {
@@ -110,18 +122,18 @@ export const DirectorCRM: React.FC = () => {
     });
   }).slice(0, 4);
 
-  const totalLeadsFunnel = leads.length;
-  const contactedLeadsFunnel = leads.filter(l => l.status !== 'new').length;
-  const trialsBookedFunnel = clients.filter(c => c.status === 'trial').length;
-  const trialsCompletedFunnel = clients.filter(c => c.status === 'trial' && c.attendance?.length > 0).length;
-  const payingClientsFunnel = clients.filter(c => c.status === 'active').length;
+  const totalLeadsFunnel = leads.length + clients.length;
+  const contactedLeadsFunnel = leads.filter(l => l.status !== 'new').length + clients.length;
+  const trialsBookedFunnel = leads.filter(l => l.status === 'trial_assigned').length + clients.length;
+  const trialsCompletedFunnel = clients.filter(c => c.status === 'trial' || c.status === 'active' || c.status === 'inactive').length;
+  const payingClientsFunnel = clients.filter(c => c.status === 'active' || c.status === 'inactive').length;
 
   const funnelData = [
-    { stage: 'Новые заявки', count: totalLeadsFunnel, percent: totalLeadsFunnel > 0 ? 100 : 0, color: 'bg-slate-900' },
-    { stage: 'Первичный контакт (звонок)', count: contactedLeadsFunnel, percent: totalLeadsFunnel > 0 ? Math.round((contactedLeadsFunnel / totalLeadsFunnel) * 100) : 0, color: 'bg-emerald-600' },
-    { stage: 'Назначена пробная тренировка', count: trialsBookedFunnel, percent: totalLeadsFunnel > 0 ? Math.round((trialsBookedFunnel / totalLeadsFunnel) * 100) : 0, color: 'bg-emerald-500' },
-    { stage: 'Пройдено / Сбор обратной связи', count: trialsCompletedFunnel, percent: totalLeadsFunnel > 0 ? Math.round((trialsCompletedFunnel / totalLeadsFunnel) * 100) : 0, color: 'bg-indigo-600' },
-    { stage: 'Оплачено абонементов (Выручка)', count: payingClientsFunnel, percent: totalLeadsFunnel > 0 ? Math.min(Math.round((payingClientsFunnel / totalLeadsFunnel) * 100), 100) : 0, color: 'bg-emerald-500' }
+    { stage: 'Новые заявки', count: totalLeadsFunnel, percent: totalLeadsFunnel > 0 ? 100 : 0, color: 'from-slate-700 to-slate-900', bgMain: 'bg-slate-900', lightBg: 'bg-slate-100', icon: <UserPlus className="w-4 h-4" />, conversionFromPrev: null },
+    { stage: 'В работе (связались)', count: contactedLeadsFunnel, percent: totalLeadsFunnel > 0 ? Math.round((contactedLeadsFunnel / totalLeadsFunnel) * 100) : 0, color: 'from-blue-500 to-indigo-600', bgMain: 'bg-indigo-600', lightBg: 'bg-indigo-50', icon: <MessageCircle className="w-4 h-4" />, conversionFromPrev: totalLeadsFunnel > 0 ? Math.round((contactedLeadsFunnel / totalLeadsFunnel) * 100) : 0 },
+    { stage: 'Назначена тренировка', count: trialsBookedFunnel, percent: totalLeadsFunnel > 0 ? Math.round((trialsBookedFunnel / totalLeadsFunnel) * 100) : 0, color: 'from-cyan-400 to-teal-500', bgMain: 'bg-teal-500', lightBg: 'bg-teal-50', icon: <CalendarCheck className="w-4 h-4" />, conversionFromPrev: contactedLeadsFunnel > 0 ? Math.round((trialsBookedFunnel / contactedLeadsFunnel) * 100) : 0 },
+    { stage: 'Тренировка пройдена', count: trialsCompletedFunnel, percent: totalLeadsFunnel > 0 ? Math.round((trialsCompletedFunnel / totalLeadsFunnel) * 100) : 0, color: 'from-emerald-400 to-emerald-600', bgMain: 'bg-emerald-600', lightBg: 'bg-emerald-50', icon: <Activity className="w-4 h-4" />, conversionFromPrev: trialsBookedFunnel > 0 ? Math.round((trialsCompletedFunnel / trialsBookedFunnel) * 100) : 0 },
+    { stage: 'Резиденты клуба', count: payingClientsFunnel, percent: totalLeadsFunnel > 0 ? Math.min(Math.round((payingClientsFunnel / totalLeadsFunnel) * 100), 100) : 0, color: 'from-amber-400 to-orange-500', bgMain: 'bg-orange-500', lightBg: 'bg-orange-50', icon: <Crown className="w-4 h-4" />, conversionFromPrev: trialsCompletedFunnel > 0 ? Math.round((payingClientsFunnel / trialsCompletedFunnel) * 100) : 0 }
   ];
 
   const dynamicAttendanceByDay = {
@@ -154,14 +166,20 @@ export const DirectorCRM: React.FC = () => {
     let rate = 0;
     if (stats.total > 0) {
       rate = Math.round((stats.present / stats.total) * 100);
-    } else if (groups && groups.length > 0) {
-      rate = Math.round(groups.reduce((sum, g) => sum + (g.attendanceRate || 0), 0) / groups.length);
+    } else {
+      // Look at groups that train on this day to get a more accurate realistic estimate
+      const dayFullForms: Record<string, string> = { 'Пн': 'Понедельник', 'Вт': 'Вторник', 'Ср': 'Среда', 'Чт': 'Четверг', 'Пт': 'Пятница', 'Сб': 'Суббота', 'Вс': 'Воскресенье' };
+      const groupsOnThisDay = groups.filter(g => g.schedule?.some(s => s.day === dayFullForms[day] || s.day === day));
+      if (groupsOnThisDay.length > 0) {
+        rate = Math.round(groupsOnThisDay.reduce((sum, g) => sum + (g.attendanceRate || 85), 0) / groupsOnThisDay.length);
+      }
     }
     return { day, rate };
   });
 
-  const avgAttendanceRate = attendanceChartData.length > 0
-    ? Math.round(attendanceChartData.reduce((sum, d) => sum + d.rate, 0) / attendanceChartData.length)
+  const validRates = attendanceChartData.filter(d => d.rate > 0);
+  const avgAttendanceRate = validRates.length > 0
+    ? Math.round(validRates.reduce((sum, d) => sum + d.rate, 0) / validRates.length)
     : 0;
 
   // New Staging States for Data Loader
@@ -181,6 +199,21 @@ export const DirectorCRM: React.FC = () => {
   const [parsedData, setParsedData] = useState<any[]>([]);
 
   const [fullScreenPhoto, setFullScreenPhoto] = useState<string | null>(null);
+  const [newDirectorTask, setNewDirectorTask] = useState('');
+
+  const handleAddDirectorTask = () => {
+    if (!newDirectorTask.trim()) return;
+    const newTask = {
+      id: `task_${Date.now()}`,
+      title: newDirectorTask.trim(),
+      description: 'Добавлено с дашборда',
+      dueDate: new Date().toLocaleDateString('ru-RU'),
+      assignedTo: 'director' as const,
+      status: 'pending' as const,
+    };
+    addTask(newTask);
+    setNewDirectorTask('');
+  };
 
   // Split raw text into clean grid of cells (supporting Tabs, Semicolons, and Commas)
   const parseTextToGrid = (text: string): string[][] => {
@@ -837,21 +870,49 @@ export const DirectorCRM: React.FC = () => {
                 </div>
 
                 {/* Stacked funnel blocks */}
-                <div className="space-y-3 font-sans">
+                <div className="space-y-4 font-sans mt-2">
                   {funnelData.map((fn, idx) => (
-                    <div key={idx} className="space-y-1 text-left">
-                      <div className="flex justify-between text-xs font-semibold text-slate-700">
-                        <span>{fn.stage}</span>
-                        <div className="font-mono">
-                          <span className="font-black text-slate-900">{fn.count} лидов</span>
-                          <span className="text-gray-400 ml-1.5">({fn.percent}%)</span>
+                    <motion.div 
+                      key={idx} 
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: idx * 0.1, duration: 0.4 }}
+                      className="relative text-left"
+                    >
+                      {/* Connecting line to next item if not last */}
+                      {idx > 0 && fn.conversionFromPrev !== null && (
+                        <div className="absolute -top-3.5 right-6 flex items-center justify-end z-10">
+                          <div className="bg-white border shadow-sm rounded-full px-2 py-0.5 text-[9px] font-bold text-slate-500 z-10 flex items-center gap-1">
+                            <span className="text-emerald-500">↘</span> {fn.conversionFromPrev}%
+                          </div>
+                        </div>
+                      )}
+
+                      <div className={`flex items-center justify-between p-2.5 rounded-xl border border-slate-100/50 shadow-sm ${fn.lightBg} relative overflow-hidden group`}>
+                        {/* Background progress fill overlay */}
+                        <motion.div 
+                          className={`absolute left-0 top-0 bottom-0 bg-gradient-to-r ${fn.color} opacity-10`}
+                          initial={{ width: 0 }}
+                          animate={{ width: `${fn.percent}%` }}
+                          transition={{ delay: 0.3 + (idx * 0.1), duration: 0.8, ease: "easeOut" }}
+                        />
+                        
+                        <div className="flex items-center space-x-3 relative z-10">
+                          <div className={`w-8 h-8 rounded-lg ${fn.bgMain} text-white flex items-center justify-center text-sm shadow-md`}>
+                            {fn.icon}
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold text-slate-800">{fn.stage}</div>
+                            <div className="text-[10px] text-slate-500">Доля от общего: <span className="font-medium text-slate-700">{fn.percent}%</span></div>
+                          </div>
+                        </div>
+                        
+                        <div className="font-mono text-right relative z-10">
+                          <span className="text-lg font-black text-slate-900 block leading-none">{fn.count}</span>
+                          <span className="text-[9px] uppercase tracking-widest text-slate-400 font-bold">Лидов</span>
                         </div>
                       </div>
-                      {/* Progress representation */}
-                      <div className="w-full bg-slate-100 h-6 rounded-lg overflow-hidden relative border border-slate-200/50">
-                        <div className={`${fn.color} h-full rounded-lg transition-all duration-500`} style={{ width: `${fn.percent}%` }}></div>
-                      </div>
-                    </div>
+                    </motion.div>
                   ))}
                 </div>
               </div>
@@ -896,7 +957,7 @@ export const DirectorCRM: React.FC = () => {
                       <div key={idx} className="p-3 bg-slate-50 border rounded-xl flex items-center justify-between hover:shadow-2xs transition">
                         <div className="space-y-0.5">
                           <div className="font-bold text-slate-855 text-xs">{item.title}</div>
-                          <div className="text-[10px] text-gray-400 font-mono">{item.time} ({item.loc})</div>
+                          <div className="text-[10px] text-gray-400 font-mono">{item.time}</div>
                           <p className="text-[10px] text-gray-505 font-medium">Тренер: {item.coach}</p>
                         </div>
                         <ArrowUpRight className="w-4 h-4 text-gray-400" />
@@ -918,7 +979,24 @@ export const DirectorCRM: React.FC = () => {
                   <ClipboardList className="w-4 h-4 text-gray-400" />
                 </div>
 
-                <div className="space-y-3.5 text-xs font-sans">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="text"
+                    value={newDirectorTask}
+                    onChange={(e) => setNewDirectorTask(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddDirectorTask()}
+                    placeholder="Новая задача..."
+                    className="flex-1 border bg-slate-50 border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all font-medium placeholder-gray-400"
+                  />
+                  <button 
+                    onClick={handleAddDirectorTask}
+                    className="w-8 h-8 flex items-center justify-center bg-slate-900 hover:bg-slate-800 text-white rounded-lg shadow-sm active:scale-95 transition-all outline-none"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="space-y-3.5 text-xs font-sans max-h-[300px] overflow-y-auto">
                   {directorTasks.length === 0 ? (
                     <p className="text-gray-400 italic py-2">Задач руководителя не найдено.</p>
                   ) : (
@@ -960,25 +1038,42 @@ export const DirectorCRM: React.FC = () => {
 
                 <div className="space-y-3 text-xs font-sans">
                   {leaderboardToDisplay.length === 0 ? (
-                    <div className="text-center py-6 text-xs text-gray-400 italic">
-                      Нет активных учеников для выгрузки успеваемости.
+                    <div className="flex flex-col items-center justify-center py-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                      <TrendingUp className="w-6 h-6 text-slate-300 mb-2" />
+                      <div className="text-xs text-gray-500 font-medium">Нет активных оценок</div>
+                      <div className="text-[10px] text-gray-400 mt-1">Оценки или посещения пока отсутствуют</div>
                     </div>
                   ) : (
                     leaderboardToDisplay.map((top, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-2.5 bg-slate-50 border rounded-xl hover:shadow-2xs transition">
-                        <div className="flex items-center space-x-2.5">
-                          <div className="h-8 w-8 rounded-full bg-emerald-100 text-emerald-700 font-extrabold flex items-center justify-center font-sans text-xs">
-                            {top.avatar}
+                      <div key={top.id || idx} className="flex items-center justify-between p-2.5 bg-white border border-slate-100 rounded-xl hover:shadow-md hover:border-emerald-200 transition-all duration-300 relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-emerald-100/40 to-transparent rounded-bl-full -z-0 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                        <div className="flex items-center space-x-3 z-10 relative">
+                          <div className={`h-9 w-9 rounded-full flex items-center justify-center font-sans text-xs font-extrabold shrink-0 shadow-sm ${
+                            idx === 0 ? 'bg-gradient-to-br from-amber-200 to-amber-400 text-amber-900 ring-2 ring-amber-100' : 
+                            idx === 1 ? 'bg-gradient-to-br from-slate-200 to-slate-300 text-slate-800' : 
+                            idx === 2 ? 'bg-gradient-to-br from-orange-200 to-orange-300 text-orange-900' : 
+                            'bg-gradient-to-br from-emerald-100 to-emerald-200 text-emerald-800'
+                          }`}>
+                            {idx === 0 ? <Trophy className="w-4 h-4 text-amber-900 drop-shadow-sm" /> : top.avatar}
                           </div>
-                          <div className="text-left space-y-0.5">
-                            <div className="font-bold text-slate-800">{top.name}</div>
-                            <div className="text-[10px] text-gray-400 font-medium">{top.group} • {top.medals}</div>
+                          <div className="text-left space-y-0.5 min-w-0">
+                            <div className="font-bold text-slate-800 truncate">{top.name}</div>
+                            <div className="flex items-center gap-1.5 text-[10px] text-gray-500 font-medium whitespace-nowrap">
+                              <span className="truncate max-w-[85px] block text-slate-400" title={top.group}>{top.group}</span>
+                              <span className="text-gray-300">•</span>
+                              <span className="flex items-center gap-0.5 text-amber-600 font-semibold">{top.medals}</span>
+                            </div>
                           </div>
                         </div>
                         
-                        <div className="text-right">
-                          <div className="font-black text-slate-900 font-mono text-sm">{top.rating}</div>
-                          <div className="text-[9px] text-gray-400 font-medium uppercase font-mono">из 5</div>
+                        <div className="text-right flex flex-col items-end z-10 relative">
+                          <div className="flex items-center space-x-1.5">
+                             <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
+                             <div className="font-black text-slate-900 font-mono text-base tracking-tight">{top.rating}</div>
+                          </div>
+                          <div className="text-[8.5px] text-gray-400 font-black uppercase font-mono tracking-widest mt-0.5">
+                            {top.avgScore > 0 ? 'Оценка навыков' : 'Рейтинг посещений'}
+                          </div>
                         </div>
                       </div>
                     ))

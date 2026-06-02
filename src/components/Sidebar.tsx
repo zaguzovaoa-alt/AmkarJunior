@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   BarChart, Users, FileText, CheckSquare, GraduationCap, 
   FolderPlus, DollarSign, BookOpen, MessageSquare, Calendar, 
-  Settings, Award, Sparkles, RefreshCw, Trophy
+  Settings, Award, Sparkles, RefreshCw, Trophy, Share2
 } from 'lucide-react';
 import { useCRM } from '../context/CRMContext';
 import { AmkarLogo } from './AmkarLogo';
+import { InviteLinkModal } from './InviteLinkModal';
 
 interface SidebarProps {
   currentRole: 'manager' | 'trainer' | 'parent' | 'director';
@@ -21,6 +22,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   messageCount
 }) => {
   const { schoolName, leads, messages } = useCRM();
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
 
   const newLeadsCount = leads.filter(l => l.status === 'new').length;
   // Calculate messages visible to the current role
@@ -142,8 +144,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
         })}
       </nav>
 
+      {/* Quick Invite Button */}
+      <div className="px-4 py-3 border-t border-gray-100">
+        <button 
+          onClick={() => setIsInviteModalOpen(true)}
+          className="w-full flex items-center justify-center space-x-2 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-bold py-2.5 rounded-lg shadow-sm shadow-emerald-500/20 transition-all text-xs"
+        >
+          <Share2 className="w-4 h-4" />
+          <span>Пригласить друга</span>
+        </button>
+      </div>
+
       {/* Collapse button stub */}
-      <div className="p-4 mt-auto">
+      <div className="p-4 mt-auto border-t border-gray-50 flex-shrink-0">
         <button className="flex items-center space-x-2 text-gray-400 hover:text-gray-600 text-xs font-medium px-3 py-2 transition-colors">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6"></polyline>
@@ -151,6 +164,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span>Свернуть</span>
         </button>
       </div>
+      
+      <InviteLinkModal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} />
     </div>
   );
 };
