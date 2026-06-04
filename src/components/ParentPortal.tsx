@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import amkarUniform from '../assets/images/amkar_uniform.jpg';
+import { isBirthdayToday } from '../utils/dateUtils';
 
 interface ParentPortalProps {
   activeTab: string;
@@ -16,7 +17,7 @@ interface ParentPortalProps {
 }
 
 export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActiveTab, onOpenPayment }) => {
-  const { clients, messages, addChatMessage, updateChatMessage, deleteChatMessage, uploadDocument, groups, userProfile } = useCRM();
+  const { clients, messages, addChatMessage, updateChatMessage, deleteChatMessage, uploadDocument, groups, userProfile, tasks } = useCRM();
   const [chatInput, setChatInput] = useState('');
   const [chatVisibility, setChatVisibility] = useState<('manager' | 'trainer' | 'parent' | 'director')[]>(['manager', 'trainer', 'director']);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -43,6 +44,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
   }
 
   const myGroup = groups.find(g => g.name === myClient.groupName);
+  const mySelectTeams = groups.filter(g => g.isSelectTeam && g.selectedClientIds?.includes(myClient.id));
   
   // Calculate next training
   const today = new Date();
@@ -90,34 +92,97 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
   });
 
   const nextThreeDates = React.useMemo(() => {
-    const list: Array<{day: string, month: string, title: string, time: string, loc: string, dateObj: Date}> = [];
-    if (!myGroup || !myGroup.scheduleDays) return list;
+    const list: Array<{day: string, month: string, title: string, time: string, loc: string, dateObj: Date, type?: string}> = [];
+    if (!myGroup) return list;
 
-    // Check next 21 days for schedule hits
+    // Load custom events from localStorage
+    let customEvents: any[] = [];
+    try {
+      const cached = localStorage.getItem('amkar_custom_events');
+      if (cached) customEvents = JSON.parse(cached);
+    } catch {}
+
+    // Check next 21 days
     for (let i = 1; i <= 21; i++) {
       const td = new Date(today.getTime() + 1000 * 60 * 60 * 24 * i);
       const dayAbbrId = td.getDay();
+      const dateStr = td.toLocaleDateString('en-CA'); // YYYY-MM-DD
 
-      myGroup.scheduleDays.forEach((sched: string) => {
-        const slots = parseScheduleString(sched);
-        slots.forEach(slot => {
-          if (RU_WEEKDAYS_MAP[slot.day] === dayAbbrId) {
+      // 1. Regular schedule
+      if (myGroup.scheduleDays) {
+        myGroup.scheduleDays.forEach((sched: string) => {
+          const slots = parseScheduleString(sched);
+          slots.forEach(slot => {
+            if (RU_WEEKDAYS_MAP[slot.day] === dayAbbrId) {
+              list.push({
+                dateObj: td,
+                day: td.getDate().toString(),
+                month: td.toLocaleDateString('ru-RU', { month: 'short' }).replace('.', ''),
+                title: 'Тренировка',
+                time: slot.time,
+                loc: slot.location || myClient.branch || 'Основное поле',
+                type: 'regular'
+              });
+            }
+          });
+        });
+      }
+
+      // 2. Custom Events matching this group or 'all'
+      customEvents.forEach(ev => {
+        if (ev.date === dateStr && (ev.groupId === 'all' || ev.groupId === myGroup.id)) {
+          list.push({
+            dateObj: td,
+            day: td.getDate().toString(),
+            month: td.toLocaleDateString('ru-RU', { month: 'short' }).replace('.', ''),
+            title: ev.title,
+            time: ev.time,
+            loc: ev.location,
+            type: ev.type
+          });
+        }
+      });
+      
+      // 3. Trainer Tasks matching this group
+      tasks.forEach(t => {
+        if (t.assignedTo === 'trainer' && t.dueDate === dateStr) {
+          // Check if task mentions my group
+          if (t.title.includes(myGroup.name)) {
+            const isRisk = t.title.includes('Удержание:');
             list.push({
               dateObj: td,
               day: td.getDate().toString(),
               month: td.toLocaleDateString('ru-RU', { month: 'short' }).replace('.', ''),
-              title: 'Тренировка',
-              time: slot.time,
-              loc: slot.location || myClient.branch || 'Основное поле'
+              title: t.title,
+              time: '00:00',
+              loc: t.description || 'Не указано',
+              type: isRisk ? 'match' : 'meeting'
             });
           }
-        });
+        }
       });
     }
 
-    list.sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
-    return list.slice(0, 3);
-  }, [myGroup, today, myClient.branch]);
+    // Sort by Date + Time
+    list.sort((a, b) => {
+      const dDiff = a.dateObj.getTime() - b.dateObj.getTime();
+      if (dDiff !== 0) return dDiff;
+      return a.time.localeCompare(b.time);
+    });
+    
+    // Deduplicate by date and title
+    const uniqueList: typeof list = [];
+    const seen = new Set();
+    list.forEach(item => {
+      const key = `${item.dateObj.getTime()}_${item.title}_${item.time}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueList.push(item);
+      }
+    });
+
+    return uniqueList.slice(0, 3);
+  }, [myGroup, today, myClient.branch, tasks]);
 
   const handleSendChat = (e: React.FormEvent) => {
     e.preventDefault();
@@ -226,12 +291,23 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
 
         {/* Top Profile Pickers exactly like picture */}
         <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2.5 bg-slate-100 px-3.5 py-1.5 rounded-xl border border-gray-200">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            <div className="text-xs text-left">
-              <div className="font-semibold text-gray-800">{myClient.childSurname} {myClient.childName}</div>
-              <div className="text-gray-500 font-mono text-[10px]">{myClient.groupName}</div>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center space-x-2.5 bg-slate-100 px-3.5 py-1.5 rounded-xl border border-gray-200 w-full">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <div className="text-xs text-left">
+                <div className="font-semibold text-gray-800">{myClient.childSurname} {myClient.childName}</div>
+                <div className="text-gray-500 font-mono text-[10px]">{myClient.groupName || 'Группа не назначена'}</div>
+              </div>
             </div>
+            {mySelectTeams.map(st => (
+              <div key={st.id} className="flex items-center space-x-2.5 bg-red-50 text-red-700 px-3.5 py-1.5 rounded-xl border border-red-200 w-full" title={st.targetCompetition || undefined}>
+                <Trophy className="w-3 h-3 text-red-500 shrink-0" />
+                <div className="text-xs text-left">
+                  <div className="font-semibold text-red-800">Сборная команда</div>
+                  <div className="text-red-600 font-mono text-[10px] truncate">{st.name}</div>
+                </div>
+              </div>
+            ))}
           </div>
           <div className="flex items-center space-x-2">
             <div className="h-9 w-9 rounded-full bg-emerald-100 border border-emerald-200 flex items-center justify-center font-bold text-emerald-600">
@@ -257,6 +333,30 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
               exit={{ opacity: 0 }}
               className="space-y-6"
             >
+              {isBirthdayToday(myClient.childBirthDate) && (
+                <div className="relative overflow-hidden bg-gradient-to-tr from-amber-400 via-orange-400 to-rose-400 rounded-2xl p-8 shadow-xl text-white transform transition-all hover:scale-[1.01]">
+                  <div className="absolute top-0 right-0 -mt-10 -mr-10 opacity-20 pointer-events-none">
+                     <svg width="200" height="200" viewBox="0 0 24 24" fill="currentColor">
+                       <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                     </svg>
+                  </div>
+                  <div className="relative z-10 flex flex-col md:flex-row items-center md:items-start space-y-4 md:space-y-0 md:space-x-6">
+                    <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center border border-white/50 shrink-0 shadow-lg">
+                      <Trophy className="w-8 h-8 text-white drop-shadow" />
+                    </div>
+                    <div className="text-center md:text-left">
+                      <h2 className="text-3xl font-black tracking-tight drop-shadow-md pb-1">
+                        С Днём Рождения, {myClient.childName}! 🎉
+                      </h2>
+                      <p className="text-orange-50 font-medium text-sm md:text-base max-w-2xl mt-1 leading-relaxed drop-shadow">
+                        Команда «АМКАР ЮНИОР» от всей души поздравляет юного чемпиона с днём рождения!
+                        Желаем крепкого здоровья, ярких побед, красивых голов и отличного настроения. Пусть футбол приносит только радость! ⚽🏆
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {(myClient.abonementSessionsLeft <= 2 || myClient.abonementStatus === 'Ожидает оплаты') && myClient.abonement !== 'none' && (
                 <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm animate-pulse">
                   <div className="flex items-center space-x-3">
@@ -354,7 +454,27 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
                       <div className="border-t sm:border-t-0 sm:border-l border-gray-200 pt-3 sm:pt-0 sm:pl-4 flex flex-col justify-between">
                         <div>
                           <div className="text-xs text-gray-400 font-medium">Остаток тренировок</div>
-                          <div className="text-2xl font-black text-slate-900 mt-0.5">{myClient.abonementSessionsLeft} <span className="text-xs text-gray-500 font-medium">из {myClient.abonement === '12_sessions' ? 12 : 8}</span></div>
+                          <div className="text-2xl font-black text-slate-900 mt-0.5">
+                            {myClient.abonementSessionsLeft} <span className="text-xs text-gray-500 font-medium">из {(() => {
+                              const baseTotal = myClient.abonement === '12_sessions' ? 12 : myClient.abonement === '8_sessions' ? 8 : myClient.abonement === '4_sessions' ? 4 : myClient.abonement === '1_session' ? 1 : 0;
+                              return Math.max(baseTotal, myClient.abonementSessionsLeft || 0);
+                            })()}</span>
+                          </div>
+                          <div className="mt-2 w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                            <div className="bg-emerald-500 h-1.5 rounded-full transition-all" style={{ width: `${(() => {
+                              const baseTotal = myClient.abonement === '12_sessions' ? 12 : myClient.abonement === '8_sessions' ? 8 : myClient.abonement === '4_sessions' ? 4 : myClient.abonement === '1_session' ? 1 : 0;
+                              const maxTotal = baseTotal > 0 ? Math.max(baseTotal, myClient.abonementSessionsLeft || 0) : 1;
+                              const used = maxTotal - (myClient.abonementSessionsLeft || 0);
+                              return Math.min(100, Math.max(0, (used / maxTotal) * 100));
+                            })()}%` }}></div>
+                          </div>
+                          <div className="text-[10px] text-gray-400 mt-1">
+                            Использовано: {(() => {
+                              const baseTotal = myClient.abonement === '12_sessions' ? 12 : myClient.abonement === '8_sessions' ? 8 : myClient.abonement === '4_sessions' ? 4 : myClient.abonement === '1_session' ? 1 : 0;
+                              const maxTotal = Math.max(baseTotal, myClient.abonementSessionsLeft || 0);
+                              return maxTotal - (myClient.abonementSessionsLeft || 0);
+                            })()} занятий
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -524,10 +644,10 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
                     {/* Progress bars matching screenshot exactly */}
                     <div className="space-y-3 pt-2">
                       {[
-                        { name: 'Техника', score: myClient.progress.technique, color: 'bg-emerald-500' },
-                        { name: 'Тактика', score: myClient.progress.tactics, color: 'bg-indigo-500' },
-                        { name: 'Физ. подготовка', score: myClient.progress.physical, color: 'bg-amber-500' },
-                        { name: 'Дисциплина', score: myClient.progress.discipline, color: 'bg-orange-500' }
+                        { name: 'Техника', score: myClient.progress?.technique || 0, color: 'bg-emerald-500' },
+                        { name: 'Тактика', score: myClient.progress?.tactics || 0, color: 'bg-indigo-500' },
+                        { name: 'Физ. подготовка', score: myClient.progress?.physical || 0, color: 'bg-amber-500' },
+                        { name: 'Дисциплина', score: myClient.progress?.discipline || 0, color: 'bg-orange-500' }
                       ].map((item, idx) => (
                         <div key={idx} className="space-y-1">
                           <div className="flex justify-between text-xs">
@@ -637,22 +757,35 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
 
                     <div className="space-y-3.5">
                       {nextThreeDates.length > 0 ? (
-                        nextThreeDates.map((evt, id) => (
-                          <div key={id} className="flex items-start space-x-3 text-xs">
-                            <div className="flex-shrink-0 w-11 h-11 rounded-lg bg-emerald-50 text-center flex flex-col justify-center border border-emerald-100/40">
-                              <span className="text-base font-black text-emerald-600 font-mono leading-none">{evt.day}</span>
-                              <span className="text-[8px] text-emerald-500 font-bold tracking-tight uppercase">{evt.month}</span>
-                            </div>
-                            <div className="space-y-0.5">
-                              <div className="font-bold text-slate-800">{evt.title}</div>
-                              <div className="text-[10px] text-gray-400 font-mono flex items-center space-x-1.5">
-                                <span>{evt.time}</span>
-                                <span>•</span>
-                                <span>{evt.loc}</span>
+                        nextThreeDates.map((evt, id) => {
+                          let bgC = 'bg-emerald-50 border-emerald-100/40 text-emerald-600';
+                          let monthC = 'text-emerald-500';
+                          if (evt.type === 'match') { bgC = 'bg-red-50 border-red-100 text-red-600'; monthC = 'text-red-500'; }
+                          if (evt.type === 'competition') { bgC = 'bg-fuchsia-50 border-fuchsia-100 text-fuchsia-600'; monthC = 'text-fuchsia-500'; }
+                          if (evt.type === 'masterclass') { bgC = 'bg-amber-50 border-amber-100 text-amber-600'; monthC = 'text-amber-500'; }
+                          if (evt.type === 'meeting') { bgC = 'bg-indigo-50 border-indigo-100 text-indigo-600'; monthC = 'text-indigo-500'; }
+
+                          return (
+                            <div key={id} className="flex items-start space-x-3 text-xs">
+                              <div className={`flex-shrink-0 w-11 h-11 rounded-lg text-center flex flex-col justify-center border ${bgC}`}>
+                                <span className="text-base font-black font-mono leading-none">{evt.day}</span>
+                                <span className={`text-[8px] font-bold tracking-tight uppercase ${monthC}`}>{evt.month}</span>
+                              </div>
+                              <div className="space-y-0.5">
+                                <div className="font-bold text-slate-800 flex items-center space-x-1.5">
+                                  <span>{evt.title}</span>
+                                  {evt.type === 'competition' && <span className="px-1.5 py-0.5 bg-fuchsia-100 text-fuchsia-800 text-[8px] rounded uppercase">Турнир</span>}
+                                  {evt.type === 'match' && <span className="px-1.5 py-0.5 bg-red-100 text-red-800 text-[8px] rounded uppercase">Матч</span>}
+                                </div>
+                                <div className="text-[10px] text-gray-400 font-mono flex items-center space-x-1.5 line-clamp-1">
+                                  <span>{evt.time === '00:00' ? '' : evt.time}</span>
+                                  {evt.time !== '00:00' && <span>•</span>}
+                                  <span>{evt.loc}</span>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))
+                          );
+                        })
                       ) : (
                         <div className="text-center py-4 text-xs text-gray-400 max-w-[200px] mx-auto leading-relaxed">
                           Ближайших регулярных тренировок не запланировано.

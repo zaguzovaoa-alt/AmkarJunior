@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useCRM } from '../context/CRMContext';
 import { 
   Users, FolderPlus, Trash2, UserPlus, UserMinus, Search, 
-  Calendar, Plus, X, GraduationCap, Check, Edit2
+  Calendar, Plus, X, GraduationCap, Check, Edit2, Trophy
 } from 'lucide-react';
 import { parseScheduleString } from '../utils/scheduleParser';
 
@@ -14,7 +14,9 @@ export const GroupsModule: React.FC = () => {
     createGroup, 
     deleteGroup, 
     updateGroup,
-    assignClientToGroup 
+    assignClientToGroup,
+    assignClientToSelectTeam,
+    removeClientFromSelectTeam
   } = useCRM();
 
   // 1. Search and Filtering States
@@ -24,17 +26,25 @@ export const GroupsModule: React.FC = () => {
   // 2. New Group Form States
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
-  const [newGroupYear, setNewGroupYear] = useState<number>(new Date().getFullYear() - 10);
+  const [newGroupYear, setNewGroupYear] = useState<number>(new Date().getFullYear() - 10); // legacy
+  const [newGroupBirthYearFrom, setNewGroupBirthYearFrom] = useState<number>(new Date().getFullYear() - 11);
+  const [newGroupBirthYearTo, setNewGroupBirthYearTo] = useState<number>(new Date().getFullYear() - 9);
   const [selectedCoachId, setSelectedCoachId] = useState('');
   const [newGroupSchedule, setNewGroupSchedule] = useState<string[]>(['Пн 18:00', 'Ср 18:00']);
   const [scheduleInput, setScheduleInput] = useState('Пн 18:00, Ср 18:00');
+  const [newIsSelectTeam, setNewIsSelectTeam] = useState(false);
+  const [newTargetCompetition, setNewTargetCompetition] = useState('');
 
   // Edit Group Form States
   const [editingGroup, setEditingGroup] = useState<any | null>(null);
   const [editGroupName, setEditGroupName] = useState('');
-  const [editGroupYear, setEditGroupYear] = useState<number>(new Date().getFullYear() - 10);
+  const [editGroupYear, setEditGroupYear] = useState<number>(new Date().getFullYear() - 10); // legacy
+  const [editGroupBirthYearFrom, setEditGroupBirthYearFrom] = useState<number>(new Date().getFullYear() - 11);
+  const [editGroupBirthYearTo, setEditGroupBirthYearTo] = useState<number>(new Date().getFullYear() - 9);
   const [editSelectedCoachId, setEditSelectedCoachId] = useState('');
   const [editScheduleInput, setEditScheduleInput] = useState('');
+  const [editIsSelectTeam, setEditIsSelectTeam] = useState(false);
+  const [editTargetCompetition, setEditTargetCompetition] = useState('');
 
   // Quick assignment states
   const [selectedClientIdToAssign, setSelectedClientIdToAssign] = useState('');
@@ -70,16 +80,24 @@ export const GroupsModule: React.FC = () => {
       await createGroup(
         newGroupName,
         newGroupYear,
+        newGroupBirthYearFrom,
+        newGroupBirthYearTo,
         coachId,
         coachName,
-        parsedSchedule.length > 0 ? parsedSchedule : newGroupSchedule
+        parsedSchedule.length > 0 ? parsedSchedule : newGroupSchedule,
+        newIsSelectTeam,
+        newTargetCompetition
       );
 
       // Reset
       setNewGroupName('');
       setNewGroupYear(new Date().getFullYear() - 10);
+      setNewGroupBirthYearFrom(new Date().getFullYear() - 11);
+      setNewGroupBirthYearTo(new Date().getFullYear() - 9);
       setSelectedCoachId('');
       setScheduleInput('Пн 18:00, Ср 18:05');
+      setNewIsSelectTeam(false);
+      setNewTargetCompetition('');
       setShowCreateModal(false);
     } catch (err: any) {
       alert('Ошибка при создании группы: ' + err.message);
@@ -90,8 +108,12 @@ export const GroupsModule: React.FC = () => {
     setEditingGroup(group);
     setEditGroupName(group.name);
     setEditGroupYear(group.year);
+    setEditGroupBirthYearFrom(group.birthYearFrom || group.year - 1);
+    setEditGroupBirthYearTo(group.birthYearTo || group.year + 1);
     setEditSelectedCoachId(group.coachId || '');
     setEditScheduleInput(group.scheduleDays.join(', '));
+    setEditIsSelectTeam(group.isSelectTeam || false);
+    setEditTargetCompetition(group.targetCompetition || '');
   };
 
   const handleUpdateGroup = async (e: React.FormEvent) => {
@@ -114,9 +136,13 @@ export const GroupsModule: React.FC = () => {
       await updateGroup(editingGroup.id, {
         name: editGroupName.trim(),
         year: editGroupYear,
+        birthYearFrom: editGroupBirthYearFrom,
+        birthYearTo: editGroupBirthYearTo,
         coachId,
         coachName,
-        scheduleDays: parsedSchedule
+        scheduleDays: parsedSchedule,
+        isSelectTeam: editIsSelectTeam,
+        targetCompetition: editTargetCompetition
       });
 
       setEditingGroup(null);
@@ -150,6 +176,10 @@ export const GroupsModule: React.FC = () => {
   const filteredClients = clients.filter(c => {
     const fullName = `${c.childName} ${c.childSurname} ${c.parentName}`.toLowerCase();
     return fullName.includes(searchQuery.toLowerCase());
+  }).sort((a, b) => {
+    const nameA = `${a.childSurname} ${a.childName}`.trim().toLowerCase();
+    const nameB = `${b.childSurname} ${b.childName}`.trim().toLowerCase();
+    return nameA.localeCompare(nameB, 'ru');
   });
 
   return (
@@ -230,11 +260,17 @@ export const GroupsModule: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {groups.map((group) => {
                   // Get dynamic client count assigned to this group name by stripping whitespace and matching case-insensitively
-                  const groupClientsList = clients.filter(c => 
-                    c.groupName && 
-                    group.name && 
-                    c.groupName.trim().toLowerCase() === group.name.trim().toLowerCase()
-                  );
+                  const groupClientsList = group.isSelectTeam 
+                    ? clients.filter(c => group.selectedClientIds?.includes(c.id)).sort((a,b) => `${a.childSurname} ${a.childName}`.localeCompare(`${b.childSurname} ${b.childName}`, 'ru'))
+                    : clients.filter(c => 
+                        c.groupName && 
+                        group.name && 
+                        c.groupName.trim().toLowerCase() === group.name.trim().toLowerCase()
+                      ).sort((a, b) => {
+                        const nameA = `${a.childSurname} ${a.childName}`.trim().toLowerCase();
+                        const nameB = `${b.childSurname} ${b.childName}`.trim().toLowerCase();
+                        return nameA.localeCompare(nameB, 'ru');
+                      });
                   const isNoCoach = !group.coachId;
 
                   return (
@@ -245,10 +281,26 @@ export const GroupsModule: React.FC = () => {
                       {/* Card Header */}
                       <div className="p-4 border-b border-gray-50/80 flex items-start justify-between">
                         <div>
-                          <div className="inline-flex items-center space-x-1.5 bg-red-50 text-red-700 px-2 py-0.5 rounded-lg text-[10px] font-black uppercase font-mono mb-1">
-                            <span>{group.year} Год р.</span>
+                          <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                            {group.isSelectTeam && (
+                              <span className="inline-flex items-center space-x-1 bg-red-100 text-red-700 px-2 py-0.5 rounded-lg text-[10px] font-black uppercase font-mono">
+                                <Trophy className="w-3 h-3 text-red-500" />
+                                <span>Сборная</span>
+                              </span>
+                            )}
+                            <div className="inline-flex items-center space-x-1.5 bg-red-50 text-red-700 px-2 py-0.5 rounded-lg text-[10px] font-black uppercase font-mono">
+                              <span>
+                                {group.birthYearFrom && group.birthYearTo 
+                                  ? `${group.birthYearFrom} - ${group.birthYearTo} Год р.`
+                                  : `${group.year} Год р.`
+                                }
+                              </span>
+                            </div>
                           </div>
-                          <h3 className="text-base font-black text-slate-900 tracking-tight text-left">{group.name}</h3>
+                          <h3 className="text-base font-black text-slate-900 tracking-tight text-left">
+                            {group.name}
+                            {group.targetCompetition && <span className="block text-xs font-semibold text-gray-500 mt-0.5">{group.targetCompetition}</span>}
+                          </h3>
                         </div>
 
                         <div className="flex items-center space-x-1 shrink-0">
@@ -310,7 +362,13 @@ export const GroupsModule: React.FC = () => {
                                 </div>
 
                                 <button
-                                  onClick={() => handleQuickAssign(client.id, null)}
+                                  onClick={async () => {
+                                    if (group.isSelectTeam) {
+                                      await removeClientFromSelectTeam(client.id, group.id);
+                                    } else {
+                                      handleQuickAssign(client.id, null);
+                                    }
+                                  }}
                                   className="text-[10px] text-orange-655 font-bold hover:text-red-650 bg-orange-100/50 hover:bg-red-100 p-1 rounded transition text-orange-600 shrink-0"
                                   title="Исключить из группы"
                                 >
@@ -323,24 +381,28 @@ export const GroupsModule: React.FC = () => {
                       </div>
 
                       {/* Card Footer: Assign Select list */}
-                      {unassignedClients.length > 0 && (
+                      {(group.isSelectTeam ? clients.filter(c => !group.selectedClientIds?.includes(c.id)) : unassignedClients).length > 0 && (
                         <div className="p-3 border-t bg-slate-50 border-gray-100 rounded-b-2xl">
                           <div className="flex items-center space-x-1.5">
                             <select
                               defaultValue=""
-                              onChange={(e) => {
+                              onChange={async (e) => {
                                 const val = e.target.value;
                                 if (val) {
-                                  handleQuickAssign(val, group.name);
+                                  if (group.isSelectTeam) {
+                                    await assignClientToSelectTeam(val, group.id);
+                                  } else {
+                                    handleQuickAssign(val, group.name);
+                                  }
                                   e.target.value = ''; // Reset select
                                 }
                               }}
                               className="flex-1 bg-white border rounded-xl py-1 px-2.5 text-xs font-bold text-slate-705 focus:outline-none"
                             >
                               <option value="">+ Зачислить ученика...</option>
-                              {unassignedClients.map(c => (
+                              {(group.isSelectTeam ? clients.filter(c => !group.selectedClientIds?.includes(c.id)).sort((a,b) => `${a.childSurname} ${a.childName}`.localeCompare(`${b.childSurname} ${b.childName}`, 'ru')) : unassignedClients).map(c => (
                                 <option key={c.id} value={c.id}>
-                                  {c.childName} {c.childSurname} ({c.childBirthYear} г.р.)
+                                  {c.childName} {c.childSurname} {group.isSelectTeam && c.groupName ? `(${c.groupName})` : ''}
                                 </option>
                               ))}
                             </select>
@@ -480,15 +542,28 @@ export const GroupsModule: React.FC = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-xs font-black text-slate-900 uppercase font-mono tracking-wider">Год рождения учеников</label>
-                  <input
-                    type="number"
-                    min="2010"
-                    max="2027"
-                    required
-                    value={newGroupYear}
-                    onChange={(e) => setNewGroupYear(parseInt(e.target.value) || new Date().getFullYear())}
-                    className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold focus:outline-none"
-                  />
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs font-bold text-gray-500">с</span>
+                    <input
+                      type="number"
+                      min="2010"
+                      max="2027"
+                      required
+                      value={newGroupBirthYearFrom}
+                      onChange={(e) => setNewGroupBirthYearFrom(parseInt(e.target.value) || new Date().getFullYear())}
+                      className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold focus:outline-none"
+                    />
+                    <span className="text-xs font-bold text-gray-500">до</span>
+                    <input
+                      type="number"
+                      min="2010"
+                      max="2027"
+                      required
+                      value={newGroupBirthYearTo}
+                      onChange={(e) => setNewGroupBirthYearTo(parseInt(e.target.value) || new Date().getFullYear())}
+                      className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold focus:outline-none"
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-1">
@@ -520,6 +595,30 @@ export const GroupsModule: React.FC = () => {
                   className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold focus:outline-none"
                 />
                 <p className="text-[10px] text-gray-400 leading-normal mt-1">Через запятую. Формат: ДеньНедели ЧЧ:ММ (Пн 18:00, Ср 18:00)</p>
+              </div>
+
+              <div className="space-y-3 p-3 bg-red-50/50 border border-red-100 rounded-xl">
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={newIsSelectTeam}
+                    onChange={(e) => setNewIsSelectTeam(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-600"
+                  />
+                  <span className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-1.5"><Trophy className="w-4 h-4 text-orange-500" /> Это сборная команда</span>
+                </label>
+                {newIsSelectTeam && (
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Целевое соревнование (Необязательно)</label>
+                    <input 
+                      type="text"
+                      value={newTargetCompetition}
+                      onChange={(e) => setNewTargetCompetition(e.target.value)}
+                      placeholder="Напр. Кубок Мэра 2026"
+                      className="w-full px-3 py-2 border border-red-200 rounded-xl text-xs font-medium focus:outline-none focus:border-red-500"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="pt-2 border-t flex space-x-3">
@@ -575,15 +674,28 @@ export const GroupsModule: React.FC = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-xs font-black text-slate-900 uppercase font-mono tracking-wider">Год рождения учеников</label>
-                  <input
-                    type="number"
-                    min="2010"
-                    max="2027"
-                    required
-                    value={editGroupYear}
-                    onChange={(e) => setEditGroupYear(parseInt(e.target.value) || new Date().getFullYear())}
-                    className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold focus:outline-none"
-                  />
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs font-bold text-gray-500">с</span>
+                    <input
+                      type="number"
+                      min="2010"
+                      max="2027"
+                      required
+                      value={editGroupBirthYearFrom}
+                      onChange={(e) => setEditGroupBirthYearFrom(parseInt(e.target.value) || new Date().getFullYear())}
+                      className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold focus:outline-none"
+                    />
+                    <span className="text-xs font-bold text-gray-500">до</span>
+                    <input
+                      type="number"
+                      min="2010"
+                      max="2027"
+                      required
+                      value={editGroupBirthYearTo}
+                      onChange={(e) => setEditGroupBirthYearTo(parseInt(e.target.value) || new Date().getFullYear())}
+                      className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold focus:outline-none"
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-1">
@@ -615,6 +727,30 @@ export const GroupsModule: React.FC = () => {
                   className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold focus:outline-none"
                 />
                 <p className="text-[10px] text-gray-400 leading-normal mt-1">Через запятую. Формат: ДеньНедели ЧЧ:ММ (Пн 18:00, Ср 18:00)</p>
+              </div>
+
+              <div className="space-y-3 p-3 bg-red-50/50 border border-red-100 rounded-xl">
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={editIsSelectTeam}
+                    onChange={(e) => setEditIsSelectTeam(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-600"
+                  />
+                  <span className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-1.5"><Trophy className="w-4 h-4 text-orange-500" /> Это сборная команда</span>
+                </label>
+                {editIsSelectTeam && (
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Целевое соревнование</label>
+                    <input 
+                      type="text"
+                      value={editTargetCompetition}
+                      onChange={(e) => setEditTargetCompetition(e.target.value)}
+                      placeholder="Напр. Кубок Мэра"
+                      className="w-full px-3 py-2 border border-red-200 rounded-xl text-xs font-medium focus:outline-none focus:border-red-500"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="pt-2 border-t flex space-x-3">

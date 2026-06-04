@@ -280,8 +280,29 @@ service cloud.firestore {
         </div>
 
         {/* CRM Role-Specific Content Area */}
-        <div className="flex-1 overflow-y-auto">
-          {renderRoleComponent()}
+        <div className="flex-1 overflow-y-auto flex flex-col">
+          <div className="flex-1">
+            {renderRoleComponent()}
+          </div>
+          
+          {/* Global Footer */}
+          <footer className="mt-auto py-6 border-t border-gray-200 bg-white">
+            <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center space-x-2 opacity-80">
+                <AmkarLogo width="24" height="24" />
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-widest">Амкар Юниор</span>
+              </div>
+              
+              <div className="text-center sm:text-right">
+                <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-xs text-slate-500 hover:text-red-600 font-medium transition-colors">
+                  Политика конфиденциальности
+                </a>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  © {new Date().getFullYear()} ИП Тюкалов Е.Е. Все права защищены.
+                </p>
+              </div>
+            </div>
+          </footer>
         </div>
 
         {/* Global check payment gateway sandbox portal */}
@@ -320,8 +341,9 @@ function AuthGateway() {
   return (
     <>
       <DashboardContainer />
+      <NotificationListener />
       {/* Global Logout Button */}
-      <div className="fixed bottom-4 right-4 z-50">
+      <div className="fixed bottom-4 right-4 z-50 flex items-center gap-2">
         <button 
           onClick={logout}
           className="bg-white/90 shadow-md backdrop-blur px-3 py-1.5 rounded-full text-[10px] uppercase font-bold text-slate-500 hover:text-red-500 hover:bg-white transition"
@@ -334,6 +356,10 @@ function AuthGateway() {
 }
 
 import { InstallAppPrompt } from './components/InstallAppPrompt';
+import { RegistrationPage } from './components/RegistrationPage';
+import { NotificationListener } from './components/NotificationListener';
+import { PrivacyPolicy } from './components/PrivacyPolicy';
+import { AmkarLogo } from './components/AmkarLogo';
 
 export default function App() {
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
@@ -346,10 +372,22 @@ export default function App() {
     return () => window.removeEventListener('popstate', handleLocationChange);
   }, []);
 
+  if (currentPath === '/privacy') {
+    return <PrivacyPolicy onBack={() => { window.history.back() }} />;
+  }
+
   if (currentPath === '/join' || currentPath === '/payment') {
     return (
       <CRMProvider>
         <JoinPage />
+      </CRMProvider>
+    );
+  }
+
+  if (currentPath === '/register') {
+    return (
+      <CRMProvider>
+        <RegistrationPage />
       </CRMProvider>
     );
   }

@@ -4,12 +4,15 @@ import { useAuth } from '../context/AuthContext';
 import { ScheduleCalendar } from './ScheduleCalendar';
 import { 
   Calendar, Check, User, AlertCircle, ChevronRight, CheckSquare, 
-  MessageSquare, Star, Plus, Download, ClipboardList, Camera, Upload, Send, Users, Edit2, Trash, CreditCard
+  MessageSquare, Star, Plus, Download, ClipboardList, Camera, Upload, Send, Users, Edit2, Trash, CreditCard, Trophy
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { compressImage } from '../utils/image';
+import { calculateAge } from '../utils/dateUtils';
+import { BirthdaysBanner } from './BirthdaysBanner';
 import { PaymentLinkModal } from './PaymentLinkModal';
 import { parseScheduleString } from '../utils/scheduleParser';
+import { TrainingGroup } from '../types';
 
 interface TrainerCRMProps {
   activeTab: string;
@@ -85,7 +88,11 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
   };
 
   const myGroups = groups.filter(g => g.coachId === myCoach.id);
-  const myClients = clients.filter(c => myGroups.some(g => g.name === c.groupName) || c.coachId === myCoach.id);
+  const myClients = clients.filter(c => myGroups.some(g => g.name === c.groupName || (g.isSelectTeam && g.selectedClientIds?.includes(c.id))) || c.coachId === myCoach.id).sort((a, b) => {
+    const nameA = `${a.childSurname} ${a.childName}`.trim().toLowerCase();
+    const nameB = `${b.childSurname} ${b.childName}`.trim().toLowerCase();
+    return nameA.localeCompare(nameB, 'ru');
+  });
   const coachTasks = tasks.filter(t => t.assignedTo === 'trainer');
 
   const handleSendChat = (e: React.FormEvent) => {
@@ -113,11 +120,13 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
     const resolvedName = groupObj ? groupObj.name : groupId;
     setSelectedGroupForAttendance(resolvedName);
     // Pre-populate actual client players in that group using case-insensitive trimmed matching
-    const groupPlayersBase: any[] = myClients.filter(c => 
-      c.groupName && 
-      resolvedName && 
-      c.groupName.trim().toLowerCase() === resolvedName.trim().toLowerCase()
-    );
+    const groupPlayersBase: any[] = groupObj?.isSelectTeam 
+      ? myClients.filter(c => groupObj.selectedClientIds?.includes(c.id))
+      : myClients.filter(c => 
+          c.groupName && 
+          resolvedName && 
+          c.groupName.trim().toLowerCase() === resolvedName.trim().toLowerCase()
+        );
     const groupTrialLeads = (leads || []).filter(l => 
       l.status === 'trial_booked' && 
       l.trialGroupId && 
@@ -302,6 +311,8 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
 
       <div className="p-6 max-w-7xl mx-auto space-y-6">
         
+        <BirthdaysBanner clients={clients} />
+
         {/* TAB 1: DASHBOARD OVERVIEW (МАТЧИТ ИЗОБРАЖЕНИЕ №3) */}
         {activeTab === 'trainer_home' && (
           <div id="trainer-main-dashboard" className="space-y-6">
@@ -339,7 +350,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
                      if (localMyClients.length === 0) return '0.0';
                      let totalScore = 0;
                      localMyClients.forEach(c => {
-                       totalScore += ((c.progress.technique + c.progress.tactics + c.progress.physical + c.progress.discipline) / 4);
+                       totalScore += (((c.progress?.technique || 0) + (c.progress?.tactics || 0) + (c.progress?.physical || 0) + (c.progress?.discipline || 0)) / 4);
                      });
                      return (totalScore / localMyClients.length).toFixed(1);
                   })()}
@@ -531,7 +542,10 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
                             {grp.year}
                           </span>
                           <div className="space-y-0.5 max-w-[120px]">
-                            <div className="font-bold text-slate-900 text-xs truncate">{grp.name}</div>
+                            <div className="font-bold text-slate-900 text-xs truncate flex items-center gap-1">
+                              {grp.isSelectTeam && <Trophy className="w-3 h-3 text-orange-500 shrink-0" />}
+                              <span className="truncate">{grp.name}</span>
+                            </div>
                             <div className="text-[9px] text-gray-400">Тренировка сегодня, 17:00</div>
                           </div>
                         </div>
@@ -570,7 +584,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
 
                   <div className="space-y-1 text-left">
                     {myClients.filter(c => c.status === 'active').slice(0, 3).map((item, id) => {
-                      const avg = ((item.progress.technique + item.progress.tactics + item.progress.physical + item.progress.discipline)/4).toFixed(1);
+                      const avg = (((item.progress?.technique || 0) + (item.progress?.tactics || 0) + (item.progress?.physical || 0) + (item.progress?.discipline || 0))/4).toFixed(1);
                       return (
                       <div key={id} className="py-2.5 px-2 -mx-2 hover:bg-slate-50 rounded-lg flex items-center justify-between cursor-pointer border-b last:border-0 border-gray-50"
                         onClick={() => {
@@ -833,11 +847,13 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
                   <div className="flex flex-col space-y-2">
                     {(() => {
                       const groupObj = groups.find(g => g.name === selectedGroupForAttendance);
-                      const groupPlayersBase: any[] = myClients.filter(c => {
-                        const cGroup = c.groupName?.trim().toLowerCase();
-                        const sGroup = selectedGroupForAttendance?.trim().toLowerCase();
-                        return !!cGroup && !!sGroup && cGroup === sGroup;
-                      });
+                      const groupPlayersBase: any[] = groupObj?.isSelectTeam
+                        ? myClients.filter(c => groupObj.selectedClientIds?.includes(c.id))
+                        : myClients.filter(c => {
+                            const cGroup = c.groupName?.trim().toLowerCase();
+                            const sGroup = selectedGroupForAttendance?.trim().toLowerCase();
+                            return !!cGroup && !!sGroup && cGroup === sGroup;
+                          });
                       const groupTrialLeads = (leads || []).filter(l => 
                         l.status === 'trial_booked' && 
                         l.trialGroupId && 
@@ -850,7 +866,11 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
                         status: 'trial' as const,
                         isLead: true
                       }));
-                      const allPlayers = [...groupPlayersBase, ...groupTrialLeads];
+                      const allPlayers = [...groupPlayersBase, ...groupTrialLeads].sort((a, b) => {
+                        const nameA = `${a.childSurname} ${a.childName}`.trim().toLowerCase();
+                        const nameB = `${b.childSurname} ${b.childName}`.trim().toLowerCase();
+                        return nameA.localeCompare(nameB, 'ru');
+                      });
                       
                       return allPlayers.map((p, i) => {
                         const isTrial = p.status === 'trial';
@@ -970,10 +990,10 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
                     key={idx} 
                     onClick={() => {
                       setSelectedPlayerForRating(player.id);
-                      setTechniqueRating(player.progress.technique);
-                      setTacticsRating(player.progress.tactics);
-                      setPhysicalRating(player.progress.physical);
-                      setDisciplineRating(player.progress.discipline);
+                      setTechniqueRating(player.progress?.technique || 4.5);
+                      setTacticsRating(player.progress?.tactics || 4.5);
+                      setPhysicalRating(player.progress?.physical || 4.5);
+                      setDisciplineRating(player.progress?.discipline || 4.5);
                     }}
                     className="p-3 bg-slate-50 hover:bg-slate-100/80 rounded-xl cursor-pointer border text-left flex items-center justify-between transition group"
                   >
@@ -1158,13 +1178,28 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
           <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm text-left space-y-4">
             {!selectedGroupId ? (
               <>
-                <h3 className="text-lg font-bold text-slate-900 border-b pb-3 mb-4">Детальная информация о моих группах</h3>
+                <div className="flex justify-between items-center border-b pb-3 mb-4">
+                  <h3 className="text-lg font-bold text-slate-900">Детальная информация о моих группах</h3>
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(window.location.origin + '/register');
+                      alert('Ссылка для родителей скопирована: ' + window.location.origin + '/register\nОтправьте её родителям для создания профиля.');
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-[10px] uppercase tracking-wider font-bold transition-all shadow-sm flex items-center space-x-1"
+                    title="Скопировать ссылку-приглашение для родителей"
+                  >
+                    <span>🔗 Пригласить родителей</span>
+                  </button>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {myGroups.map((grp, idx) => (
                     <div key={idx} className="p-5 border rounded-2xl bg-white shadow-sm hover:shadow-md transition">
                       <div className="flex justify-between items-start mb-4">
                         <div>
-                          <h4 className="font-black text-slate-900 text-lg mb-1">{grp.name}</h4>
+                          <h4 className="font-black text-slate-900 text-lg mb-1 flex items-center gap-1.5">
+                            {grp.isSelectTeam && <Trophy className="w-4 h-4 text-orange-500" />}
+                            {grp.name}
+                          </h4>
                           <p className="text-xs text-gray-500 font-medium">Год рождения: {grp.year}</p>
                         </div>
                         <span className="px-3 py-1 bg-emerald-100 text-emerald-800 font-bold text-xs rounded-full">
@@ -1175,7 +1210,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
                       <div className="space-y-3 pt-3 border-t text-sm">
                         <div className="flex justify-between">
                           <span className="text-gray-500">Кол-во игроков:</span>
-                          <span className="font-bold text-slate-800">{clients.filter(c => c.groupName === grp.name).length}</span>
+                          <span className="font-bold text-slate-800">{grp.isSelectTeam ? clients.filter(c => grp.selectedClientIds?.includes(c.id)).length : clients.filter(c => c.groupName === grp.name).length}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-500">Посещаемость:</span>
@@ -1214,7 +1249,11 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
               (() => {
                 const grp = myGroups.find(g => g.id === selectedGroupId);
                 if (!grp) return null;
-                const groupPlayers = clients.filter(c => c.groupName === grp.name);
+                const groupPlayers = (grp.isSelectTeam ? clients.filter(c => grp.selectedClientIds?.includes(c.id)) : clients.filter(c => c.groupName === grp.name)).sort((a, b) => {
+                  const nameA = `${a.childSurname} ${a.childName}`.trim().toLowerCase();
+                  const nameB = `${b.childSurname} ${b.childName}`.trim().toLowerCase();
+                  return nameA.localeCompare(nameB, 'ru');
+                });
                 
                 return (
                   <div className="space-y-4">
@@ -1314,7 +1353,11 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
               {showAddPlayerModal && selectedGroupId && (() => {
                 const grp = myGroups.find(g => g.id === selectedGroupId);
                 // Potential players: without group or in other group.
-                const unassignedPlayers = clients.filter(c => c.groupName !== grp?.name && (c.childName.toLowerCase().includes(addPlayerSearch.toLowerCase()) || c.childSurname.toLowerCase().includes(addPlayerSearch.toLowerCase())));
+                const unassignedPlayers = clients.filter(c => c.groupName !== grp?.name && (c.childName.toLowerCase().includes(addPlayerSearch.toLowerCase()) || c.childSurname.toLowerCase().includes(addPlayerSearch.toLowerCase()))).sort((a, b) => {
+                  const nameA = `${a.childSurname} ${a.childName}`.trim().toLowerCase();
+                  const nameB = `${b.childSurname} ${b.childName}`.trim().toLowerCase();
+                  return nameA.localeCompare(nameB, 'ru');
+                });
 
                 return (
                   <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">

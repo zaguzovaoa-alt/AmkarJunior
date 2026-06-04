@@ -219,7 +219,7 @@ export const YooKassaPortal: React.FC<YooKassaPortalProps> = ({ clientId, onClos
               <div className="space-y-1">
                 <h4 className="font-extrabold text-slate-900 text-base">Оплата завершена успешно! 🎉</h4>
                 <p className="text-xs text-gray-505 max-w-sm">
-                  Абонемент для мальчика <strong>{targetClient.childSurname} {targetClient.childName}</strong> активирован в CRM футбольной школы. Менеджер извещен, а ребенку начислено <strong>{selectedTariff.key === '12_sessions' ? 12 : 8} тренировок</strong>.
+                  Абонемент для {targetClient.childSurname} {targetClient.childName} активирован в CRM футбольной школы. Менеджер извещен, а ребенку начислено <strong>{selectedTariff.key === '12_sessions' ? 12 : selectedTariff.key === '8_sessions' ? 8 : selectedTariff.key === '4_sessions' ? 4 : 1} тренировок</strong>.
                 </p>
               </div>
 

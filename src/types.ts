@@ -8,6 +8,7 @@ export interface Lead {
   childName: string;
   childSurname: string;
   childBirthYear: number;
+  childBirthDate?: string;
   childAge: number;
   source: LeadSource;
   createdAt: string; // ISO String
@@ -62,11 +63,13 @@ export interface Client {
   childName: string;
   childSurname: string;
   childBirthYear: number;
+  childBirthDate?: string;
   childAge: number;
   status: ClientStatus;
   abonement: 'none' | '12_sessions' | '8_sessions' | '4_sessions' | '1_session';
   abonementStatus: 'Оплачено' | 'Ожидает оплаты' | 'Нет абонемента';
   abonementExpirationDate?: string;
+  abonementTotalSessions?: number;
   abonementSessionsLeft: number;
   groupName: string | null; // e.g., 'Группа 2014' or null
   coachId: string | null;
@@ -103,12 +106,19 @@ export interface CRMTask {
 export interface TrainingGroup {
   id: string;
   name: string; // e.g. 'Группа 2014'
-  year: number; // e.g. 2014
+  year: number; // e.g. 2014 (legacy)
+  birthYearFrom?: number;
+  birthYearTo?: number;
   coachId: string;
   coachName: string;
   playersCount: number;
   attendanceRate: number;
   scheduleDays: string[]; // e.g. ["Пн 17:00", "Ср 17:00"]
+  
+  // For Select Teams (Сборные команды)
+  isSelectTeam?: boolean;
+  targetCompetition?: string;
+  selectedClientIds?: string[];
 }
 
 export interface Coach {
@@ -202,4 +212,15 @@ export interface ChatMessage {
   fileName?: string;
   fileType?: 'image' | 'document';
   visibleTo?: ('manager' | 'trainer' | 'parent' | 'director')[];
+}
+
+export interface AppNotification {
+  id: string;
+  title: string;
+  body: string;
+  targetRole?: ('manager' | 'trainer' | 'parent' | 'director')[];
+  targetGroupIds?: string[]; // if empty, applies to all
+  dateString: string;
+  isRead: boolean;
+  type: 'event' | 'system' | 'message';
 }

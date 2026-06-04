@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { collection, doc, getDoc, setDoc, onSnapshot, updateDoc, deleteDoc, getDocFromServer, query, getDocs } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { 
-  Lead, Client, CRMTask, TrainingGroup, Coach, FinanceRecord, ChatMessage, LeadSource, Payment, TrainingSessionProtocol, FinanceCategory, FinancialPlan, CRMConfig
+  Lead, Client, CRMTask, TrainingGroup, Coach, FinanceRecord, ChatMessage, LeadSource, Payment, TrainingSessionProtocol, FinanceCategory, FinancialPlan, CRMConfig, AppNotification
 } from '../types';
 
 // Types for User Profile
@@ -59,6 +59,9 @@ interface CRMContextType {
   addChatMessage: (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
   updateChatMessage: (id: string, newText: string) => void;
   deleteChatMessage: (id: string) => void;
+  notifications: AppNotification[];
+  addNotification: (notif: Omit<AppNotification, 'id' | 'isRead' | 'dateString'>) => void;
+  markNotificationRead: (id: string) => void;
   toggleCalendarSync: () => void;
   triggerManualCalendarSync: () => void;
   resetAllData: () => void;
@@ -87,10 +90,12 @@ interface CRMContextType {
   addFinanceRecord: (record: Omit<FinanceRecord, 'id'>) => Promise<void>;
   updateClientNotes: (clientId: string, notes: string) => Promise<void>;
   updateClient: (clientId: string, updates: Partial<Omit<Client, 'id'>>) => Promise<void>;
-  createGroup: (name: string, year: number, coachId: string, coachName: string, scheduleDays: string[]) => Promise<void>;
+  createGroup: (name: string, year: number, birthYearFrom: number, birthYearTo: number, coachId: string, coachName: string, scheduleDays: string[], isSelectTeam?: boolean, targetCompetition?: string, selectedClientIds?: string[]) => Promise<void>;
   deleteGroup: (id: string) => Promise<void>;
   updateGroup: (id: string, updates: Partial<Omit<TrainingGroup, 'id'>>) => Promise<void>;
   assignClientToGroup: (clientId: string, groupName: string | null) => Promise<void>;
+  assignClientToSelectTeam: (clientId: string, groupId: string) => Promise<void>;
+  removeClientFromSelectTeam: (clientId: string, groupId: string) => Promise<void>;
   createCoach: (name: string, role: string, joinedYear: number, status: Coach['status'], phone?: string, telegram?: string, avatarUrl?: string, initialFeedback?: Coach['feedback']) => Promise<void>;
   deleteCoach: (id: string) => Promise<void>;
   assignCoachToGroup: (groupId: string, coachId: string, coachName: string) => Promise<void>;
@@ -152,6 +157,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
   const [trainingSessions, setTrainingSessions] = useState<TrainingSessionProtocol[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [firebaseReady, setFirebaseReady] = useState(false);
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
 
@@ -351,21 +357,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             autoOverdueTasks: true
           });
         } else {
-          // One-time production wipe of database test entries for all collections
-          const configData = configDoc.data();
-          if (configData && !configData.isProductionWipedFull) {
-            console.log("Wiping existing trial and demo data from Firebase Firestore...");
-            const collectionsToClear = ['leads', 'clients', 'tasks', 'finances', 'messages', 'coaches', 'groups'];
-            for (const colName of collectionsToClear) {
-              const q = query(collection(db, colName));
-              const snap = await getDocs(q);
-              for (const document of snap.docs) {
-                await deleteDoc(doc(db, colName, document.id));
-              }
-            }
-            await updateDoc(configDocRef, { isProductionWipedFull: true });
-          }
-
           // Load settings from config document if present
           const data = configDoc.data();
           if (data) {
@@ -495,6 +486,15 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setMessages(list);
     }, (err) => handleSnapshotErr(err, 'messages'));
 
+    const unsubNotifications = onSnapshot(collection(db, 'notifications'), (snapshot) => {
+      const list: AppNotification[] = [];
+      snapshot.forEach((doc) => {
+        list.push(doc.data() as AppNotification);
+      });
+      list.sort((a, b) => b.dateString.localeCompare(a.dateString));
+      setNotifications(list);
+    }, (err) => handleSnapshotErr(err, 'notifications'));
+
     return () => {
       unsubLeads();
       unsubClients();
@@ -504,6 +504,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubFinances();
       unsubTrainingSessions();
       unsubMessages();
+      unsubNotifications();
     };
   }, [firebaseReady]);
 
@@ -813,6 +814,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         status: 'active',
         abonement: tariff,
         abonementStatus: 'Оплачено',
+        abonementTotalSessions: sessions,
         abonementSessionsLeft: sessions,
         abonementExpirationDate: new Date(Date.now() + 30*24*60*60*1000).toISOString().substring(0, 10),
         groupName: groupName,
@@ -869,6 +871,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         status: 'active' as const,
         abonement: tariff,
         abonementStatus: 'Оплачено',
+        abonementTotalSessions: sessions + (c.abonementSessionsLeft || 0),
         abonementSessionsLeft: sessions + (c.abonementSessionsLeft || 0),
         abonementExpirationDate: new Date(Date.now() + 30*24*60*60*1000).toISOString().substring(0, 10),
         groupName: autoGroup,
@@ -898,6 +901,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         status: 'active',
         abonement: tariff,
         abonementStatus: 'Оплачено',
+        abonementTotalSessions: sessions + (client.abonementSessionsLeft || 0),
         abonementSessionsLeft: sessions + (client.abonementSessionsLeft || 0),
         abonementExpirationDate: new Date(Date.now() + 30*24*60*60*1000).toISOString().substring(0, 10),
         groupName: autoGroup,
@@ -1138,6 +1142,29 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setMessages(prev => prev.filter(m => m.id !== id));
     deleteDoc(doc(db, 'messages', id)).catch(err => {
       console.warn(`Failed to delete message ${id} in Firestore:`, err);
+    });
+  };
+
+  const addNotification = async (notifData: Omit<AppNotification, 'id' | 'isRead' | 'dateString'>) => {
+    const id = `notif_${Date.now()}`;
+    const dateString = new Date().toISOString();
+    const newNotif: AppNotification = {
+      ...notifData,
+      id,
+      isRead: false,
+      dateString
+    };
+    
+    setNotifications(prev => [newNotif, ...prev]);
+    setDoc(doc(db, 'notifications', id), newNotif).catch(err => {
+      console.warn("Failed to sync new notification in Firestore:", err);
+    });
+  };
+
+  const markNotificationRead = async (id: string) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+    updateDoc(doc(db, 'notifications', id), { isRead: true }).catch(err => {
+      console.warn(`Failed to mark notification ${id} as read in Firestore:`, err);
     });
   };
 
@@ -1483,16 +1510,21 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const createGroup = async (name: string, year: number, coachId: string, coachName: string, scheduleDays: string[]) => {
+  const createGroup = async (name: string, year: number, birthYearFrom: number, birthYearTo: number, coachId: string, coachName: string, scheduleDays: string[], isSelectTeam?: boolean, targetCompetition?: string, selectedClientIds?: string[]) => {
     const newGroup: TrainingGroup = {
       id: `g_${Date.now()}`,
       name,
       year,
+      birthYearFrom,
+      birthYearTo,
       coachId,
       coachName,
-      playersCount: 0,
+      playersCount: selectedClientIds ? selectedClientIds.length : 0,
       attendanceRate: 100,
-      scheduleDays
+      scheduleDays,
+      isSelectTeam,
+      targetCompetition,
+      selectedClientIds: selectedClientIds || []
     };
     setGroups(prev => [...prev, newGroup]);
     setDoc(doc(db, 'groups', newGroup.id), newGroup).catch(err => {
@@ -1538,6 +1570,42 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
       }
     }
+  };
+
+  const assignClientToSelectTeam = async (clientId: string, groupId: string) => {
+    const group = groups.find(g => g.id === groupId);
+    if (!group) return;
+    const selectedClientIds = group.selectedClientIds || [];
+    if (selectedClientIds.includes(clientId)) return;
+
+    const newSelectedIds = [...selectedClientIds, clientId];
+    
+    setGroups(prev => prev.map(g => g.id === groupId ? { ...g, selectedClientIds: newSelectedIds, playersCount: newSelectedIds.length } : g));
+    
+    updateDoc(doc(db, 'groups', groupId), {
+      selectedClientIds: newSelectedIds,
+      playersCount: newSelectedIds.length 
+    }).catch(err => {
+      console.warn(`Failed to assign client to select team in Firestore:`, err);
+    });
+  };
+
+  const removeClientFromSelectTeam = async (clientId: string, groupId: string) => {
+    const group = groups.find(g => g.id === groupId);
+    if (!group) return;
+    const selectedClientIds = group.selectedClientIds || [];
+    if (!selectedClientIds.includes(clientId)) return;
+
+    const newSelectedIds = selectedClientIds.filter(id => id !== clientId);
+
+    setGroups(prev => prev.map(g => g.id === groupId ? { ...g, selectedClientIds: newSelectedIds, playersCount: newSelectedIds.length } : g));
+    
+    updateDoc(doc(db, 'groups', groupId), {
+      selectedClientIds: newSelectedIds,
+      playersCount: newSelectedIds.length 
+    }).catch(err => {
+      console.warn(`Failed to remove client from select team in Firestore:`, err);
+    });
   };
 
   const assignClientToGroup = async (clientId: string, groupName: string | null) => {
@@ -1673,13 +1741,15 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       firestoreError, dismissFirestoreError,
       addLead, updateLeadStatus, bookTrial, completeTrialAndMarkAttendance,
       sendPaymentLink, processPayment, uploadDocument, markAttendance, ratePlayer,
-      addTask, completeTask, addChatMessage, updateChatMessage, deleteChatMessage, toggleCalendarSync, triggerManualCalendarSync,
+      completeTask, addTask,
+      notifications, addNotification, markNotificationRead,
+      addChatMessage, updateChatMessage, deleteChatMessage, toggleCalendarSync, triggerManualCalendarSync,
       resetAllData,
       clearAllData,
       overwriteClients, overwriteLeads, overwriteFinances, overwriteCoaches,
       appendClients, appendLeads, appendFinances, appendCoaches,
       deleteLead, deleteClient, deleteTask, deleteFinanceRecord, addFinanceCategory, deleteFinanceCategory, addFinanceRecord, updateFinancialPlan, updateClientNotes, updateClient,
-      createGroup, deleteGroup, updateGroup, assignClientToGroup,
+      createGroup, deleteGroup, updateGroup, assignClientToGroup, assignClientToSelectTeam, removeClientFromSelectTeam,
       createCoach, deleteCoach, assignCoachToGroup, updateCoachContacts, updateCoach,
       schoolName, updateSchoolName, whatsappNotifications, updateWhatsappNotifications,
       autoOverdueTasks, updateAutoOverdueTasks,

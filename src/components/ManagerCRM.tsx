@@ -7,9 +7,11 @@ import {
   Settings, Shield
 } from 'lucide-react';
 import { Client, Lead, ClientStatus, CRMTask } from '../types';
+import { calculateAge, isBirthdayToday } from '../utils/dateUtils';
 import { compressImage } from '../utils/image';
 import { PaymentLinkModal } from './PaymentLinkModal';
 import { ConfirmModal } from './ConfirmModal';
+import { BirthdaysBanner } from './BirthdaysBanner';
 
 interface ManagerCRMProps {
   activeTab: string;
@@ -50,8 +52,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
   const [newParentName, setNewParentName] = useState('');
   const [newChildName, setNewChildName] = useState('');
   const [newChildSurname, setNewChildSurname] = useState('');
-  const [newChildAge, setNewChildAge] = useState(6);
-  const [newChildYear, setNewChildYear] = useState(2018);
+  const [newChildBirthDate, setNewChildBirthDate] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newSource, setNewSource] = useState<'MAX' | 'telegram' | 'vk' | 'листовка' | 'рекомендация'>('MAX');
 
@@ -61,8 +62,9 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
   const [editParentName, setEditParentName] = useState('');
   const [editChildName, setEditChildName] = useState('');
   const [editChildSurname, setEditChildSurname] = useState('');
-  const [editChildAge, setEditChildAge] = useState(6);
-  const [editChildYear, setEditChildYear] = useState(2018);
+  const [editChildBirthDate, setEditChildBirthDate] = useState('');
+  const [editChildAge, setEditChildAge] = useState(0);
+  const [editChildYear, setEditChildYear] = useState(new Date().getFullYear());
   const [editPhone, setEditPhone] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editStatus, setEditStatus] = useState<ClientStatus>('active');
@@ -122,24 +124,14 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
 
 
 
-  const getMaxCallUrl = (phone: string) => {
-    const cleanPhone = phone.replace(/\D/g, '');
-    let maxPhone = cleanPhone;
-    if (maxPhone.startsWith('8') && maxPhone.length === 11) {
-      maxPhone = '7' + maxPhone.substring(1);
-    } else if (maxPhone.startsWith('9') && maxPhone.length === 10) {
-      maxPhone = '7' + maxPhone;
-    }
-    return `max://call?phone=+${maxPhone}`;
-  };
-
   const handleStartEditClient = (client: Client) => {
     setEditClientId(client.id);
     setEditParentName(client.parentName || '');
     setEditChildName(client.childName || '');
     setEditChildSurname(client.childSurname || '');
+    setEditChildBirthDate(client.childBirthDate || `${client.childBirthYear}-01-01`);
     setEditChildAge(client.childAge || 0);
-    setEditChildYear(client.childBirthYear || 2018);
+    setEditChildYear(client.childBirthYear || new Date().getFullYear());
     setEditPhone(client.parentPhone || '');
     setEditEmail(client.parentEmail || '');
     setEditStatus(client.status || 'active');
@@ -166,8 +158,9 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
         parentName: editParentName,
         childName: editChildName,
         childSurname: editChildSurname,
-        childAge: editChildAge,
-        childBirthYear: editChildYear,
+        childBirthDate: editChildBirthDate || undefined,
+        childBirthYear: editChildBirthDate ? parseInt(editChildBirthDate.split('-')[0]) : 2018,
+        childAge: calculateAge(editChildBirthDate, 2018),
         parentPhone: editPhone,
         parentEmail: editEmail,
         status: editStatus,
@@ -294,8 +287,9 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
         parentEmail: 'client@amkar-junior.ru',
         childName: newChildName,
         childSurname: newChildSurname || 'Иванов',
-        childBirthYear: newChildYear,
-        childAge: newChildAge,
+        childBirthDate: newChildBirthDate || undefined,
+        childBirthYear: newChildBirthDate ? parseInt(newChildBirthDate.split('-')[0]) : 2018,
+        childAge: calculateAge(newChildBirthDate, 2018),
         source: newSource
       });
       alert('Новая входящая заявка успешно зарегистрирована во вкладке "Заявки" и добавлена в задачник руководителя и менеджера!');
@@ -342,6 +336,10 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
     const matchesBranch = filterBranch === 'all' || (c.branch && c.branch === filterBranch);
 
     return matchesSearch && matchesStatus && matchesGroup && matchesAbonement && matchesBranch;
+  }).sort((a, b) => {
+    const nameA = `${a.childSurname} ${a.childName}`.trim().toLowerCase();
+    const nameB = `${b.childSurname} ${b.childName}`.trim().toLowerCase();
+    return nameA.localeCompare(nameB, 'ru');
   });
 
   const totalPages = Math.ceil(filteredClients.length / itemsPerPage) || 1;
@@ -447,7 +445,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                         </td>
                         <td className="p-3">
                           <div className="font-bold">{lead.timeString}</div>
-                          <p className="text-[10px] text-gray-400 font-mono">23.05.2026</p>
+                          <p className="text-[10px] text-gray-400 font-mono">{new Date(lead.createdAt || Date.now()).toLocaleDateString('ru-RU')}</p>
                         </td>
                         <td className="p-3">
                           <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase ${
@@ -531,9 +529,19 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                 </div>
                 <button 
                   onClick={() => setIsAddClientOpen(true)}
-                  className="bg-black hover:bg-gray-800 text-white px-5 py-2 rounded-full text-xs font-bold transition-all shadow-md shadow-gray-200"
+                  className="bg-black hover:bg-gray-800 text-white px-5 py-2 rounded-full text-xs font-bold transition-all shadow-md shadow-gray-200 whitespace-nowrap"
                 >
                   <span className="-ml-1 mr-1.5">+</span> Добавить клиента
+                </button>
+                <button 
+                  onClick={() => {
+                    navigator.clipboard.writeText(window.location.origin + '/register');
+                    alert('Ссылка для родителей скопирована: ' + window.location.origin + '/register\nОтправьте её родителям для создания профиля.');
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-full text-xs font-bold transition-all shadow-md shadow-emerald-200 whitespace-nowrap"
+                  title="Скопировать ссылку-приглашение для родителей"
+                >
+                  🔗 Пригласить
                 </button>
                 <div className="relative">
                   <div className="relative cursor-pointer hover:bg-gray-50 p-2 rounded-full transition-colors ml-2" onClick={() => { setIsNotificationsMenuOpen(!isNotificationsMenuOpen); setNotificationsHasUnreadLocallyCleared(true); setIsProfileMenuOpen(false); }}>
@@ -605,6 +613,8 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                 </div>
               </div>
             </div>
+
+            <BirthdaysBanner clients={clients} />
 
             {/* Dashboard / Stats Cards */}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -901,7 +911,22 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                                 {client.abonementStatus || 'Не оплачено'}
                               </span>
                               <div className="text-[9px] text-gray-400 mt-0.5">
-                                {client.abonementSessionsLeft !== undefined ? `Остаток: ${client.abonementSessionsLeft} зан.` : ''}
+                                {client.abonementSessionsLeft !== undefined ? (
+                                  <>
+                                    Остаток: {client.abonementSessionsLeft} из {(() => {
+                                      const baseTotal = client.abonement === '12_sessions' ? 12 : client.abonement === '8_sessions' ? 8 : client.abonement === '4_sessions' ? 4 : client.abonement === '1_session' ? 1 : 0;
+                                      return Math.max(baseTotal, client.abonementSessionsLeft || 0);
+                                    })()}
+                                    <div className="mt-1 w-full bg-gray-200 rounded-full h-1 overflow-hidden">
+                                      <div className="bg-emerald-400 h-1 rounded-full text-[0px]" style={{ width: `${(() => {
+                                        const baseTotal = client.abonement === '12_sessions' ? 12 : client.abonement === '8_sessions' ? 8 : client.abonement === '4_sessions' ? 4 : client.abonement === '1_session' ? 1 : 0;
+                                        const maxTotal = baseTotal > 0 ? Math.max(baseTotal, client.abonementSessionsLeft || 0) : 1;
+                                        const used = maxTotal - (client.abonementSessionsLeft || 0);
+                                        return Math.min(100, Math.max(0, (used / maxTotal) * 100));
+                                      })()}%` }}></div>
+                                    </div>
+                                  </>
+                                ) : ''}
                               </div>
                             </td>
                             <td className="p-2 md:p-3 align-middle flex justify-end space-x-1">
@@ -1115,7 +1140,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                             onChange={(e) => {
                               const v = parseInt(e.target.value) || 0;
                               setEditChildAge(v);
-                              setEditChildYear(2026 - v);
+                              setEditChildYear(new Date().getFullYear() - v);
                             }}
                             className="w-full p-2 bg-slate-50 rounded-lg outline-none focus:bg-white text-[11px] font-semibold text-slate-900 border"
                           />
@@ -1126,12 +1151,12 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                             required 
                             type="number" 
                             min="2000" 
-                            max="2026" 
+                            max={new Date().getFullYear()} 
                             value={editChildYear} 
                             onChange={(e) => {
                               const v = parseInt(e.target.value) || 2018;
                               setEditChildYear(v);
-                              setEditChildAge(2026 - v);
+                              setEditChildAge(new Date().getFullYear() - v);
                             }}
                             className="w-full p-2 bg-slate-50 rounded-lg outline-none focus:bg-white text-[11px] font-semibold text-slate-800 border"
                           />
@@ -1419,17 +1444,37 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                             <div className="pt-2 border-t border-gray-100 flex items-start mt-4">
                                <span className="text-gray-500 font-medium w-1/3 flex items-center mt-0.5"><FileText className="w-3.5 h-3.5 mr-2 text-gray-400" /> Примечание</span>
                                <div className="flex-1 text-right text-gray-900 font-medium">
-                                 Любит играть в защите, левша.
+                                 {selectedClient.notes || <span className="text-gray-400 italic">Нет примечаний.</span>}
                                </div>
                             </div>
                           </div>
                         )}
 
                         {clientDetailTab === 'abos' && (
-                          <div className="space-y-2">
-                            <div><strong>Абонемент:</strong> {selectedClient.abonement === 'none' ? 'Нет' : selectedClient.abonement}</div>
-                            <div><strong>Баланс занятий:</strong> {selectedClient.abonementSessionsLeft} тренировок</div>
-                            <div><strong>Срок действия:</strong> {selectedClient.abonementExpirationDate || '—'}</div>
+                          <div className="space-y-4">
+                            <div className="bg-white p-3 rounded-xl border">
+                              <div className="mb-2"><strong>Абонемент:</strong> {selectedClient.abonement === 'none' ? 'Нет' : selectedClient.abonement}</div>
+                              <div className="flex justify-between items-end mb-1 text-xs">
+                                <span><strong>Баланс:</strong> {selectedClient.abonementSessionsLeft} из {(() => {
+                                  const baseTotal = selectedClient.abonement === '12_sessions' ? 12 : selectedClient.abonement === '8_sessions' ? 8 : selectedClient.abonement === '4_sessions' ? 4 : selectedClient.abonement === '1_session' ? 1 : 0;
+                                  return Math.max(baseTotal, selectedClient.abonementSessionsLeft || 0);
+                                })()}</span>
+                                <span className="text-[10px] text-gray-500">Использовано: {(() => {
+                                  const baseTotal = selectedClient.abonement === '12_sessions' ? 12 : selectedClient.abonement === '8_sessions' ? 8 : selectedClient.abonement === '4_sessions' ? 4 : selectedClient.abonement === '1_session' ? 1 : 0;
+                                  const maxTotal = Math.max(baseTotal, selectedClient.abonementSessionsLeft || 0);
+                                  return maxTotal - (selectedClient.abonementSessionsLeft || 0);
+                                })()}</span>
+                              </div>
+                              <div className="w-full bg-gray-200 rounded-full h-1.5 mb-2 overflow-hidden">
+                                  <div className="bg-emerald-500 h-1.5 rounded-full transition-all" style={{ width: `${(() => {
+                                    const baseTotal = selectedClient.abonement === '12_sessions' ? 12 : selectedClient.abonement === '8_sessions' ? 8 : selectedClient.abonement === '4_sessions' ? 4 : selectedClient.abonement === '1_session' ? 1 : 0;
+                                    const maxTotal = baseTotal > 0 ? Math.max(baseTotal, selectedClient.abonementSessionsLeft || 0) : 1;
+                                    const used = maxTotal - (selectedClient.abonementSessionsLeft || 0);
+                                    return Math.min(100, Math.max(0, (used / maxTotal) * 100));
+                                  })()}%` }}></div>
+                              </div>
+                              <div><strong>Срок действия:</strong> {selectedClient.abonementExpirationDate || '—'}</div>
+                            </div>
                             
                             {selectedClient.status === 'trial' && (
                               <div className="p-3.5 bg-orange-50 text-orange-850 rounded-xl space-y-2 mt-2 border border-orange-150">
@@ -1486,31 +1531,53 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                       <div className="space-y-2 border-t pt-3">
                         <label className="block text-[10px] font-extrabold uppercase text-gray-400 tracking-wider">Рабочая заметка менеджера:</label>
                         <textarea
-                          value={clientNotes[selectedClient.id] || ''}
+                          value={clientNotes[selectedClient.id] !== undefined ? clientNotes[selectedClient.id] : (selectedClient.notes || '')}
                           onChange={(e) => setClientNotes(prev => ({ ...prev, [selectedClient.id]: e.target.value }))}
                           className="w-full font-mono p-2.5 bg-slate-100 focus:bg-white text-[11px] border focus:border-emerald-500 rounded-xl outline-none min-h-[70px] resize-none text-slate-700 leading-normal"
                           placeholder="Например, левша, любит играть в защите..."
                         />
-                        <button 
-                          onClick={() => handleSaveNotes(selectedClient.id, clientNotes[selectedClient.id] || '')}
-                          className="w-full py-1.5 bg-slate-950 text-white font-bold text-xs rounded-lg flex items-center justify-center space-x-1"
-                        >
-                          <Save className="w-3.5 h-3.5" />
-                          <span>Сохранить заметку</span>
-                        </button>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => handleSaveNotes(selectedClient.id, clientNotes[selectedClient.id] !== undefined ? clientNotes[selectedClient.id] : (selectedClient.notes || ''))}
+                            className="flex-1 py-1.5 bg-slate-950 hover:bg-slate-800 text-white font-bold text-xs rounded-lg flex items-center justify-center space-x-1 transition"
+                          >
+                            <Save className="w-3.5 h-3.5" />
+                            <span>Сохранить</span>
+                          </button>
+                          {(selectedClient.notes || (clientNotes[selectedClient.id] && clientNotes[selectedClient.id].trim() !== '')) ? (
+                            <button 
+                              onClick={() => {
+                                setClientNotes(prev => ({ ...prev, [selectedClient.id]: '' }));
+                                handleSaveNotes(selectedClient.id, '');
+                              }}
+                              className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 font-bold text-xs rounded-lg flex items-center justify-center transition border border-red-200"
+                              title="Удалить примечание"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
 
                       {/* Help actions */}
                       <div className="flex gap-2 pt-1 border-t">
-                        <a 
-                          href={getMaxCallUrl(selectedClient.parentPhone)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 text-center rounded font-extrabold text-[11px] flex items-center justify-center space-x-1.5 transition border border-indigo-200"
+                        <button 
+                          onClick={() => {
+                            const cleanPhone = selectedClient.parentPhone.replace(/\D/g, '');
+                            let tgPhone = cleanPhone;
+                            if (tgPhone.startsWith('8') && tgPhone.length === 11) {
+                              tgPhone = '7' + tgPhone.substring(1);
+                            } else if (tgPhone.startsWith('9') && tgPhone.length === 10) {
+                              tgPhone = '7' + tgPhone;
+                            }
+                            const url = `https://t.me/+${tgPhone}`;
+                            window.open(url, '_blank');
+                          }}
+                          className="flex-1 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-center rounded font-bold text-[11px] flex items-center justify-center space-x-1 transition"
                         >
-                          <Phone className="w-3.5 h-3.5" />
-                          <span>Позвонить в MAX</span>
-                        </a>
+                          <MessageSquare className="w-3.5 h-3.5" />
+                          <span>Чат Telegram</span>
+                        </button>
                         <button 
                           onClick={() => {
                             const cleanPhone = selectedClient.parentPhone.replace(/\D/g, '');
@@ -1716,17 +1783,12 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3.5">
+              <div className="grid grid-cols-1 gap-3.5">
                 <div className="space-y-1">
-                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Возраст мальчика (4-12)</label>
-                  <input type="number" min="4" max="12" className="w-full p-2.5 bg-slate-50 border rounded-xl" value={newChildAge} onChange={(e) => {
-                    setNewChildAge(parseInt(e.target.value));
-                    setNewChildYear(2026 - parseInt(e.target.value));
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Дата рождения мальчика</label>
+                  <input type="date" className="w-full p-2.5 bg-slate-50 border rounded-xl font-mono" value={newChildBirthDate} onChange={(e) => {
+                    setNewChildBirthDate(e.target.value);
                   }} />
-                </div>
-                <div className="space-y-1">
-                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Год рождения</label>
-                  <input type="number" className="w-full p-2.5 bg-slate-50 font-mono border rounded-xl" value={newChildYear} readOnly />
                 </div>
               </div>
 
@@ -1832,21 +1894,11 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3.5">
+              <div className="grid grid-cols-1 gap-3.5">
                 <div className="space-y-1">
-                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Возраст (лет) *</label>
-                  <input required type="number" min="3" max="17" className="w-full p-2.5 bg-slate-50 border rounded-xl focus:bg-white focus:ring-1 focus:ring-emerald-500 outline-none" value={editChildAge} onChange={(e) => {
-                    const val = parseInt(e.target.value) || 0;
-                    setEditChildAge(val);
-                    setEditChildYear(2026 - val);
-                  }} />
-                </div>
-                <div className="space-y-1">
-                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Год рождения *</label>
-                  <input required type="number" min="2000" max="2025" className="w-full p-2.5 bg-slate-50 font-mono border rounded-xl focus:bg-white focus:ring-1 focus:ring-emerald-500 outline-none" value={editChildYear} onChange={(e) => {
-                    const yr = parseInt(e.target.value) || 2018;
-                    setEditChildYear(yr);
-                    setEditChildAge(2026 - yr);
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Дата рождения *</label>
+                  <input required type="date" className="w-full p-2.5 bg-slate-50 font-mono border rounded-xl focus:bg-white focus:ring-1 focus:ring-emerald-500 outline-none" value={editChildBirthDate} onChange={(e) => {
+                    setEditChildBirthDate(e.target.value);
                   }} />
                 </div>
               </div>

@@ -156,10 +156,24 @@ export const JoinPage: React.FC = () => {
                 </div>
               </div>
 
+              <div className="flex items-start space-x-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                <input 
+                  type="checkbox" 
+                  id="join-privacy" 
+                  checked={privacyAccepted}
+                  onChange={(e) => setPrivacyAccepted(e.target.checked)}
+                  className="mt-1 w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
+                />
+                <label htmlFor="join-privacy" className="text-[11px] text-slate-500 leading-tight">
+                  Я выражаю свое согласие с <a href="/privacy" className="text-emerald-600 hover:text-emerald-700 underline font-medium" target="_blank" rel="noopener noreferrer">Политикой конфиденциальности</a> и даю согласие на обработку моих персональных данных.
+                </label>
+              </div>
+
               <div className="pt-4">
                 <button 
                   type="submit"
-                  className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black rounded-xl shadow-lg shadow-emerald-500/30 flex items-center justify-center space-x-2 transition-all active:scale-[0.98]"
+                  disabled={!privacyAccepted}
+                  className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black rounded-xl shadow-lg shadow-emerald-500/30 flex items-center justify-center space-x-2 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 disabled:shadow-none"
                 >
                   <Send className="w-4 h-4" />
                   <span>Отправить заявку</span>

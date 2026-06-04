@@ -6,6 +6,8 @@ import {
   Trash2, Upload, FileText, CheckCircle2, AlertCircle, Plus, Info, Sparkles, FolderDown, Save, X, Camera, Star, UserPlus, PhoneCall, CalendarCheck, Target, Crown, Flag, MessageCircle
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { BirthdaysBanner } from './BirthdaysBanner';
+import { calculateAge } from '../utils/dateUtils';
 
 // CRM Schema Definitions for Field Mapping
 const FIELD_DEFINITIONS = {
@@ -52,7 +54,7 @@ const FIELD_DEFINITIONS = {
 
 export const DirectorCRM: React.FC = () => {
   const { 
-    clients, leads, tasks, finances, coaches, groups, trainingSessions, completeTask,
+    clients, leads, tasks, finances, coaches, groups, trainingSessions, completeTask, addTask,
     overwriteClients, overwriteLeads, overwriteFinances, overwriteCoaches,
     appendClients, appendLeads, appendFinances, appendCoaches 
   } = useCRM();
@@ -280,7 +282,7 @@ export const DirectorCRM: React.FC = () => {
         if (ageMatch) {
           age = parseInt(ageMatch[1]);
         } else {
-          age = 2026 - birthYear;
+          age = new Date().getFullYear() - birthYear;
         }
 
         let parentName = '';
@@ -460,7 +462,7 @@ export const DirectorCRM: React.FC = () => {
           childSurname,
           childName,
           childBirthYear: birthYear,
-          childAge: rowDict.childAge ? parseInt(rowDict.childAge) : (2026 - birthYear),
+          childAge: rowDict.childAge ? parseInt(rowDict.childAge) : (new Date().getFullYear() - birthYear),
           parentName: rowDict.parentName || '',
           parentPhone: rowDict.parentPhone || '',
           parentEmail: rowDict.parentEmail || '',
@@ -827,6 +829,7 @@ export const DirectorCRM: React.FC = () => {
       {activeSection === 'metrics' ? (
         // METRICS DASHBOARD VIEW
         <div id="metrics-dashboard" className="p-6 max-w-7xl mx-auto space-y-6">
+          <BirthdaysBanner clients={clients} />
           
           {/* Top summary cards exactly like Image 7 header stats row */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

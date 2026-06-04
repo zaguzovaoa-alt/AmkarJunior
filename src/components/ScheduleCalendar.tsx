@@ -34,7 +34,8 @@ interface CustomEvent {
   coachId: string;
   coachName: string;
   location: string;
-  type: 'regular' | 'match' | 'masterclass' | 'meeting';
+  type: 'regular' | 'match' | 'masterclass' | 'meeting' | 'competition';
+  notes?: string;
 }
 
 const RU_WEEKDAYS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
@@ -54,14 +55,15 @@ export const ScheduleCalendar: React.FC<{ filteredGroupId?: string; filteredCoac
     calendarSyncEnabled, 
     toggleCalendarSync, 
     calendarSyncLog,
-    triggerManualCalendarSync
+    triggerManualCalendarSync,
+    addNotification
   } = useCRM();
 
   // Active view: 'month' | 'week' | 'list'
   const [view, setView] = useState<'month' | 'week' | 'list'>('month');
   
   // Date state
-  const [currentDate, setCurrentDate] = useState<Date>(new Date(2026, 4, 24)); // Focus on May 2026 as per local date 2026-05-24
+  const [currentDate, setCurrentDate] = useState<Date>(new Date());
 
   // Filter states
   const [selectedGroupId, setSelectedGroupId] = useState<string>('all');
@@ -90,11 +92,16 @@ export const ScheduleCalendar: React.FC<{ filteredGroupId?: string; filteredCoac
         // Fallback to defaults
       }
     }
+    const today = new Date();
+    const d1 = new Date(today); d1.setDate(today.getDate() + 1);
+    const d2 = new Date(today); d2.setDate(today.getDate() + 3);
+    const d3 = new Date(today); d3.setDate(today.getDate() + 4);
+    
     return [
       {
         id: 'ce_1',
         title: 'Товарищеский хоккей/футбик с ФК Импульс',
-        date: '2026-05-25',
+        date: d1.toLocaleDateString('en-CA'),
         time: '18:00',
         groupId: groups[0]?.id || 'none',
         groupName: groups[0]?.name || 'Без группы',
@@ -106,7 +113,7 @@ export const ScheduleCalendar: React.FC<{ filteredGroupId?: string; filteredCoac
       {
         id: 'ce_2',
         title: 'Мастер-класс: Финты и дриблинг 1-на-1',
-        date: '2026-05-27',
+        date: d2.toLocaleDateString('en-CA'),
         time: '19:30',
         groupId: groups.length > 1 ? groups[1]?.id : (groups[0]?.id || 'none'),
         groupName: groups.length > 1 ? groups[1]?.name : (groups[0]?.name || 'Без группы'),
@@ -118,7 +125,7 @@ export const ScheduleCalendar: React.FC<{ filteredGroupId?: string; filteredCoac
       {
         id: 'ce_3',
         title: 'Родительское собрание: Планы на летние сборы',
-        date: '2026-05-28',
+        date: d3.toLocaleDateString('en-CA'),
         time: '19:00',
         groupId: 'all',
         groupName: 'Все группы',
@@ -142,7 +149,9 @@ export const ScheduleCalendar: React.FC<{ filteredGroupId?: string; filteredCoac
   const [newEventGroupId, setNewEventGroupId] = useState('all');
   const [newEventCoachId, setNewEventCoachId] = useState('');
   const [newEventLocation, setNewEventLocation] = useState('Манеж Спартак');
-  const [newEventType, setNewEventType] = useState<'regular' | 'match' | 'masterclass' | 'meeting'>('regular');
+  const [newEventType, setNewEventType] = useState<'regular' | 'match' | 'masterclass' | 'meeting' | 'competition'>('regular');
+  const [newEventNotes, setNewEventNotes] = useState('');
+  const [notificationTarget, setNotificationTarget] = useState<'none' | 'all' | 'group'>('none');
 
   // Trigger calendar sync event logger
   const [syncLoading, setSyncLoading] = useState(false);
@@ -216,15 +225,20 @@ export const ScheduleCalendar: React.FC<{ filteredGroupId?: string; filteredCoac
       .filter(t => t.status !== 'completed')
       .map(t => {
         const rawDate = t.dueDate;
-        // Map 'Сегодня' or empty dates to today's date "2026-05-26"
-        let resolvedDate = (rawDate === 'Сегодня' || !rawDate) ? '2026-05-26' : rawDate;
+        const todayStr = new Date().toLocaleDateString('en-CA');
+        const tmrw = new Date();
+        tmrw.setDate(tmrw.getDate() + 1);
+        const tmrwStr = tmrw.toLocaleDateString('en-CA');
+
+        // Map 'Сегодня' or empty dates to today's date
+        let resolvedDate = (rawDate === 'Сегодня' || !rawDate) ? todayStr : rawDate;
         
-        // If the date is not in standard YYYY-MM-DD format (e.g. 'Завтра'), default to '2026-05-27'
+        // If the date is not in standard YYYY-MM-DD format (e.g. 'Завтра')
         if (resolvedDate && !/^\d{4}-\d{2}-\d{2}$/.test(resolvedDate)) {
           if (resolvedDate.toLowerCase().includes('завтра')) {
-            resolvedDate = '2026-05-27';
+            resolvedDate = tmrwStr;
           } else {
-            resolvedDate = '2026-05-26';
+            resolvedDate = todayStr;
           }
         }
 
@@ -289,7 +303,7 @@ export const ScheduleCalendar: React.FC<{ filteredGroupId?: string; filteredCoac
   };
 
   const handleToday = () => {
-    setCurrentDate(new Date(2026, 4, 24)); // Force back to may 2026 for showcase consistency
+    setCurrentDate(new Date());
   };
 
   // Build grid of days for the Month view
@@ -321,10 +335,11 @@ export const ScheduleCalendar: React.FC<{ filteredGroupId?: string; filteredCoac
       });
     }
 
+    const today = new Date();
     // Current month days
     for (let d = 1; d <= daysCount; d++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      const isToday = year === 2026 && month === 4 && d === 24; // Today is 2026-05-24
+      const isToday = year === today.getFullYear() && month === today.getMonth() && d === today.getDate();
 
       grid.push({
         dayNum: d,
@@ -358,11 +373,12 @@ export const ScheduleCalendar: React.FC<{ filteredGroupId?: string; filteredCoac
     const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
     startOfWeek.setDate(diff);
 
+    const today = new Date();
     for (let i = 0; i < 7; i++) {
       const d = new Date(startOfWeek);
       d.setDate(startOfWeek.getDate() + i);
       const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      const isToday = d.getFullYear() === 2026 && d.getMonth() === 4 && d.getDate() === 24;
+      const isToday = d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
       list.push({
         dayName: RU_WEEKDAYS[d.getDay()],
         dayNum: d.getDate(),
@@ -383,6 +399,7 @@ export const ScheduleCalendar: React.FC<{ filteredGroupId?: string; filteredCoac
     setNewEventTime('17:00');
     setNewEventType('regular');
     setNewEventLocation('Манеж Спартак');
+    setNewEventNotes('');
     setShowAddModal(true);
   };
 
@@ -408,8 +425,25 @@ export const ScheduleCalendar: React.FC<{ filteredGroupId?: string; filteredCoac
       coachId: newEventCoachId || cObj?.id || 'all',
       coachName: cObj?.name || 'Дежурный тренер',
       location: newEventLocation,
-      type: newEventType
+      type: newEventType,
+      notes: newEventNotes
     };
+
+    if (notificationTarget !== 'none') {
+      const targetRole: ('parent' | 'trainer' | 'manager' | 'director')[] = ['parent', 'trainer', 'manager'];
+      let bodyText = `Новое событие: ${generatedTitle} (${newEventDate} ${newEventTime}) в ${newEventLocation}`;
+      if (notificationTarget === 'group' && gObj) {
+        bodyText += `. Для группы ${gObj.name}.`;
+      }
+
+      addNotification({
+        title: 'Обновление расписания',
+        body: bodyText,
+        type: 'event',
+        targetRole,
+        targetGroupIds: notificationTarget === 'group' && gObj ? [gObj.id] : [],
+      });
+    }
 
     // If regular, we also offer option to add as repeating schedule day to Group config!
     if (newEventType === 'regular' && gObj) {
@@ -527,6 +561,8 @@ export const ScheduleCalendar: React.FC<{ filteredGroupId?: string; filteredCoac
   // Render event type label design helper
   const renderTypeBadge = (type: CustomEvent['type']) => {
     switch(type) {
+      case 'competition':
+        return <span className="px-2 py-0.5 bg-fuchsia-100 text-fuchsia-800 font-extrabold text-[9px] uppercase rounded border border-fuchsia-200">Соревнование</span>;
       case 'match':
         return <span className="px-2 py-0.5 bg-red-100 text-red-700 font-extrabold text-[9px] uppercase rounded border border-red-200">Матч турнира</span>;
       case 'masterclass':
@@ -838,6 +874,7 @@ export const ScheduleCalendar: React.FC<{ filteredGroupId?: string; filteredCoac
                         if (ev.type === 'match') bgTypeStyle = 'bg-red-50 text-red-800 border-red-150';
                         if (ev.type === 'masterclass') bgTypeStyle = 'bg-amber-50 text-amber-900 border-amber-200';
                         if (ev.type === 'meeting') bgTypeStyle = 'bg-indigo-50 text-indigo-900 border-indigo-150';
+                        if (ev.type === 'competition') bgTypeStyle = 'bg-fuchsia-50 text-fuchsia-900 border-fuchsia-200';
 
                         const isSelected = selectedEventIds.includes(ev.id);
 
@@ -966,11 +1003,13 @@ export const ScheduleCalendar: React.FC<{ filteredGroupId?: string; filteredCoac
                               className={`p-2.5 rounded-lg border text-left text-[10px] cursor-pointer hover:shadow-sm transition relative group/ev ${
                                 ev.type === 'match' 
                                   ? 'bg-red-50 hover:bg-red-105 text-red-900 border-red-200' 
-                                  : ev.type === 'masterclass'
-                                    ? 'bg-amber-50 hover:bg-amber-105 text-amber-900 border-amber-200'
-                                    : ev.type === 'meeting'
-                                      ? 'bg-indigo-50 hover:bg-indigo-105 text-indigo-900 border-indigo-200'
-                                      : 'bg-emerald-50 hover:bg-emerald-105 text-emerald-990 border-emerald-150'
+                                  : ev.type === 'competition'
+                                    ? 'bg-fuchsia-50 hover:bg-fuchsia-105 text-fuchsia-900 border-fuchsia-200'
+                                    : ev.type === 'masterclass'
+                                      ? 'bg-amber-50 hover:bg-amber-105 text-amber-900 border-amber-200'
+                                      : ev.type === 'meeting'
+                                        ? 'bg-indigo-50 hover:bg-indigo-105 text-indigo-900 border-indigo-200'
+                                        : 'bg-emerald-50 hover:bg-emerald-105 text-emerald-990 border-emerald-150'
                               } ${isDeleteModeActive && isSelected ? 'ring-2 ring-red-500 bg-red-100 border-red-350' : ''}`}
                             >
                               <div className="flex items-center justify-between font-mono font-bold text-[9px] text-slate-500 mb-1">
@@ -1039,7 +1078,8 @@ export const ScheduleCalendar: React.FC<{ filteredGroupId?: string; filteredCoac
                   .sort((a,b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))
                   .slice(0, 15)
                   .map((ev) => {
-                    const isToday = ev.date === '2026-05-24';
+                    const todayStr = new Date().toLocaleDateString('en-CA'); // gets YYYY-MM-DD in local time
+                    const isToday = ev.date === todayStr;
                     const isSelected = selectedEventIds.includes(ev.id);
                     return (
                       <div
@@ -1153,6 +1193,7 @@ export const ScheduleCalendar: React.FC<{ filteredGroupId?: string; filteredCoac
                     <option value="match">Официальный Матч</option>
                     <option value="masterclass">Платный Мастер-Класс</option>
                     <option value="meeting">Родительское собрание</option>
+                    <option value="competition">Соревнование / Турнир</option>
                   </select>
                 </div>
 
@@ -1233,6 +1274,32 @@ export const ScheduleCalendar: React.FC<{ filteredGroupId?: string; filteredCoac
                 </div>
               </div>
 
+              {newEventType === 'competition' && (
+                <div className="space-y-1 animate-in fade-in duration-100">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase font-mono block">Заметки / Инфо о соревновании (время сбора, детали)</label>
+                  <input
+                    type="text"
+                    placeholder="Напр. Сбор в 10:30 у входа, не забыть щитки"
+                    value={newEventNotes}
+                    onChange={(e) => setNewEventNotes(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-xl text-xs font-semibold focus:outline-none focus:border-red-600"
+                  />
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-500 uppercase font-mono block">Push-уведомление (FCM)</label>
+                <select
+                  value={notificationTarget}
+                  onChange={(e) => setNotificationTarget(e.target.value as any)}
+                  className="w-full px-2.5 py-1.8 border rounded-xl text-xs font-semibold bg-white focus:outline-none focus:border-red-600"
+                >
+                  <option value="none">Не отправлять уведомление</option>
+                  <option value="group">Уведомить детей выбранной группы</option>
+                  <option value="all">Уведомить всех (родители, тренеры, менеджеры)</option>
+                </select>
+              </div>
+
               {newEventType === 'regular' && (
                 <div className="p-3 bg-red-50/50 border border-red-100 rounded-xl space-y-1">
                   <span className="text-[9px] font-bold text-red-600 uppercase font-mono block">РЕКУРРЕНТНОЕ СОБЫТИЕ:</span>
@@ -1309,6 +1376,15 @@ export const ScheduleCalendar: React.FC<{ filteredGroupId?: string; filteredCoac
                   </div>
                 </div>
               </div>
+
+              {showEventDetailsModal.notes && (
+                <div className="p-3 bg-fuchsia-50/50 border border-fuchsia-100 rounded-xl space-y-1">
+                  <span className="text-[9px] font-bold text-fuchsia-800 uppercase font-mono block">ЗАМЕТКИ К СОБЫТИЮ:</span>
+                  <p className="text-[11px] text-fuchsia-900/80 leading-normal font-semibold">
+                    {showEventDetailsModal.notes}
+                  </p>
+                </div>
+              )}
 
               {calendarSyncEnabled && (
                 <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl flex items-center gap-2 text-[10px] text-slate-500">

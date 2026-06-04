@@ -133,6 +133,10 @@ service cloud.firestore {
       allow delete: if true;
     }
 
+    match /notifications/{notificationId} {
+      allow read, write: if true;
+    }
+
     match /systemUsers/{userId} {
       allow read, write: if true;
     }

@@ -13,6 +13,8 @@ export const AuthScreen: React.FC = () => {
   const [callSession, setCallSession] = useState<{ check_id: string; call_phone: string; call_phone_pretty: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkInterval, setCheckInterval] = useState<number | null>(null);
+  
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
 
   // Poll for status automatically when callSession exists
   useEffect(() => {
@@ -41,7 +43,7 @@ export const AuthScreen: React.FC = () => {
 
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!phone || phone.length < 10) return;
+    if (!phone || phone.length < 10 || !privacyAccepted) return;
     setIsSubmitting(true);
     try {
       const session = await sendPhoneCode(phone);
@@ -63,6 +65,14 @@ export const AuthScreen: React.FC = () => {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleGoogleLoginClick = () => {
+    if (!privacyAccepted) {
+      alert('Пожалуйста, примите политику конфиденциальности');
+      return;
+    }
+    loginWithGoogle();
   };
 
   if (loading) {
@@ -89,6 +99,19 @@ export const AuthScreen: React.FC = () => {
         </div>
 
         <div className="p-8 space-y-6">
+          <div className="flex items-start space-x-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
+            <input 
+              type="checkbox" 
+              id="privacy" 
+              checked={privacyAccepted}
+              onChange={(e) => setPrivacyAccepted(e.target.checked)}
+              className="mt-1 w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
+            />
+            <label htmlFor="privacy" className="text-[11px] text-slate-500 leading-tight">
+              Я выражаю свое согласие с <a href="/privacy" className="text-emerald-600 hover:text-emerald-700 underline font-medium" target="_blank" rel="noopener noreferrer">Политикой конфиденциальности</a> и даю согласие на обработку моих персональных данных.
+            </label>
+          </div>
+
           <AnimatePresence mode="wait">
             {!phoneMode ? (
               <motion.div 
@@ -99,8 +122,9 @@ export const AuthScreen: React.FC = () => {
                 className="space-y-4"
               >
                 <button
-                  onClick={loginWithGoogle}
-                  className="w-full flex items-center justify-center space-x-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 py-3.5 px-4 rounded-xl font-bold transition shadow-sm"
+                  onClick={handleGoogleLoginClick}
+                  disabled={!privacyAccepted}
+                  className="w-full flex items-center justify-center space-x-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 py-3.5 px-4 rounded-xl font-bold transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <svg className="w-5 h-5" viewBox="0 0 24 24">
                     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -119,7 +143,8 @@ export const AuthScreen: React.FC = () => {
 
                 <button
                   onClick={() => setPhoneMode(true)}
-                  className="w-full flex items-center justify-center space-x-3 bg-slate-900 border border-slate-900 hover:bg-slate-800 text-white py-3.5 px-4 rounded-xl font-bold transition shadow-sm"
+                  disabled={!privacyAccepted}
+                  className="w-full flex items-center justify-center space-x-3 bg-slate-900 border border-slate-900 hover:bg-slate-800 text-white py-3.5 px-4 rounded-xl font-bold transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Smartphone className="w-5 h-5 text-emerald-400" />
                   <span>По номеру телефона</span>
@@ -153,8 +178,8 @@ export const AuthScreen: React.FC = () => {
                     )}
                     <button
                       type="submit"
-                      disabled={isSubmitting || phone.length < 10}
-                      className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3.5 rounded-xl transition flex justify-center items-center disabled:opacity-50"
+                      disabled={isSubmitting || phone.length < 10 || !privacyAccepted}
+                      className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3.5 rounded-xl transition flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Авторизоваться звонком'}
                     </button>
@@ -211,6 +236,9 @@ export const AuthScreen: React.FC = () => {
           <span className="text-xs text-slate-500 font-medium tracking-wide">Защищенное соединение</span>
         </div>
       </motion.div>
+      <div className="mt-8 text-center">
+        <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-xs text-slate-400 hover:text-slate-300 transition-colors uppercase tracking-wider font-semibold">Политика конфиденциальности</a>
+      </div>
     </div>
   );
 };
