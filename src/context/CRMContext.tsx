@@ -627,7 +627,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const addClient = async (clientData: Omit<Client, 'id' | 'attendance' | 'payments' | 'progress' | 'achievements'>) => {
+  async function addClient(clientData: Omit<Client, 'id' | 'attendance' | 'payments' | 'progress' | 'achievements'>) {
     const clientId = `cl_${Date.now()}`;
     const newClient: Client = {
       ...clientData,
@@ -665,7 +665,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       body: `${newClient.childName} ${newClient.childSurname} добавлен в базу клиентов.`,
       type: 'system'
     });
-  };
+  }
 
   const updateLeadStatus = async (id: string, status: Lead['status']) => {
     setLeads(prev => prev.map(l => l.id === id ? { ...l, status } : l));
@@ -1189,7 +1189,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const addNotification = async (notifData: Omit<AppNotification, 'id' | 'isRead' | 'dateString'>) => {
+  async function addNotification(notifData: Omit<AppNotification, 'id' | 'isRead' | 'dateString'>) {
     const id = `notif_${Date.now()}`;
     const dateString = new Date().toISOString();
     const newNotif: AppNotification = {
@@ -1203,7 +1203,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setDoc(doc(db, 'notifications', id), newNotif).catch(err => {
       console.warn("Failed to sync new notification in Firestore:", err);
     });
-  };
+  }
 
   const markNotificationRead = async (id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
