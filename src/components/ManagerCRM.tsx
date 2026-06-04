@@ -305,7 +305,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
         source: newSource
       });
       alert('Новая входящая заявка успешно зарегистрирована во вкладке "Заявки" и добавлена в задачник руководителя и менеджера!');
-      setIsAddClientOpen(false);
+      setIsAddLeadOpen(false);
       // clean forms
       setNewParentName('');
       setNewChildName('');

@@ -10,6 +10,7 @@ export const JoinPage: React.FC = () => {
   const [parentPhone, setParentPhone] = useState('');
   const [childName, setChildName] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [paymentModalClientId, setPaymentModalClientId] = useState<string | null>(null);
 
   // Auto-open payment modal if navigated to /payment

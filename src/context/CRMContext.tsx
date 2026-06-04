@@ -662,8 +662,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     addNotification({
       title: 'Новый ученик!',
-      message: `${newClient.childName} ${newClient.childSurname} добавлен в базу клиентов.`,
-      type: 'info'
+      body: `${newClient.childName} ${newClient.childSurname} добавлен в базу клиентов.`,
+      type: 'system'
     });
   };
 
@@ -1783,7 +1783,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       calendarSyncEnabled, calendarSyncStatus, calendarSyncLog,
       currentRole, currentTab, setCurrentRole, setCurrentTab,
       firestoreError, dismissFirestoreError,
-      addLead, updateLeadStatus, bookTrial, completeTrialAndMarkAttendance,
+      addLead, addClient, updateLeadStatus, bookTrial, completeTrialAndMarkAttendance,
       sendPaymentLink, processPayment, uploadDocument, markAttendance, ratePlayer,
       completeTask, addTask,
       notifications, addNotification, markNotificationRead,
