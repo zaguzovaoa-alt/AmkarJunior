@@ -39,6 +39,7 @@ interface CRMContextType {
   
   // Actions
   addLead: (lead: Omit<Lead, 'id' | 'createdAt' | 'timeString' | 'status'>) => void;
+  addClient: (clientData: Omit<Client, 'id' | 'attendance' | 'payments' | 'progress' | 'achievements'>) => void;
   updateLeadStatus: (id: string, status: Lead['status']) => void;
   bookTrial: (leadId: string, coachId: string, groupName: string, date: string, time: string) => void;
   completeTrialAndMarkAttendance: (
@@ -584,11 +585,14 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const managerTaskId = `t_${Date.now()}_m`;
     const managerTask: CRMTask = {
       id: managerTaskId,
-      title: `Связаться по новой заявке: ${newLead.childSurname} ${newLead.childName}`,
+      title: `⚡ НОВАЯ ЗАЯВКА: ${newLead.childSurname} ${newLead.childName}`,
       assignedTo: 'manager',
       status: 'new',
       dueDate: 'Сегодня',
-      description: `Поступила новая заявка из канала [${newLead.source}]. Родитель: ${newLead.parentName}, Тел: ${newLead.parentPhone}`,
+      description: `🔥 Внимание! Поступила новая заявка из канала [${newLead.source}]. 
+Родитель: ${newLead.parentName}
+Телефон: ${newLead.parentPhone}
+🔔 НЕОБХОДИМО: Связаться в ближайшее время, уточнить детали и ЗАПИСАТЬ в расписание на пробную тренировку в подходящую возрастную группу!`,
       relatedLeadId: newLead.id
     };
 
@@ -621,6 +625,46 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ...prev
       ]);
     }
+  };
+
+  const addClient = async (clientData: Omit<Client, 'id' | 'attendance' | 'payments' | 'progress' | 'achievements'>) => {
+    const clientId = `cl_${Date.now()}`;
+    const newClient: Client = {
+      ...clientData,
+      id: clientId,
+      attendance: [],
+      payments: [],
+      progress: { technique: 4.0, tactics: 4.0, physical: 4.0, discipline: 4.0 },
+      achievements: []
+    };
+
+    setClients(prev => [...prev, newClient]);
+
+    const managerTaskId = `t_${Date.now()}_mc`;
+    const managerTask: CRMTask = {
+      id: managerTaskId,
+      title: `Новый ученик добавлен напрямую: ${newClient.childSurname} ${newClient.childName}`,
+      assignedTo: 'manager',
+      status: 'completed',
+      dueDate: 'Сегодня',
+      description: `Добавлен новый ученик ${newClient.childName} ${newClient.childSurname} напрямую в базу данных. Группа: ${newClient.groupName || 'Не указана'}.`,
+      relatedClientId: clientId
+    };
+
+    setTasks(prev => [managerTask, ...prev]);
+
+    setDoc(doc(db, 'clients', clientId), newClient).catch(err => {
+      console.warn("Failed to sync new client to Firestore:", err);
+    });
+    setDoc(doc(db, 'tasks', managerTaskId), managerTask).catch(err => {
+      console.warn("Failed to sync task to Firestore:", err);
+    });
+
+    addNotification({
+      title: 'Новый ученик!',
+      message: `${newClient.childName} ${newClient.childSurname} добавлен в базу клиентов.`,
+      type: 'info'
+    });
   };
 
   const updateLeadStatus = async (id: string, status: Lead['status']) => {

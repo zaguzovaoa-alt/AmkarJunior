@@ -121,8 +121,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await setDoc(docRef, newUser);
       setAppUser(newUser);
 
-    } catch (err) {
-      console.error("Error resolving AppUser:", err);
+    } catch (err: any) {
+      if (err.message?.includes('offline')) {
+        console.warn("Offline mode active. Using fallback AppUser.");
+      } else {
+        console.error("Error resolving AppUser:", err);
+      }
       setAppUser({
         uid: u.uid,
         email: u.email,

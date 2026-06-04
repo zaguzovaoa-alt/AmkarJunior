@@ -22,7 +22,7 @@ interface ManagerCRMProps {
 
 export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab, onOpenPayment }) => {
   const { 
-    clients, leads, tasks, addLead, bookTrial, sendPaymentLink, addTask, completeTask, 
+    clients, leads, tasks, addLead, addClient, bookTrial, sendPaymentLink, addTask, completeTask, 
     deleteClient, deleteLead, updateClientNotes, updateClient, schoolName, groups, assignClientToGroup,
     crmConfig,
     messages,
@@ -48,13 +48,25 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
 
   // Client form modal state
   const [selectedClientIds, setSelectedClientIds] = useState<Set<string>>(new Set());
-  const [isAddClientOpen, setIsAddClientOpen] = useState(false);
+  const [isAddLeadOpen, setIsAddLeadOpen] = useState(false);
+  const [isAddDirectClientOpen, setIsAddDirectClientOpen] = useState(false);
   const [newParentName, setNewParentName] = useState('');
   const [newChildName, setNewChildName] = useState('');
   const [newChildSurname, setNewChildSurname] = useState('');
   const [newChildBirthDate, setNewChildBirthDate] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newSource, setNewSource] = useState<'MAX' | 'telegram' | 'vk' | 'листовка' | 'рекомендация'>('MAX');
+
+  // Direct Client Form States
+  const [newDirectParentName, setNewDirectParentName] = useState('');
+  const [newDirectChildName, setNewDirectChildName] = useState('');
+  const [newDirectChildSurname, setNewDirectChildSurname] = useState('');
+  const [newDirectChildBirthDate, setNewDirectChildBirthDate] = useState('');
+  const [newDirectPhone, setNewDirectPhone] = useState('');
+  const [newDirectEmail, setNewDirectEmail] = useState('');
+  const [newDirectGroup, setNewDirectGroup] = useState('');
+  const [newDirectStatus, setNewDirectStatus] = useState<Client['status']>('active');
+  const [newDirectAbonement, setNewDirectAbonement] = useState<Client['abonement']>('none');
 
   // Edit Client modal state
   const [isEditClientOpen, setIsEditClientOpen] = useState(false);
@@ -304,6 +316,42 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
     }
   };
 
+  const handleAddNewDirectClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDirectParentName || !newDirectChildName || !newDirectChildSurname) return;
+    try {
+      await addClient({
+        parentName: newDirectParentName,
+        parentPhone: newDirectPhone || '+7 (000) 000-00-00',
+        parentEmail: newDirectEmail || undefined,
+        childName: newDirectChildName,
+        childSurname: newDirectChildSurname,
+        childBirthDate: newDirectChildBirthDate || undefined,
+        childBirthYear: newDirectChildBirthDate ? parseInt(newDirectChildBirthDate.split('-')[0]) : new Date().getFullYear(),
+        childAge: calculateAge(newDirectChildBirthDate, new Date().getFullYear()),
+        status: newDirectStatus,
+        abonement: newDirectAbonement,
+        abonementStatus: newDirectAbonement !== 'none' ? 'Ожидает оплаты' : 'Не требуется',
+        abonementSessionsLeft: newDirectAbonement === '1_session' ? 1 : newDirectAbonement === '4_sessions' ? 4 : newDirectAbonement === '8_sessions' ? 8 : newDirectAbonement === '12_sessions' ? 12 : 0,
+        abonementTotalSessions: newDirectAbonement === '1_session' ? 1 : newDirectAbonement === '4_sessions' ? 4 : newDirectAbonement === '8_sessions' ? 8 : newDirectAbonement === '12_sessions' ? 12 : 0,
+        groupName: newDirectGroup || undefined,
+        managerBonusAccrued: 0,
+        notes: 'Добавлен менеджером вручную из CRM'
+      });
+      alert('Новый ученик успешно добавлен!');
+      setIsAddDirectClientOpen(false);
+      // clean forms
+      setNewDirectParentName('');
+      setNewDirectChildName('');
+      setNewDirectChildSurname('');
+      setNewDirectPhone('');
+      setNewDirectEmail('');
+      setNewDirectGroup('');
+    } catch (err: any) {
+      alert('Ошибка при добавлении ученика: ' + (err.message || String(err)));
+    }
+  };
+
   const handleBookTrialFromLead = (lead: Lead) => {
     const defaultCoach = 'c1'; // Andrey Petrov
     const defaultGroup = availableGroups[0] || 'Без группы';
@@ -364,7 +412,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
 
         <div className="flex items-center space-x-3">
           <button 
-            onClick={() => setIsAddClientOpen(true)}
+            onClick={() => setIsAddLeadOpen(true)}
             className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-xs transition flex items-center space-x-2 shadow-lg shadow-emerald-100"
           >
             <UserPlus className="w-4 h-4" />
@@ -528,7 +576,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                   <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Поиск клиента..." className="pl-9 pr-4 py-2 bg-gray-50 hover:bg-gray-100 rounded-full text-xs font-medium border-none focus:ring-0 outline-none w-56 transition-colors text-gray-700" />
                 </div>
                 <button 
-                  onClick={() => setIsAddClientOpen(true)}
+                  onClick={() => setIsAddDirectClientOpen(true)}
                   className="bg-black hover:bg-gray-800 text-white px-5 py-2 rounded-full text-xs font-bold transition-all shadow-md shadow-gray-200 whitespace-nowrap"
                 >
                   <span className="-ml-1 mr-1.5">+</span> Добавить клиента
@@ -1754,8 +1802,8 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
 
       </div>
 
-      {/* Add Client (Lead) modal drawer dialog */}
-      {isAddClientOpen && (
+      {/* Add Lead modal drawer dialog */}
+      {isAddLeadOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 z-50">
           <div className="bg-white rounded-3xl w-full max-w-md max-h-full flex flex-col overflow-hidden border shadow-xl">
             <div className="p-5 bg-slate-900 text-white flex justify-between items-center text-left shrink-0">
@@ -1763,7 +1811,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                 <h3 className="font-extrabold text-white text-sm">Создание новой входящей заявки</h3>
                 <p className="text-[10px] text-gray-400 mt-0.5">Ручной ввод лида при входящем звонке / визите.</p>
               </div>
-              <button onClick={() => setIsAddClientOpen(false)} className="text-white hover:text-slate-300 font-bold p-1">✕</button>
+              <button onClick={() => setIsAddLeadOpen(false)} className="text-white hover:text-slate-300 font-bold p-1">✕</button>
             </div>
 
             <form onSubmit={handleAddNewLead} className="p-5 sm:p-6 space-y-4 text-left font-sans text-xs overflow-y-auto">
@@ -1810,7 +1858,91 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
 
               <div className="flex space-x-3 pt-4 border-t">
                 <button type="submit" className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-xs transition">Зарегистрировать лид</button>
-                <button type="button" onClick={() => setIsAddClientOpen(false)} className="flex-1 py-3 bg-slate-200 text-slate-700 rounded-xl">Отмена</button>
+                <button type="button" onClick={() => setIsAddLeadOpen(false)} className="flex-1 py-3 bg-slate-200 text-slate-700 rounded-xl">Отмена</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Direct Client modal drawer dialog */}
+      {isAddDirectClientOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 z-50">
+          <div className="bg-white rounded-3xl w-full max-w-lg max-h-full flex flex-col overflow-hidden border shadow-xl">
+            <div className="p-5 bg-black text-white flex justify-between items-center text-left shrink-0">
+              <div>
+                <h3 className="font-extrabold text-white text-sm">Добавление нового ученика (Прямой ввод)</h3>
+                <p className="text-[10px] text-gray-400 mt-0.5">Полное заполнение профиля без этапа пробной тренировки.</p>
+              </div>
+              <button onClick={() => setIsAddDirectClientOpen(false)} className="text-white hover:text-slate-300 font-bold p-1">✕</button>
+            </div>
+
+            <form onSubmit={handleAddNewDirectClient} className="p-5 sm:p-6 space-y-4 text-left font-sans text-xs overflow-y-auto">
+              <div className="grid grid-cols-2 gap-3.5">
+                <div className="space-y-1">
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Имя мальчика *</label>
+                  <input required type="text" placeholder="Максим" className="w-full p-2.5 bg-slate-50 border rounded-xl" value={newDirectChildName} onChange={(e) => setNewDirectChildName(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Фамилия мальчика *</label>
+                  <input required type="text" placeholder="Иванов" className="w-full p-2.5 bg-slate-50 border rounded-xl" value={newDirectChildSurname} onChange={(e) => setNewDirectChildSurname(e.target.value)} />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-gray-500 font-semibold uppercase tracking-wider">Дата рождения мальчика *</label>
+                <input required type="date" className="w-full p-2.5 bg-slate-50 border rounded-xl font-mono" value={newDirectChildBirthDate} onChange={(e) => setNewDirectChildBirthDate(e.target.value)} />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-gray-500 font-semibold uppercase tracking-wider">ФИО Родителя *</label>
+                <input required type="text" placeholder="Иванова Мария" className="w-full p-2.5 bg-slate-50 border rounded-xl" value={newDirectParentName} onChange={(e) => setNewDirectParentName(e.target.value)} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3.5">
+                <div className="space-y-1">
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Телефон *</label>
+                  <input required type="text" placeholder="+7 (___) ___-__-__" className="w-full p-2.5 bg-slate-50 font-mono border rounded-xl" value={newDirectPhone} onChange={(e) => setNewDirectPhone(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Email</label>
+                  <input type="email" placeholder="mail@example.com" className="w-full p-2.5 bg-slate-50 font-mono border rounded-xl" value={newDirectEmail} onChange={(e) => setNewDirectEmail(e.target.value)} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3.5">
+                <div className="space-y-1">
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Группа</label>
+                  <select className="w-full p-2.5 bg-slate-50 border rounded-xl" value={newDirectGroup} onChange={(e) => setNewDirectGroup(e.target.value)}>
+                    <option value="">-- Выберите группу --</option>
+                    {availableGroups.map(g => (
+                      <option key={g} value={g}>{g}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Статус</label>
+                  <select className="w-full p-2.5 bg-slate-50 border rounded-xl" value={newDirectStatus} onChange={(e: any) => setNewDirectStatus(e.target.value)}>
+                    <option value="active">Активен</option>
+                    <option value="inactive">Неактивен</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-gray-500 font-semibold uppercase tracking-wider">Абонемент</label>
+                <select className="w-full p-2.5 bg-slate-50 border rounded-xl" value={newDirectAbonement} onChange={(e: any) => setNewDirectAbonement(e.target.value)}>
+                  <option value="none">Без абонемента</option>
+                  <option value="12_sessions">12 занятий</option>
+                  <option value="8_sessions">8 занятий</option>
+                  <option value="4_sessions">4 занятия</option>
+                  <option value="1_session">Разовое</option>
+                </select>
+              </div>
+
+              <div className="flex space-x-3 pt-4 border-t">
+                <button type="submit" className="flex-1 py-3 bg-black hover:bg-gray-800 text-white font-bold rounded-xl text-xs transition">Добавить ученика</button>
+                <button type="button" onClick={() => setIsAddDirectClientOpen(false)} className="flex-1 py-3 bg-slate-200 text-slate-700 rounded-xl">Отмена</button>
               </div>
             </form>
           </div>
