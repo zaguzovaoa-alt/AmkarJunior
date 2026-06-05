@@ -277,19 +277,19 @@ export const FinanceModule: React.FC = () => {
               </div>
 
               {/* Pie Chart */}
-              <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-                 <h3 className="font-bold text-slate-900 text-sm mb-4">Структура расходов <span className="text-gray-400 font-normal">({currentMonthStr})</span></h3>
+              <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col">
+                 <h3 className="font-bold text-slate-900 text-sm mb-4 shrink-0">Структура расходов <span className="text-gray-400 font-normal">({currentMonthStr})</span></h3>
                  {dashboardData.pieData.length > 0 ? (
-                   <div className="flex flex-col md:flex-row items-center justify-between">
-                     <div className="w-48 h-48 relative">
+                   <div className="flex flex-col md:flex-row lg:flex-col xl:flex-row items-center justify-center gap-6 flex-1">
+                     <div className="w-48 h-48 sm:w-56 sm:h-56 relative mx-auto shrink-0">
                         <ResponsiveContainer width="100%" height="100%">
-                          <RePieChart>
+                          <RePieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                             <Pie
                               data={dashboardData.pieData}
                               cx="50%"
                               cy="50%"
-                              innerRadius={50}
-                              outerRadius={80}
+                              innerRadius="65%"
+                              outerRadius="90%"
                               paddingAngle={2}
                               dataKey="value"
                               stroke="none"
@@ -298,24 +298,27 @@ export const FinanceModule: React.FC = () => {
                                 <Cell key={`cell-${index}`} fill={entry.color} />
                               ))}
                             </Pie>
-                            <Tooltip formatter={(value: number) => `${value.toLocaleString()} ₽`} />
+                            <Tooltip 
+                              contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)' }}
+                              formatter={(value: number) => [`${value.toLocaleString()} ₽`]} 
+                            />
                           </RePieChart>
                         </ResponsiveContainer>
                         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                          <span className="text-lg font-black text-slate-900">{dashboardData.mExpenses.toLocaleString()} ₽</span>
-                          <span className="text-[9px] text-gray-500 uppercase tracking-widest font-bold">Всего</span>
+                          <span className="text-lg sm:text-xl font-black text-slate-900 mb-0.5 sm:mb-1">{dashboardData.mExpenses.toLocaleString()} ₽</span>
+                          <span className="text-[9px] sm:text-[10px] text-gray-500 uppercase tracking-widest font-bold">Всего</span>
                         </div>
                      </div>
-                     <div className="flex-1 mt-4 md:mt-0 md:ml-4 w-full">
+                     <div className="flex-1 w-full min-w-0">
                        <ul className="space-y-3">
                          {dashboardData.pieData.slice(0,5).map((item, id) => (
                             <li key={id} className="flex justify-between items-center text-xs">
-                              <div className="flex items-center">
-                                <span className="w-2.5 h-2.5 rounded-full mr-2" style={{backgroundColor: item.color}}></span>
-                                <span className="text-gray-600 font-medium truncate max-w-[100px]">{item.name}</span>
+                              <div className="flex items-center min-w-0 pr-3">
+                                <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full mr-2 sm:mr-3 shadow-sm shrink-0" style={{backgroundColor: item.color}}></span>
+                                <span className="text-slate-600 font-medium truncate">{item.name}</span>
                               </div>
-                              <div className="text-slate-800 font-bold ml-2">
-                                {item.value.toLocaleString()} <span className="text-[10px] text-gray-400 font-normal">({Math.round((item.value/dashboardData.mExpenses)*100)}%)</span>
+                              <div className="text-slate-800 font-bold text-xs shrink-0 whitespace-nowrap">
+                                {item.value.toLocaleString()} ₽ <span className="text-[9px] sm:text-[10px] text-gray-400 font-medium ml-1">({Math.round((item.value/dashboardData.mExpenses)*100)}%)</span>
                               </div>
                             </li>
                          ))}

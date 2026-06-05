@@ -747,7 +747,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
                       },
                       {
                         name: 'Дриблинг и пас',
-                        url: 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=400&auto=format&fit=crop&q=60'
+                        url: 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=400&auto=format&fit=crop&q=60'
                       },
                       {
                         name: 'Удары по воротам',

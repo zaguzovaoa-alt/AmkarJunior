@@ -9,6 +9,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import amkarUniform from '../assets/images/amkar_uniform.jpg';
 import { isBirthdayToday } from '../utils/dateUtils';
+import { PaymentModal } from './PaymentModal';
 
 interface ParentPortalProps {
   activeTab: string;
@@ -37,10 +38,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
   const myClient = Object.assign({}, myClientRaw || {});
   const [selectedArticle, setSelectedArticle] = useState<any | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
-
-  if (!myClient || !myClient.id) {
-    return <div className="p-8 text-center bg-gray-50 text-gray-400">Загрузка данных личного кабинета...</div>;
-  }
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
   const myGroup = groups.find(g => g.name === myClient.groupName);
   const mySelectTeams = groups.filter(g => g.isSelectTeam && g.selectedClientIds?.includes(myClient.id));
@@ -255,6 +253,10 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
     }
   ];
 
+  if (!myClient || !myClient.id) {
+    return <div className="p-8 text-center bg-gray-50 text-gray-400">Загрузка данных личного кабинета...</div>;
+  }
+
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50 text-gray-800 min-h-screen relative">
       <AnimatePresence>
@@ -368,7 +370,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
                     </div>
                   </div>
                   <button 
-                    onClick={() => setActiveTab('parent_finances')}
+                    onClick={() => setIsPaymentModalOpen(true)}
                     className="bg-red-600 hover:bg-red-700 text-white px-5 py-2 text-xs font-bold rounded-lg shadow-md transition-all active:scale-95 flex-shrink-0 whitespace-nowrap"
                   >
                     Продлить абонемент
@@ -931,6 +933,13 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
             >
               <div className="flex justify-between items-center border-b pb-4">
                 <h3 className="text-lg font-bold text-slate-900">Детализированная история транзакций</h3>
+                <button 
+                  onClick={() => setIsPaymentModalOpen(true)}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 text-xs font-bold rounded-lg shadow-sm transition flex items-center space-x-2"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>Оплатить абонемент</span>
+                </button>
               </div>
 
               <div className="space-y-3">
@@ -1259,6 +1268,14 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
 
         </AnimatePresence>
       </div>
+
+      {isPaymentModalOpen && (
+        <PaymentModal 
+          isOpen={true} 
+          onClose={() => setIsPaymentModalOpen(false)} 
+          clientId={myClient.id} 
+        />
+      )}
     </div>
   );
 };

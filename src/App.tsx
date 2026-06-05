@@ -18,9 +18,12 @@ import { Shield, RefreshCw } from 'lucide-react';
 import firebaseConfig from '../firebase-applet-config.json';
 
 
+import { PaymentModal } from './components/PaymentModal';
+
 function DashboardContainer() {
   const { currentRole, currentTab, setCurrentTab, setCurrentRole, firestoreError, dismissFirestoreError } = useCRM();
   const [showInstructions, setShowInstructions] = useState(false);
+  const [paymentModalClientId, setPaymentModalClientId] = useState<string | null>(null);
 
   // Helper renderer for active role-specific view layout
   const renderRoleComponent = () => {
@@ -299,7 +302,14 @@ service cloud.firestore {
           </footer>
         </div>
       </div>
-
+      
+      {paymentModalClientId && (
+        <PaymentModal 
+          isOpen={true} 
+          onClose={() => setPaymentModalClientId(null)} 
+          clientId={paymentModalClientId} 
+        />
+      )}
     </div>
   );
 }

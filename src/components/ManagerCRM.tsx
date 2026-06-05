@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useCRM } from '../context/CRMContext';
+import { useAuth } from '../context/AuthContext';
 import { 
   Users, Search, UserPlus, Filter, Mail, Phone, Calendar, 
   Trash2, CreditCard, ChevronRight, Edit2, Check, AlertCircle, Sparkles, MessageSquare, Save,
@@ -9,7 +10,6 @@ import {
 import { Client, Lead, ClientStatus, CRMTask } from '../types';
 import { calculateAge, isBirthdayToday } from '../utils/dateUtils';
 import { compressImage } from '../utils/image';
-import { PaymentLinkModal } from './PaymentLinkModal';
 import { ConfirmModal } from './ConfirmModal';
 import { BirthdaysBanner } from './BirthdaysBanner';
 
@@ -20,6 +20,7 @@ interface ManagerCRMProps {
 
 
 export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab }) => {
+  const { logout } = useAuth();
   const { 
     clients, leads, tasks, addLead, addClient, bookTrial, addTask, completeTask, 
     deleteClient, deleteLead, updateClientNotes, updateClient, schoolName, groups, assignClientToGroup,
@@ -356,8 +357,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab 
   };
 
   const handleSendBilling = (client: Client, packageTitle: string, amount: number) => {
-    sendPaymentLink(client.id, amount, packageTitle);
-    alert(`Ссылка на оплату тарифа "${packageTitle}" (${amount} руб) сформирована через ЮKassa и отправлена родителю ${client.parentName} в Личный кабинет!`);
+    alert(`Ссылка на оплату тарифа "${packageTitle}" (${amount} руб) сформирована через YooKassa и отправлена родителю ${client.parentName} в Личный кабинет!`);
   };
 
   // Filter clients logically
@@ -632,7 +632,12 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab 
                          <span>Разграничение прав</span>
                       </div>
                       <div className="border-t my-1"></div>
-                      <div className="px-4 py-2 hover:bg-red-50 hover:text-red-600 cursor-pointer text-sm font-bold text-rose-600">Выйти</div>
+                      <div 
+                        className="px-4 py-2 hover:bg-red-50 hover:text-red-600 cursor-pointer text-sm font-bold text-rose-600"
+                        onClick={logout}
+                      >
+                        Выйти
+                      </div>
                     </div>
                   )}
                 </div>
