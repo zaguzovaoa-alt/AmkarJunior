@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db } from '../firebase';
 import { onAuthStateChanged, User, GoogleAuthProvider, signInWithPopup, signInAnonymously, signOut } from 'firebase/auth';
-import { collection, query, where, getDocs, setDoc, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, setDoc, doc, getDoc, deleteDoc } from 'firebase/firestore';
 
-export type UserRole = 'director' | 'manager' | 'trainer' | 'parent';
+export type UserRole = 'admin' | 'director' | 'manager' | 'trainer' | 'parent';
 
 export interface AppUser {
   uid: string;
@@ -13,6 +13,7 @@ export interface AppUser {
   role: UserRole;
   createdAt: number;
 }
+
 
 interface AuthContextType {
   user: User | null;
@@ -61,8 +62,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (docSnap.exists()) {
         const data = docSnap.data() as AppUser;
-        if ((data.email === 'zaguzovsv@gmail.com' || u.email === 'zaguzovsv@gmail.com') && data.role !== 'director') {
-          data.role = 'director';
+        const isAdmin = data.email === 'zaguzovsv@gmail.com' || u.email === 'zaguzovsv@gmail.com' || data.phone === '+79825885477' || optionalPhone === '+79825885477' || u.phoneNumber === '+79825885477';
+        
+        if (isAdmin && data.role !== 'admin') {
+          data.role = 'admin';
           await setDoc(docRef, data, { merge: true });
         }
         // Sync anonymous user phone
@@ -82,8 +85,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!emailDocs.empty) {
           const matchedDoc = emailDocs.docs[0];
           const userData = matchedDoc.data() as AppUser;
+          const isAdmin = userData.email === 'zaguzovsv@gmail.com' || u.email === 'zaguzovsv@gmail.com' || userData.phone === '+79825885477' || optionalPhone === '+79825885477' || u.phoneNumber === '+79825885477';
+          
+          if (isAdmin) userData.role = 'admin';
+          
           const newAppUser = { ...userData, uid: u.uid };
           await setDoc(docRef, newAppUser);
+          
+          if (matchedDoc.id !== u.uid) {
+             await deleteDoc(doc(db, 'systemUsers', matchedDoc.id));
+          }
+          
           setAppUser(newAppUser);
           foundUser = true;
           return;
@@ -97,8 +109,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!phoneDocs.empty) {
           const matchedDoc = phoneDocs.docs[0];
           const userData = matchedDoc.data() as AppUser;
+          const isAdmin = userData.email === 'zaguzovsv@gmail.com' || u.email === 'zaguzovsv@gmail.com' || userData.phone === '+79825885477' || optionalPhone === '+79825885477' || u.phoneNumber === '+79825885477';
+          
+          if (isAdmin) userData.role = 'admin';
+                    
           const newAppUser = { ...userData, uid: u.uid };
           await setDoc(docRef, newAppUser);
+          
+          if (matchedDoc.id !== u.uid) {
+             await deleteDoc(doc(db, 'systemUsers', matchedDoc.id));
+          }
+          
           setAppUser(newAppUser);
           foundUser = true;
           return;
@@ -107,14 +128,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const allUsersSnap = await getDocs(query(collection(db, 'systemUsers')));
       const isFirst = allUsersSnap.empty;
-      const isDirectorEmail = u.email === 'zaguzovsv@gmail.com';
+      const isAdminEmailOrPhone = u.email === 'zaguzovsv@gmail.com' || activePhone === '+79825885477';
 
       const newUser: AppUser = {
         uid: u.uid,
         email: u.email,
         phone: activePhone || null,
         fullName: u.displayName || (activePhone ? `Пользователь ${activePhone}` : "Новый Пользователь"),
-        role: (isFirst || isDirectorEmail) ? 'director' : 'parent',
+        role: isAdminEmailOrPhone ? 'admin' : (isFirst ? 'director' : 'parent'),
         createdAt: Date.now()
       };
 
@@ -132,7 +153,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email: u.email,
         phone: u.phoneNumber || optionalPhone,
         fullName: u.displayName || "Посетитель (Без БД)",
-        role: 'director', 
+        role: (u.email === 'zaguzovsv@gmail.com' || (u.phoneNumber || optionalPhone) === '+79825885477') ? 'admin' : 'director', 
         createdAt: Date.now()
       });
     }

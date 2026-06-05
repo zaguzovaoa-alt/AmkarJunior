@@ -204,21 +204,21 @@ export interface CRMConfig {
 
 export interface ChatMessage {
   id: string;
-  senderRole: 'manager' | 'trainer' | 'parent' | 'director';
+  senderRole: 'manager' | 'trainer' | 'parent' | 'director' | 'admin';
   senderName: string;
   text: string;
   timestamp: string; // HH:MM or ISO
   fileUrl?: string;
   fileName?: string;
   fileType?: 'image' | 'document';
-  visibleTo?: ('manager' | 'trainer' | 'parent' | 'director')[];
+  visibleTo?: ('manager' | 'trainer' | 'parent' | 'director' | 'admin')[];
 }
 
 export interface AppNotification {
   id: string;
   title: string;
   body: string;
-  targetRole?: ('manager' | 'trainer' | 'parent' | 'director')[];
+  targetRole?: ('manager' | 'trainer' | 'parent' | 'director' | 'admin')[];
   targetGroupIds?: string[]; // if empty, applies to all
   dateString: string;
   isRead: boolean;

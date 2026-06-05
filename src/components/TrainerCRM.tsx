@@ -10,7 +10,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { compressImage } from '../utils/image';
 import { calculateAge } from '../utils/dateUtils';
 import { BirthdaysBanner } from './BirthdaysBanner';
-import { PaymentLinkModal } from './PaymentLinkModal';
 import { parseScheduleString } from '../utils/scheduleParser';
 import { TrainingGroup } from '../types';
 
@@ -28,9 +27,6 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
     c.name.toLowerCase() === appUser?.fullName?.toLowerCase() ||
     (c.phone && appUser?.phone && c.phone === appUser?.phone)
   ) || coaches[0] || { id: 'c1', name: 'Пьянченко Василий Витальевич', role: 'Старший тренер' };
-  
-  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
-  const [paymentModalData, setPaymentModalData] = useState<{clientId: string, clientName: string} | null>(null);
 
   // Local states for interactive things
   const [selectedGroupForAttendance, setSelectedGroupForAttendance] = useState<string | null>(null);
@@ -47,7 +43,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
   const [disciplineRating, setDisciplineRating] = useState(4.5);
 
   const [chatInput, setChatInput] = useState('');
-  const [chatVisibility, setChatVisibility] = useState<('manager' | 'trainer' | 'parent' | 'director')[]>(['manager', 'director', 'trainer']);
+  const [chatVisibility, setChatVisibility] = useState<('manager' | 'trainer' | 'parent' | 'director' | 'admin')[]>(['manager', 'director', 'trainer', 'admin']);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editMessageText, setEditMessageText] = useState('');
 
@@ -100,7 +96,8 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
     if (!chatInput.trim()) return;
     
     let senderName = `Тренер ${myCoach.name}`;
-    if (currentRole === 'director') senderName = userProfile.name ? `Директор ${userProfile.name}` : 'Директор';
+    if (currentRole === 'admin') senderName = userProfile.name ? `Администратор ${userProfile.name}` : 'Администратор';
+    else if (currentRole === 'director') senderName = userProfile.name ? `Директор ${userProfile.name}` : 'Директор';
     else if (currentRole === 'manager') senderName = userProfile.name ? `Менеджер ${userProfile.name}` : 'Менеджер';
 
     addChatMessage({
@@ -1003,17 +1000,6 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
                     </div>
                     
                     <div className="flex items-center space-x-2">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPaymentModalData({ clientId: player.id, clientName: `${player.childSurname} ${player.childName}` });
-                            setPaymentModalOpen(true);
-                          }}
-                          className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white border border-emerald-200 rounded font-bold text-[10px] transition"
-                          title="Отправить ссылку на оплату"
-                        >
-                          <CreditCard className="w-3.5 h-3.5" />
-                        </button>
                         <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
                     </div>
                   </div>
@@ -1459,15 +1445,6 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
         )}
 
       </div>
-
-      {paymentModalData && (
-        <PaymentLinkModal
-          isOpen={paymentModalOpen}
-          onClose={() => setPaymentModalOpen(false)}
-          clientId={paymentModalData.clientId}
-          clientName={paymentModalData.clientName}
-        />
-      )}
     </div>
   );
 };

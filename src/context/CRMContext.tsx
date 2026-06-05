@@ -30,9 +30,9 @@ interface CRMContextType {
   calendarSyncEnabled: boolean;
   calendarSyncStatus: 'connected' | 'disconnected' | 'syncing';
   calendarSyncLog: string[];
-  currentRole: 'manager' | 'trainer' | 'parent' | 'director';
+  currentRole: 'manager' | 'trainer' | 'parent' | 'director' | 'admin';
   currentTab: string;
-  setCurrentRole: (role: 'manager' | 'trainer' | 'parent' | 'director') => void;
+  setCurrentRole: (role: 'manager' | 'trainer' | 'parent' | 'director' | 'admin') => void;
   setCurrentTab: (tab: string) => void;
   firestoreError: string | null;
   dismissFirestoreError: () => void;
@@ -50,8 +50,6 @@ interface CRMContextType {
     coachName: string,
     fileAttached?: string
   ) => void;
-  sendPaymentLink: (clientId: string, amount: number, title: string) => void;
-  processPayment: (clientId: string, tariff: '12_sessions' | '8_sessions' | '4_sessions' | '1_session', amount: number) => void;
   uploadDocument: (clientId: string, type: 'medical' | 'insurance', fileName: string) => void;
   markAttendance: (groupId: string, date: string, records: { clientId: string; status: 'present' | 'absent_sick' | 'absent'; reason?: string }[], mediaFile?: string, notes?: string) => void;
   ratePlayer: (clientId: string, metrics: { technique: number; tactics: number; physical: number; discipline: number }) => void;
@@ -180,9 +178,9 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     ];
   });
 
-  const [currentRole, setCurrentRoleState] = useState<'manager' | 'trainer' | 'parent' | 'director'>(() => {
+  const [currentRole, setCurrentRoleState] = useState<'manager' | 'trainer' | 'parent' | 'director' | 'admin'>(() => {
     const cached = localStorage.getItem('amkar_current_role');
-    return (cached as 'manager' | 'trainer' | 'parent' | 'director') || 'director';
+    return (cached as 'manager' | 'trainer' | 'parent' | 'director' | 'admin') || 'director';
   });
 
   const [currentTab, setCurrentTabState] = useState<string>(() => {
@@ -288,7 +286,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const setCurrentRole = (role: 'manager' | 'trainer' | 'parent' | 'director') => {
+  const setCurrentRole = (role: 'manager' | 'trainer' | 'parent' | 'director' | 'admin') => {
     setCurrentRoleState(role);
     localStorage.setItem('amkar_current_role', role);
     let defaultTab = 'hq_home';
@@ -776,201 +774,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setDoc(doc(db, 'tasks', directorTaskId), directorTask).catch(err => {
       console.warn("Failed to sync director task in Firestore:", err);
     });
-  };
-
-  const sendPaymentLink = async (clientId: string, amount: number, title: string) => {
-    const taskId = `t_${Date.now()}_paylink`;
-    const task: CRMTask = {
-      id: taskId,
-      title: `Отправлена ссылка на оплату ЮКасса в ЛК родителя`,
-      assignedTo: 'manager',
-      status: 'completed',
-      dueDate: 'Сегодня',
-      description: `Ссылка для оплаты тарифа (${title} - ${amount} руб.) отправлена в личный кабинет и SMS.`,
-      relatedClientId: clientId
-    };
-    setTasks(prev => [task, ...prev]);
-    setDoc(doc(db, 'tasks', taskId), task).catch(err => {
-      console.warn("Failed to log payment link in Firestore, kept locally:", err);
-    });
-  };
-
-  const processPayment = async (clientId: string, tariff: '12_sessions' | '8_sessions' | '4_sessions' | '1_session', amount: number) => {
-    let client = clients.find(c => c.id === clientId);
-    let lead = leads.find(l => l.id === clientId);
-    if (!client && !lead) return;
-
-    let textTariff = '';
-    let sessions = 0;
-    switch (tariff) {
-      case '12_sessions': textTariff = 'Абонемент на 12 занятий'; sessions = 12; break;
-      case '8_sessions': textTariff = 'Абонемент на 8 занятий'; sessions = 8; break;
-      case '4_sessions': textTariff = 'Абонемент на 4 занятия'; sessions = 4; break;
-      case '1_session': textTariff = 'Разовая тренировка'; sessions = 1; break;
-    }
-
-    const todayString = new Date().toISOString().substring(0, 10);
-    const targetMonth = todayString.substring(0, 7);
-    const financeId = `f_${Date.now()}`;
-    const newPayment: Payment = {
-      id: `p_${Date.now()}`,
-      date: todayString,
-      amount: amount,
-      item: textTariff,
-      status: 'Оплачено'
-    };
-
-    const newFinance: FinanceRecord = {
-      id: financeId,
-      type: 'income',
-      category: 'Абонементы',
-      amount: amount,
-      date: todayString,
-      description: `Успешная оплата ЮKassa: ${textTariff} от пользователя ID ${clientId}`,
-      targetMonth
-    };
-
-    const acquiringExpenseId = `f_${Date.now()}_acq`;
-    const acquiringFee = Math.round(amount * (crmConfig.acquiringFeePct / 100));
-    const acquiringFinance: FinanceRecord = {
-      id: acquiringExpenseId,
-      type: 'expense',
-      category: 'Эквайринг (Комиссия ЮKassa)',
-      amount: acquiringFee,
-      date: todayString,
-      description: `Эквайринг ${crmConfig.acquiringFeePct}% от оплаты абонемента ${textTariff} (клиент ID ${clientId})`,
-      targetMonth
-    };
-
-    if (lead) {
-      const newClientId = `cl_${Date.now()}`;
-      const groupName = lead.trialGroupId ? groups.find(g => g.id === lead?.trialGroupId)?.name || null : groups[0]?.name || null;
-      
-      const newClient: Client = {
-        id: newClientId,
-        parentName: lead.parentName,
-        parentPhone: lead.parentPhone,
-        parentEmail: lead.parentEmail,
-        childName: lead.childName,
-        childSurname: lead.childSurname,
-        childBirthYear: lead.childBirthYear,
-        childAge: lead.childAge,
-        status: 'active',
-        abonement: tariff,
-        abonementStatus: 'Оплачено',
-        abonementTotalSessions: sessions,
-        abonementSessionsLeft: sessions,
-        abonementExpirationDate: new Date(Date.now() + 30*24*60*60*1000).toISOString().substring(0, 10),
-        groupName: groupName,
-        coachId: lead.trialCoachId || coaches[0]?.id || '',
-        coachName: coaches.find(c => c.id === lead?.trialCoachId)?.name || 'Не указан',
-        medicalCertificateUrl: null,
-        insuranceUrl: null,
-        payments: [newPayment],
-        attendance: [],
-        progress: { technique: 4.0, tactics: 4.0, physical: 4.0, discipline: 4.0 },
-        achievements: [],
-        relationshipRisk: 'none',
-        managerBonusAccrued: 500,
-        notes: `Конвертирован из лида. Источник: ${lead.source}. ${lead.trainerFeedback ? 'Отзыв тренера на пробном: ' + lead.trainerFeedback : ''}`
-      };
-
-      setClients(prev => [...prev, newClient]);
-      setLeads(prev => prev.map(l => l.id === lead?.id ? { ...l, status: 'converted' } : l));
-      setFinances(prev => [
-        {...newFinance, groupName: groupName || undefined}, 
-        {...acquiringFinance, groupName: groupName || undefined},
-        ...prev
-      ]);
-
-      const directorTaskId = `t_${Date.now()}_dir_paid`;
-      const clientLabel = `${newClient.childName} ${newClient.childSurname}`;
-      const directorNotification: CRMTask = {
-        id: directorTaskId,
-        title: `Доход и конверсия: ${amount} ₽ получено от ${clientLabel}`,
-        assignedTo: 'director',
-        status: 'new',
-        dueDate: 'Сегодня',
-        description: `Успешный переход из пробного периода в активные. Оплачен: ${textTariff}`
-      };
-      setTasks(prev => [directorNotification, ...prev]);
-
-      setDoc(doc(db, 'clients', newClientId), newClient).catch(e => console.warn(e));
-      updateDoc(doc(db, 'leads', lead.id), { status: 'converted' }).catch(e => console.warn(e));
-      setDoc(doc(db, 'finances', financeId), {...newFinance, groupName: groupName || undefined}).catch(e => console.warn(e));
-      setDoc(doc(db, 'finances', acquiringExpenseId), {...acquiringFinance, groupName: groupName || undefined}).catch(e => console.warn(e));
-      setDoc(doc(db, 'tasks', directorTaskId), directorNotification).catch(e => console.warn(e));
-
-    } else if (client) {
-      let autoGroup = client.groupName;
-      if (!autoGroup) {
-        if (groups.length > 0) autoGroup = groups[0].name;
-        else autoGroup = null;
-      }
-      
-      const updatedPayments = [newPayment, ...client.payments];
-
-      setClients(prev => prev.map(c => c.id === clientId ? {
-        ...c,
-        status: 'active' as const,
-        abonement: tariff,
-        abonementStatus: 'Оплачено',
-        abonementTotalSessions: sessions + (c.abonementSessionsLeft || 0),
-        abonementSessionsLeft: sessions + (c.abonementSessionsLeft || 0),
-        abonementExpirationDate: new Date(Date.now() + 30*24*60*60*1000).toISOString().substring(0, 10),
-        groupName: autoGroup,
-        payments: updatedPayments,
-        managerBonusAccrued: (c.managerBonusAccrued || 0) + 100
-      } : c));
-
-      setFinances(prev => [
-        {...newFinance, groupName: autoGroup || undefined}, 
-        {...acquiringFinance, groupName: autoGroup || undefined},
-        ...prev
-      ]);
-
-      const directorTaskId = `t_${Date.now()}_dir_paid`;
-      const clientLabel = `${client.childName} ${client.childSurname}`;
-      const directorNotification: CRMTask = {
-        id: directorTaskId,
-        title: `Продление абонемента: ${amount} ₽ от ${clientLabel}`,
-        assignedTo: 'director',
-        status: 'new',
-        dueDate: 'Сегодня',
-        description: `Клиент оплатил: ${textTariff}`
-      };
-      setTasks(prev => [directorNotification, ...prev]);
-
-      updateDoc(doc(db, 'clients', clientId), {
-        status: 'active',
-        abonement: tariff,
-        abonementStatus: 'Оплачено',
-        abonementTotalSessions: sessions + (client.abonementSessionsLeft || 0),
-        abonementSessionsLeft: sessions + (client.abonementSessionsLeft || 0),
-        abonementExpirationDate: new Date(Date.now() + 30*24*60*60*1000).toISOString().substring(0, 10),
-        groupName: autoGroup,
-        payments: updatedPayments,
-        managerBonusAccrued: (client.managerBonusAccrued || 0) + 100
-      }).catch(err => {
-        console.warn("Failed to update client subscription in Firestore:", err);
-      });
-      setDoc(doc(db, 'finances', financeId), {...newFinance, groupName: autoGroup || undefined}).catch(err => {
-        console.warn("Failed to sync finance record in Firestore:", err);
-      });
-      setDoc(doc(db, 'finances', acquiringExpenseId), {...acquiringFinance, groupName: autoGroup || undefined}).catch(err => {
-        console.warn("Failed to sync expense record in Firestore:", err);
-      });
-      setDoc(doc(db, 'tasks', directorTaskId), directorNotification).catch(err => {
-        console.warn("Failed to sync director payment notification in Firestore:", err);
-      });
-    }
-
-    if (calendarSyncEnabled) {
-      setCalendarSyncLog(prev => [
-        `[${new Date().toLocaleTimeString()}] Оплачен абонемент ${textTariff} (${amount} руб). Автоматически синхронизирован весь календарь занятий в аккаунт родителя.`,
-        ...prev
-      ]);
-    }
   };
 
   const uploadDocument = async (clientId: string, type: 'medical' | 'insurance', fileName: string) => {
@@ -1784,7 +1587,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       currentRole, currentTab, setCurrentRole, setCurrentTab,
       firestoreError, dismissFirestoreError,
       addLead, addClient, updateLeadStatus, bookTrial, completeTrialAndMarkAttendance,
-      sendPaymentLink, processPayment, uploadDocument, markAttendance, ratePlayer,
+      uploadDocument, markAttendance, ratePlayer,
       completeTask, addTask,
       notifications, addNotification, markNotificationRead,
       addChatMessage, updateChatMessage, deleteChatMessage, toggleCalendarSync, triggerManualCalendarSync,

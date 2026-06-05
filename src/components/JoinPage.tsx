@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useCRM } from '../context/CRMContext';
 import { Trophy, CheckCircle, Shield, Phone, User, Calendar, Sparkles, Send, Target } from 'lucide-react';
 import { AmkarLogo } from './AmkarLogo';
-import { YooKassaPortal } from './YooKassaPortal';
 
 export const JoinPage: React.FC = () => {
   const { schoolName, addLead, crmConfig } = useCRM();
@@ -11,16 +10,6 @@ export const JoinPage: React.FC = () => {
   const [childName, setChildName] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
-  const [paymentModalClientId, setPaymentModalClientId] = useState<string | null>(null);
-
-  // Auto-open payment modal if navigated to /payment
-  React.useEffect(() => {
-    if (window.location.pathname === '/payment') {
-      const p = new URLSearchParams(window.location.search);
-      const c = p.get('client');
-      setPaymentModalClientId(c || 'cl_new_lead_stub');
-    }
-  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,8 +30,7 @@ export const JoinPage: React.FC = () => {
   };
   
   const handleBuy = () => {
-    // Just map to payment modal - in a real world, this would create a lead first
-    setPaymentModalClientId('cl_new_lead_stub');
+    alert("Для оплаты перейдите по ссылке, отправленной менеджером.");
   };
 
   const prices = {
@@ -252,14 +240,6 @@ export const JoinPage: React.FC = () => {
           </div>
         </div>
       </section>
-
-      {/* Global payment modal attached to this view */}
-      {paymentModalClientId && (
-        <YooKassaPortal 
-          clientId={paymentModalClientId} 
-          onClose={() => setPaymentModalClientId(null)} 
-        />
-      )}
     </div>
   );
 };

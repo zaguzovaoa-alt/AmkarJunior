@@ -408,13 +408,6 @@ export const HQSettings: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex items-start space-x-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                  <div className="text-xs">
-                    <span className="font-bold text-slate-800">Форма Оплаты YooKassa</span>
-                    <p className="text-slate-400 text-[10px] mt-0.5">Интеграция шлюза ЮKassa работает в режиме тестирования.</p>
-                  </div>
-                </div>
               </div>
             </div>
 

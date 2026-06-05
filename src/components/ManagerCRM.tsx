@@ -16,21 +16,17 @@ import { BirthdaysBanner } from './BirthdaysBanner';
 interface ManagerCRMProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  onOpenPayment: (clientId: string) => void;
 }
 
 
-export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab, onOpenPayment }) => {
+export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab }) => {
   const { 
-    clients, leads, tasks, addLead, addClient, bookTrial, sendPaymentLink, addTask, completeTask, 
+    clients, leads, tasks, addLead, addClient, bookTrial, addTask, completeTask, 
     deleteClient, deleteLead, updateClientNotes, updateClient, schoolName, groups, assignClientToGroup,
     crmConfig,
     messages,
     userProfile, updateUserProfile
   } = useCRM();
-
-  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
-  const [paymentModalData, setPaymentModalData] = useState<{clientId: string, clientName: string} | null>(null);
 
   const [deleteLeadModal, setDeleteLeadModal] = useState<{isOpen: boolean, leadId: string, leadName: string} | null>(null);
   const [deleteClientModal, setDeleteClientModal] = useState<{isOpen: boolean, clientId: string, clientName: string} | null>(null);
@@ -513,29 +509,10 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                               Пригласить на пробную
                             </button>
                           ) : lead.status === 'trial_completed' ? (
-                            <button
-                              onClick={() => {
-                                setPaymentModalData({ clientId: lead.id, clientName: `${lead.childSurname} ${lead.childName}` });
-                                setPaymentModalOpen(true);
-                              }}
-                              className="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded font-bold text-[10px] transition group relative flex items-center space-x-1"
-                            >
-                              <CreditCard className="w-3.5 h-3.5" />
-                              <span>Выслать ссылку</span>
-                            </button>
+                            <span className="text-[11px] text-emerald-600 font-bold">Ожидает покупки</span>
                           ) : (
                             <span className="text-[11px] text-emerald-600 font-bold">✓ Отработан успешно</span>
                           )}
-                          <button
-                            title="Отправить ссылку на оплату"
-                            onClick={() => {
-                              setPaymentModalData({ clientId: lead.id, clientName: `${lead.childSurname} ${lead.childName}` });
-                              setPaymentModalOpen(true);
-                            }}
-                            className="p-1.5 text-emerald-500 hover:bg-emerald-50 hover:text-emerald-600 transition rounded"
-                          >
-                            <CreditCard className="w-4 h-4" />
-                          </button>
                           <button
                             onClick={() => {
                               setDeleteLeadModal({
@@ -978,17 +955,6 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
                               </div>
                             </td>
                             <td className="p-2 md:p-3 align-middle flex justify-end space-x-1">
-                               <button 
-                                 className="hover:text-emerald-600 p-1 hover:bg-emerald-50 text-emerald-500 rounded transition-colors"
-                                 title="Отправить ссылку на оплату"
-                                 onClick={(e) => {
-                                   e.stopPropagation();
-                                   setPaymentModalData({ clientId: client.id, clientName: `${client.childSurname} ${client.childName}` });
-                                   setPaymentModalOpen(true);
-                                 }}
-                               >
-                                 <CreditCard className="w-4 h-4" />
-                               </button>
                                <button 
                                  className="text-gray-400 hover:text-black p-1 hover:bg-gray-100 rounded transition-colors"
                                  title="Редактировать карточку"
@@ -2402,15 +2368,6 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab,
             </div>
           </div>
         </div>
-      )}
-
-      {paymentModalData && (
-        <PaymentLinkModal
-          isOpen={paymentModalOpen}
-          onClose={() => setPaymentModalOpen(false)}
-          clientId={paymentModalData.clientId}
-          clientName={paymentModalData.clientName}
-        />
       )}
 
       <ConfirmModal

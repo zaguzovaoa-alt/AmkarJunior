@@ -13,13 +13,12 @@ import { isBirthdayToday } from '../utils/dateUtils';
 interface ParentPortalProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  onOpenPayment: () => void;
 }
 
-export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActiveTab, onOpenPayment }) => {
+export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActiveTab }) => {
   const { clients, messages, addChatMessage, updateChatMessage, deleteChatMessage, uploadDocument, groups, userProfile, tasks } = useCRM();
   const [chatInput, setChatInput] = useState('');
-  const [chatVisibility, setChatVisibility] = useState<('manager' | 'trainer' | 'parent' | 'director')[]>(['manager', 'trainer', 'director']);
+  const [chatVisibility, setChatVisibility] = useState<('manager' | 'trainer' | 'parent' | 'director' | 'admin')[]>(['manager', 'trainer', 'director', 'admin']);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editMessageText, setEditMessageText] = useState('');
   const [uploadingDoc, setUploadingDoc] = useState<'medical' | 'insurance' | null>(null);
@@ -497,13 +496,6 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
                         ))}
                       </div>
                     </div>
-
-                    <button
-                      onClick={onOpenPayment}
-                      className="w-full py-3 bg-emerald-500 hover:bg-emerald-650 text-white rounded-xl font-bold transition flex items-center justify-center space-x-2 text-sm shadow-lg shadow-emerald-100"
-                    >
-                      <span>Оплатить / Продлить абонемент</span>
-                    </button>
                   </div>
 
                   {/* Document uploads */}
@@ -939,12 +931,6 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
             >
               <div className="flex justify-between items-center border-b pb-4">
                 <h3 className="text-lg font-bold text-slate-900">Детализированная история транзакций</h3>
-                <button 
-                  onClick={onOpenPayment}
-                  className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded text-xs transition transition duration-200"
-                >
-                  Оплатить новый абонемент
-                </button>
               </div>
 
               <div className="space-y-3">

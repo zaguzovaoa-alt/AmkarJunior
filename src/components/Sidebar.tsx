@@ -9,7 +9,7 @@ import { AmkarLogo } from './AmkarLogo';
 import { InviteLinkModal } from './InviteLinkModal';
 
 interface SidebarProps {
-  currentRole: 'manager' | 'trainer' | 'parent' | 'director';
+  currentRole: 'manager' | 'trainer' | 'parent' | 'director' | 'admin';
   activeTab: string;
   setActiveTab: (tab: string) => void;
   messageCount?: number;
@@ -52,6 +52,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           { id: 'trainer_messages', label: 'Сообщения', icon: MessageSquare, badge: finalMessageCount || undefined },
           { id: 'trainer_knowledge', label: 'База знаний', icon: BookOpen }
         ];
+      case 'admin':
       case 'director':
         return [
           { id: 'hq_home', label: 'Главная', icon: BarChart },
@@ -106,7 +107,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="px-6 py-2 flex items-center justify-between text-xs mb-4">
         <span className="text-gray-400">Режим:</span>
         <span className="text-slate-600 font-medium">
-          {currentRole === 'director' ? 'Директор' : 
+          {currentRole === 'admin' ? 'Администратор' :
+           currentRole === 'director' ? 'Директор' : 
            currentRole === 'manager' ? 'Менеджер' : 
            currentRole === 'trainer' ? 'Тренер' : 'Ученик'}
         </span>

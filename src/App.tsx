@@ -10,7 +10,6 @@ import { DirectorCRM } from './components/DirectorCRM';
 import { FinanceModule } from './components/FinanceModule';
 import { CoachesList } from './components/CoachesList';
 import { GoogleCalendarSync } from './components/GoogleCalendarSync';
-import { YooKassaPortal } from './components/YooKassaPortal';
 import { HQSettings } from './components/HQSettings';
 import { GroupsModule } from './components/GroupsModule';
 import { DirectorUsers } from './components/DirectorUsers';
@@ -21,12 +20,12 @@ import firebaseConfig from '../firebase-applet-config.json';
 
 function DashboardContainer() {
   const { currentRole, currentTab, setCurrentTab, setCurrentRole, firestoreError, dismissFirestoreError } = useCRM();
-  const [paymentModalClientId, setPaymentModalClientId] = useState<string | null>(null);
   const [showInstructions, setShowInstructions] = useState(false);
 
   // Helper renderer for active role-specific view layout
   const renderRoleComponent = () => {
     switch (currentRole) {
+      case 'admin':
       case 'director':
         if (currentTab === 'director_home' || currentTab === 'hq_home') return <DirectorCRM />;
         if (currentTab === 'director_finances' || currentTab === 'hq_finances') return <FinanceModule />;
@@ -39,7 +38,6 @@ function DashboardContainer() {
             <ManagerCRM 
               activeTab={currentTab} 
               setActiveTab={(tab) => setCurrentTab(tab)} 
-              onOpenPayment={(cid) => setPaymentModalClientId(cid)} 
             />
           );
         }
@@ -48,7 +46,6 @@ function DashboardContainer() {
             <ManagerCRM 
               activeTab="hq_leads" 
               setActiveTab={(tab) => setCurrentTab(tab)} 
-              onOpenPayment={(cid) => setPaymentModalClientId(cid)} 
             />
           );
         }
@@ -64,7 +61,6 @@ function DashboardContainer() {
             <ManagerCRM 
               activeTab="hq_leads" 
               setActiveTab={(tab) => setCurrentTab(tab)} 
-              onOpenPayment={(cid) => setPaymentModalClientId(cid)} 
             />
           );
         }
@@ -73,7 +69,6 @@ function DashboardContainer() {
             <ManagerCRM 
               activeTab={currentTab} 
               setActiveTab={(tab) => setCurrentTab(tab)} 
-              onOpenPayment={(cid) => setPaymentModalClientId(cid)} 
             />
           );
         }
@@ -88,7 +83,6 @@ function DashboardContainer() {
           <ManagerCRM 
             activeTab="hq_leads" 
             setActiveTab={(tab) => setCurrentTab(tab)} 
-            onOpenPayment={(cid) => setPaymentModalClientId(cid)} 
           />
         );
 
@@ -105,7 +99,7 @@ function DashboardContainer() {
 
       case 'parent':
         if (currentTab === 'parent_settings') return <HQSettings />;
-        return <ParentPortal activeTab={currentTab} setActiveTab={setCurrentTab} onOpenPayment={() => setPaymentModalClientId('cl1')} />;
+        return <ParentPortal activeTab={currentTab} setActiveTab={setCurrentTab} />;
 
       default:
         return <DirectorCRM />;
@@ -244,7 +238,7 @@ service cloud.firestore {
           <div className="flex items-center space-x-2 font-medium">
             <span 
               onClick={() => {
-                const roles: ('director' | 'manager' | 'trainer' | 'parent')[] = ['director', 'manager', 'trainer', 'parent'];
+                const roles: ('admin' | 'director' | 'manager' | 'trainer' | 'parent')[] = ['admin', 'director', 'manager', 'trainer', 'parent'];
                 const nextIdx = (roles.indexOf(currentRole) + 1) % roles.length;
                 setCurrentRole(roles[nextIdx]);
               }}
@@ -304,14 +298,6 @@ service cloud.firestore {
             </div>
           </footer>
         </div>
-
-        {/* Global check payment gateway sandbox portal */}
-        {paymentModalClientId && (
-          <YooKassaPortal 
-            clientId={paymentModalClientId} 
-            onClose={() => setPaymentModalClientId(null)} 
-          />
-        )}
       </div>
 
     </div>
@@ -357,6 +343,7 @@ function AuthGateway() {
 
 import { InstallAppPrompt } from './components/InstallAppPrompt';
 import { RegistrationPage } from './components/RegistrationPage';
+import { StaffRegistrationPage } from './components/StaffRegistrationPage';
 import { NotificationListener } from './components/NotificationListener';
 import { PrivacyPolicy } from './components/PrivacyPolicy';
 import { AmkarLogo } from './components/AmkarLogo';
@@ -389,6 +376,12 @@ export default function App() {
       <CRMProvider>
         <RegistrationPage />
       </CRMProvider>
+    );
+  }
+
+  if (currentPath === '/staff-join') {
+    return (
+      <StaffRegistrationPage />
     );
   }
 

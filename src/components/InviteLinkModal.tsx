@@ -12,7 +12,7 @@ export const InviteLinkModal: React.FC<InviteLinkModalProps> = ({ isOpen, onClos
   const { schoolName } = useCRM();
   const [copiedLink, setCopiedLink] = useState(false);
 
-  const referralLink = `https://forms.yandex.ru/u/6a0d853a9029025eff38a4db/`;
+  const referralLink = `${window.location.origin}/join`;
   const shareText = `Приглашаю на занятия в футбольный клуб "${schoolName || 'АМКАР ЮНИОР'}"! Первая тренировка - бесплатно. Присоединяйтесь по ссылке: ${referralLink}`;
 
   const handleCopyLink = () => {
