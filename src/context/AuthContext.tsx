@@ -126,6 +126,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
+      // If it's an anonymous user and we have no phone to identify them, 
+      // wait until we do before creating a dummy record, to avoid race conditions.
+      if (u.isAnonymous && !activePhone) {
+        return;
+      }
+
       const allUsersSnap = await getDocs(query(collection(db, 'systemUsers')));
       const isFirst = allUsersSnap.empty;
       const isAdminEmailOrPhone = u.email === 'zaguzovsv@gmail.com' || activePhone === '+79825885477';
@@ -199,7 +205,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         body: JSON.stringify({ check_id })
       });
       const data = await response.json();
-      if (data.status === 'OK' && data.check_status === "401") {
+      if (data.status === 'OK' && data.check_status == 401) {
          const cred = await signInAnonymously(auth);
          await resolveAppUser(cred.user, phone);
          return true;

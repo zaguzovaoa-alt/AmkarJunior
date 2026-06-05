@@ -78,7 +78,6 @@ export const StaffRegistrationPage: React.FC = () => {
             <AmkarLogo className="w-10 h-10" />
             <span className="font-extrabold tracking-tight text-slate-900 text-lg uppercase">АМКАР ЮНИОР : ШТАБ</span>
           </div>
-          <a href="/" className="text-xs font-bold text-slate-500 hover:text-emerald-600 transition">Войти в портал</a>
         </div>
       </header>
 

@@ -75,7 +75,6 @@ export const RegistrationPage: React.FC = () => {
             <AmkarLogo className="w-10 h-10" />
             <span className="font-extrabold tracking-tight text-slate-900 text-lg uppercase">{schoolName || 'АМКАР ЮНИОР'}</span>
           </div>
-          <a href="/" className="text-xs font-bold text-slate-500 hover:text-emerald-600 transition">Вход для клиентов</a>
         </div>
       </header>
 
