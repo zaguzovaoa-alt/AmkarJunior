@@ -369,6 +369,14 @@ export default function App() {
     return () => window.removeEventListener('popstate', handleLocationChange);
   }, []);
 
+  if (currentPath === '/') {
+    return (
+      <CRMProvider>
+        <JoinPage />
+      </CRMProvider>
+    );
+  }
+
   if (currentPath === '/privacy') {
     return <PrivacyPolicy onBack={() => { window.history.back() }} />;
   }
@@ -395,6 +403,7 @@ export default function App() {
     );
   }
 
+  // /crm and any other route will hit the CRM Auth Gateway
   return (
     <AuthProvider>
       <CRMProvider>
