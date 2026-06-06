@@ -1793,18 +1793,18 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab 
 
               <div className="grid grid-cols-2 gap-3.5">
                 <div className="space-y-1">
-                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Имя мальчика</label>
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Имя ребёнка</label>
                   <input required type="text" placeholder="Максим" className="w-full p-2.5 bg-slate-50 border rounded-xl" value={newChildName} onChange={(e) => setNewChildName(e.target.value)} />
                 </div>
                 <div className="space-y-1">
-                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Фамилия мальчика</label>
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Фамилия ребёнка</label>
                   <input type="text" placeholder="Иванов" className="w-full p-2.5 bg-slate-50 border rounded-xl" value={newChildSurname} onChange={(e) => setNewChildSurname(e.target.value)} />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 gap-3.5">
                 <div className="space-y-1">
-                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Дата рождения мальчика</label>
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Дата рождения ребёнка</label>
                   <input type="date" className="w-full p-2.5 bg-slate-50 border rounded-xl font-mono" value={newChildBirthDate} onChange={(e) => {
                     setNewChildBirthDate(e.target.value);
                   }} />
@@ -1851,17 +1851,17 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab 
             <form onSubmit={handleAddNewDirectClient} className="p-5 sm:p-6 space-y-4 text-left font-sans text-xs overflow-y-auto">
               <div className="grid grid-cols-2 gap-3.5">
                 <div className="space-y-1">
-                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Имя мальчика *</label>
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Имя ребёнка *</label>
                   <input required type="text" placeholder="Максим" className="w-full p-2.5 bg-slate-50 border rounded-xl" value={newDirectChildName} onChange={(e) => setNewDirectChildName(e.target.value)} />
                 </div>
                 <div className="space-y-1">
-                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Фамилия мальчика *</label>
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">Фамилия ребёнка *</label>
                   <input required type="text" placeholder="Иванов" className="w-full p-2.5 bg-slate-50 border rounded-xl" value={newDirectChildSurname} onChange={(e) => setNewDirectChildSurname(e.target.value)} />
                 </div>
               </div>
 
               <div className="space-y-1">
-                <label className="block text-gray-500 font-semibold uppercase tracking-wider">Дата рождения мальчика *</label>
+                <label className="block text-gray-500 font-semibold uppercase tracking-wider">Дата рождения ребёнка *</label>
                 <input required type="date" className="w-full p-2.5 bg-slate-50 border rounded-xl font-mono" value={newDirectChildBirthDate} onChange={(e) => setNewDirectChildBirthDate(e.target.value)} />
               </div>
 

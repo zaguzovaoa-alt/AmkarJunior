@@ -64,7 +64,7 @@ export const JoinPage: React.FC = () => {
             Первый шаг к <span className="text-emerald-600">большому футболу</span>
           </h1>
           <p className="text-slate-500 text-sm md:text-base max-w-2xl mx-auto leading-relaxed">
-            Приглашаем мальчиков от 4 до 16 лет в академию футбольного клуба {schoolName || 'АМКАР ЮНИОР'}. 
+            Приглашаем детей от 4 до 16 лет в академию футбольного клуба {schoolName || 'АМКАР ЮНИОР'}. 
             Профессиональные тренеры, современная методика и турниры.
           </p>
         </div>
