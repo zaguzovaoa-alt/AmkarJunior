@@ -26,7 +26,8 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab 
     deleteClient, deleteLead, updateClientNotes, updateClient, schoolName, groups, assignClientToGroup,
     crmConfig,
     messages,
-    userProfile, updateUserProfile
+    userProfile, updateUserProfile,
+    setViewingClientId, setCurrentRole, setCurrentTab
   } = useCRM();
 
   const [deleteLeadModal, setDeleteLeadModal] = useState<{isOpen: boolean, leadId: string, leadName: string} | null>(null);
@@ -38,7 +39,11 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab 
   const [filterGroup, setFilterGroup] = useState<string>('all');
 
   // Selected client for detail drawer (matches right panel on photo 4)
-  const [selectedClientId, setSelectedClientId] = useState<string>('cl1');
+  const [selectedClientId, setSelectedClientIdState] = useState<string>('cl1');
+  const setSelectedClientId = (id: string) => {
+    setSelectedClientIdState(id);
+    if (setViewingClientId) setViewingClientId(id);
+  };
   const [isEditingRightCard, setIsEditingRightCard] = useState<boolean>(false);
   const [clientDetailTab, setClientDetailTab] = useState<'info' | 'abos' | 'visits' | 'payments' | 'history'>('info');
   const [clientNotes, setClientNotes] = useState<{[key: string]: string}>({});
@@ -1364,6 +1369,17 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({ activeTab, setActiveTab 
                             </button>
                             <button className="text-blue-500 hover:text-blue-600 transition-colors">
                               <span className="font-bold cursor-pointer text-xs">💬</span>
+                            </button>
+                            <button 
+                              onClick={() => {
+                                setViewingClientId(selectedClient.id);
+                                setCurrentRole('parent');
+                                setCurrentTab('parent_home');
+                              }}
+                              className="ml-2 px-2 py-0.5 bg-slate-100/50 hover:bg-slate-200 text-[10px] font-bold text-slate-500 rounded border border-slate-200 transition-colors"
+                              title="Войти в кабинет от имени этого родителя"
+                            >
+                              В кабинет ↗
                             </button>
                           </div>
                         </div>

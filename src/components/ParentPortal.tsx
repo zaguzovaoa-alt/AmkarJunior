@@ -17,7 +17,7 @@ interface ParentPortalProps {
 }
 
 export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActiveTab }) => {
-  const { clients, messages, addChatMessage, updateChatMessage, deleteChatMessage, uploadDocument, groups, userProfile, tasks } = useCRM();
+  const { clients, messages, addChatMessage, updateChatMessage, deleteChatMessage, uploadDocument, groups, userProfile, tasks, viewingClientId } = useCRM();
   const [chatInput, setChatInput] = useState('');
   const [chatVisibility, setChatVisibility] = useState<('manager' | 'trainer' | 'parent' | 'director' | 'admin')[]>(['manager', 'trainer', 'director', 'admin']);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -29,11 +29,13 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
   const insuranceInputRef = useRef<HTMLInputElement>(null);
   
   // Find the child associated with the currently logged-in parent
-  const myClientRaw = clients.find(c => 
-    (userProfile?.phone && c.parentPhone === userProfile.phone) || 
-    (userProfile?.email && c.parentEmail?.toLowerCase() === userProfile.email.toLowerCase()) ||
-    (userProfile?.name && c.parentName === userProfile.name)
-  ) || clients.find(c => c.id === 'cl2') || clients[0];
+  const myClientRaw = viewingClientId 
+    ? clients.find(c => c.id === viewingClientId) 
+    : clients.find(c => 
+        (userProfile?.phone && c.parentPhone === userProfile.phone) || 
+        (userProfile?.email && c.parentEmail?.toLowerCase() === userProfile.email.toLowerCase()) ||
+        (userProfile?.name && c.parentName === userProfile.name)
+      ) || clients.find(c => c.id === 'cl2') || clients[0];
   
   const myClient = Object.assign({}, myClientRaw || {});
   const [selectedArticle, setSelectedArticle] = useState<any | null>(null);

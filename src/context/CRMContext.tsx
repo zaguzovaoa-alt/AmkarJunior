@@ -34,6 +34,8 @@ interface CRMContextType {
   currentTab: string;
   setCurrentRole: (role: 'manager' | 'trainer' | 'parent' | 'director' | 'admin') => void;
   setCurrentTab: (tab: string) => void;
+  viewingClientId: string | null;
+  setViewingClientId: (id: string | null) => void;
   firestoreError: string | null;
   dismissFirestoreError: () => void;
   
@@ -190,6 +192,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (currentRole === 'parent') return 'parent_home';
     return 'hq_home';
   });
+
+  const [viewingClientId, setViewingClientId] = useState<string | null>(null);
 
   const [schoolName, setSchoolName] = useState<string>(() => {
     return localStorage.getItem('amkar_school_name') || 'АМКАР ЮНИОР';
@@ -1585,6 +1589,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       leads, clients, tasks, groups, coaches, finances, financeCategories, financialPlans, trainingSessions, messages,
       calendarSyncEnabled, calendarSyncStatus, calendarSyncLog,
       currentRole, currentTab, setCurrentRole, setCurrentTab,
+      viewingClientId, setViewingClientId,
       firestoreError, dismissFirestoreError,
       addLead, addClient, updateLeadStatus, bookTrial, completeTrialAndMarkAttendance,
       uploadDocument, markAttendance, ratePlayer,

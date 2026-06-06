@@ -205,7 +205,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         body: JSON.stringify({ check_id })
       });
       const data = await response.json();
-      if (data.status === 'OK' && data.check_status == 401) {
+      if (data.status === 'OK' && (data.check_status == 1 || data.check_status == 401 || data.check_status == 400)) {
          const cred = await signInAnonymously(auth);
          await resolveAppUser(cred.user, phone);
          return true;
