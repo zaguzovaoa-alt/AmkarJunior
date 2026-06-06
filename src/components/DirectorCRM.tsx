@@ -828,7 +828,7 @@ export const DirectorCRM: React.FC = () => {
 
       {activeSection === 'metrics' ? (
         // METRICS DASHBOARD VIEW
-        <div id="metrics-dashboard" className="p-6 max-w-7xl mx-auto space-y-6">
+        <div id="metrics-dashboard" className="p-4 md:p-6 max-w-7xl mx-auto space-y-4 md:space-y-6">
           <BirthdaysBanner clients={clients} />
           
           {/* Top summary cards exactly like Image 7 header stats row */}
@@ -1090,7 +1090,7 @@ export const DirectorCRM: React.FC = () => {
 
         </div>
       ) : activeSection === 'training_sessions' ? (
-        <div className="p-6 max-w-7xl mx-auto space-y-6 text-left">
+        <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4 md:space-y-6 text-left">
           
           {/* Top analytical cards for training reports */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1395,7 +1395,7 @@ export const DirectorCRM: React.FC = () => {
         </div>
       ) : (
         // BULK UPLOAD / CRM IMPORT AND TABLE VIEW MODULE
-        <div id="import-management-module" className="p-6 max-w-7xl mx-auto space-y-6">
+        <div id="import-management-module" className="p-4 md:p-6 max-w-7xl mx-auto space-y-4 md:space-y-6">
           
           {/* Header alert / Toast cards */}
           {successMessage && (

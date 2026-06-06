@@ -306,7 +306,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({ activeTab, setActiveTab 
         </div>
       </div>
 
-      <div className="p-6 max-w-7xl mx-auto space-y-6">
+      <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4 md:space-y-6">
         
         <BirthdaysBanner clients={clients} />
 

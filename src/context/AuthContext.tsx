@@ -205,15 +205,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         body: JSON.stringify({ check_id })
       });
       const data = await response.json();
-      if (data.status === 'OK' && (data.check_status == 1 || data.check_status == 401 || data.check_status == 400)) {
-         const cred = await signInAnonymously(auth);
-         await resolveAppUser(cred.user, phone);
-         return true;
+      
+      const check_status = (data.checks && data.checks[check_id]) 
+        ? data.checks[check_id].check_status 
+        : data.check_status;
+        
+      if (data.status === 'OK') {
+        // 401 means Authorization Successful (call was made)
+        if (check_status == 401) {
+           try {
+             const cred = await signInAnonymously(auth);
+             await resolveAppUser(cred.user, phone);
+             return true;
+           } catch (authErr: any) {
+             console.error("Firebase Auth Error:", authErr);
+             if (authErr.code === 'auth/operation-not-allowed') {
+               setPhoneError("Ошибка: Анонимная авторизация отключена в Firebase. Пожалуйста, включите её.");
+             } else {
+               setPhoneError("Ошибка Firebase Auth: " + authErr.message);
+             }
+             return false;
+           }
+        }
+        
+        // 400 means Waiting for Call
+        if (check_status === 400) {
+           return false; // Still waiting
+        }
+        
+        if (check_status !== undefined) {
+           setPhoneError(data.status_text || data.check_status_text || "Ошибка авторизации звонком.");
+        }
+        return false;
       }
+      
       return false;
     } catch (err: any) {
-      console.error(err);
-      setPhoneError("Ошибка проверки статуса звонка.");
+      console.error("verifyPhoneCode top catch:", err);
+      setPhoneError("Ошибка проверки статуса звонка: " + err.message);
       throw err;
     }
   };

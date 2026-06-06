@@ -122,7 +122,7 @@ export const DirectorUsers: React.FC = () => {
   };
 
   return (
-    <div className="p-6 bg-slate-50 min-h-[calc(100vh-64px)] font-sans">
+    <div className="p-4 md:p-6 bg-slate-50 min-h-[calc(100vh-64px)] font-sans">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-black text-slate-800 flex items-center space-x-3">
@@ -153,7 +153,8 @@ export const DirectorUsers: React.FC = () => {
         <div className="flex justify-center p-10"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>
       ) : (
         <div className="bg-white border text-sm border-slate-200 rounded-xl overflow-hidden shadow-sm">
-          <table className="w-full text-left">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
             <thead className="bg-slate-100 text-slate-500 text-xs uppercase tracking-wider font-bold">
               <tr>
                 <th className="px-6 py-4 border-b border-slate-200">Сотрудник</th>
@@ -208,7 +209,8 @@ export const DirectorUsers: React.FC = () => {
                 </tr>
               )}
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
       )}
 

@@ -14,7 +14,7 @@ import { HQSettings } from './components/HQSettings';
 import { GroupsModule } from './components/GroupsModule';
 import { DirectorUsers } from './components/DirectorUsers';
 import { JoinPage } from './components/JoinPage';
-import { Shield, RefreshCw } from 'lucide-react';
+import { Shield, RefreshCw, Menu } from 'lucide-react';
 import firebaseConfig from '../firebase-applet-config.json';
 
 
@@ -24,6 +24,7 @@ function DashboardContainer() {
   const { currentRole, currentTab, setCurrentTab, setCurrentRole, firestoreError, dismissFirestoreError } = useCRM();
   const [showInstructions, setShowInstructions] = useState(false);
   const [paymentModalClientId, setPaymentModalClientId] = useState<string | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Helper renderer for active role-specific view layout
   const renderRoleComponent = () => {
@@ -110,13 +111,30 @@ function DashboardContainer() {
   };
 
   return (
-    <div className="flex bg-slate-100 min-h-screen font-sans">
+    <div className="flex bg-slate-100 min-h-screen font-sans w-full max-w-full overflow-x-hidden">
       
+      {/* Mobile overlay */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden backdrop-blur-sm transition-opacity"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Sidebar navigation */}
-      <Sidebar currentRole={currentRole} activeTab={currentTab} setActiveTab={setCurrentTab} />
+      <div className={`fixed inset-y-0 left-0 z-50 transform ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out`}>
+        <Sidebar 
+          currentRole={currentRole} 
+          activeTab={currentTab} 
+          setActiveTab={(tab) => {
+            setCurrentTab(tab);
+            setIsMobileMenuOpen(false);
+          }} 
+        />
+      </div>
 
       {/* Main content hub panel */}
-      <div className="flex-1 flex flex-col min-h-screen overflow-hidden relative">
+      <div className="flex-1 flex flex-col min-h-screen overflow-hidden relative w-full lg:w-auto">
         
         {firestoreError && (
           (() => {
@@ -237,8 +255,14 @@ service cloud.firestore {
         )}
 
         {/* Simple global breadcrumbs bar with live interactive Role Switcher */}
-        <div className="bg-white px-6 py-2.5 border-b border-gray-150 flex items-center justify-between text-xs text-slate-500 font-sans">
+        <div className="bg-white px-4 md:px-6 py-2.5 border-b border-gray-150 flex items-center justify-between text-xs text-slate-500 font-sans sticky top-0 z-30 shadow-sm md:shadow-none">
           <div className="flex items-center space-x-2 font-medium">
+            <button 
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="lg:hidden p-1.5 -ml-1.5 mr-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-md transition"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
             <span 
               onClick={() => {
                 const roles: ('admin' | 'director' | 'manager' | 'trainer' | 'parent')[] = ['admin', 'director', 'manager', 'trainer', 'parent'];

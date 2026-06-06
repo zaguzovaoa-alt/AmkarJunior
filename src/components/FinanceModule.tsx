@@ -150,7 +150,7 @@ export const FinanceModule: React.FC = () => {
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50 text-gray-800 min-h-screen">
-      <div className="p-6 bg-white border-b border-gray-200">
+      <div className="p-4 md:p-6 bg-white border-b border-gray-200">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-950 font-sans tracking-tight">Управленческий учет и финансы</h1>
@@ -185,7 +185,7 @@ export const FinanceModule: React.FC = () => {
         </div>
       </div>
 
-      <div className="p-6 max-w-7xl mx-auto space-y-6">
+      <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4 md:space-y-6">
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
             
@@ -540,7 +540,7 @@ export const FinanceModule: React.FC = () => {
               </div>
 
               {/* РЕЗУЛЬТАТ */}
-              <div className="p-6 bg-slate-900 shadow-xl shadow-slate-900/20 text-white rounded-2xl flex justify-between items-center">
+              <div className="p-4 md:p-6 bg-slate-900 shadow-xl shadow-slate-900/20 text-white rounded-2xl flex justify-between items-center">
                 <span className="font-bold tracking-wider text-sm text-slate-300 uppercase">Чистая прибыль (EBITDA)</span>
                 <span className="text-3xl font-black font-mono tracking-tight text-emerald-400 drop-shadow-md">
                   {(

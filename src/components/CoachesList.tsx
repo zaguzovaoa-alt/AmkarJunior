@@ -264,7 +264,7 @@ export const CoachesList: React.FC = () => {
     <div className="flex-1 overflow-y-auto bg-slate-50 text-gray-800 min-h-screen">
       
       {/* Header bar */}
-      <div className="p-6 bg-white border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="p-4 md:p-6 bg-white border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-950 font-sans tracking-tight">Рейтинг и мониторинг Тренеров</h1>
           <p className="text-gray-500 text-sm">Панель контроля спортивной нагрузки, дисциплинарных оценок и расписания тренерского состава.</p>
@@ -286,7 +286,7 @@ export const CoachesList: React.FC = () => {
         </div>
       </div>
 
-      <div className="p-6 max-w-7xl mx-auto space-y-6">
+      <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4 md:space-y-6">
         
         {/* Top summary row */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">

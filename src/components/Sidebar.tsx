@@ -158,7 +158,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Collapse button stub */}
-      <div className="p-4 mt-auto border-t border-gray-50 flex-shrink-0">
+      <div className="p-4 mt-auto border-t border-gray-50 flex-shrink-0 hidden lg:flex">
         <button className="flex items-center space-x-2 text-gray-400 hover:text-gray-600 text-xs font-medium px-3 py-2 transition-colors">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6"></polyline>

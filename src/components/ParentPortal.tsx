@@ -324,7 +324,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({ activeTab, setActive
         </div>
       </div>
 
-      <div className="p-6 max-w-7xl mx-auto space-y-6">
+      <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
         <AnimatePresence mode="wait">
           
           {/* 1. HOME DASHBOARD TAB (МАТЧИТ ИЗОБРАЖЕНИЕ №2) */}

@@ -186,7 +186,7 @@ export const GroupsModule: React.FC = () => {
     <div className="flex-1 overflow-y-auto bg-slate-50 text-gray-800 min-h-screen">
       
       {/* HEADER SECTION */}
-      <div className="p-6 bg-white border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="p-4 md:p-6 bg-white border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-950 font-sans tracking-tight">Группы и составы</h1>
           <p className="text-gray-500 text-sm">Создание и расформирование групп, распределение учеников, планирование расписаний.</p>
@@ -201,7 +201,7 @@ export const GroupsModule: React.FC = () => {
         </button>
       </div>
 
-      <div className="p-6 max-w-7xl mx-auto space-y-6">
+      <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4 md:space-y-6">
         
         {/* KPI METRICS ROW */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

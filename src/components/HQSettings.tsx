@@ -106,7 +106,7 @@ export const HQSettings: React.FC = () => {
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50 text-gray-800 min-h-screen">
       {/* Header */}
-      <div className="p-6 bg-white border-b border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="p-4 md:p-6 bg-white border-b border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="text-left">
           <h1 className="text-2xl font-bold text-slate-950 font-sans tracking-tight">
             Настройки системы & БД
@@ -123,7 +123,7 @@ export const HQSettings: React.FC = () => {
         </div>
       </div>
 
-      <div className="p-6 max-w-7xl mx-auto space-y-6">
+      <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4 md:space-y-6">
 
         {successMsg && (
           <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-805 text-emerald-800 text-xs text-left flex items-start space-x-2">
