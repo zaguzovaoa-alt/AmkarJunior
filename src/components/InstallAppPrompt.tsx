@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { Download, Smartphone } from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import { Download, Smartphone } from "lucide-react";
 
 export const InstallAppPrompt: React.FC = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
-    
+    const isStandalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as any).standalone;
+
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -16,7 +18,7 @@ export const InstallAppPrompt: React.FC = () => {
       }
     };
 
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
 
     // Force visibility for demo in browser environments where event doesn't fire automatically yet
     if (!isStandalone) {
@@ -24,20 +26,25 @@ export const InstallAppPrompt: React.FC = () => {
     }
 
     return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener(
+        "beforeinstallprompt",
+        handleBeforeInstallPrompt,
+      );
     };
   }, []);
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) {
-      alert('Чтобы установить веб-приложение, нажмите кнопку "Поделиться" в вашем браузере и выберите "На экран «Домой»" (Add to Home Screen).');
+      alert(
+        'Чтобы установить веб-приложение, нажмите кнопку "Поделиться" в вашем браузере и выберите "На экран «Домой»" (Add to Home Screen).',
+      );
       return;
     }
-    
+
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
-    
-    if (outcome === 'accepted') {
+
+    if (outcome === "accepted") {
       setIsVisible(false);
     }
     setDeferredPrompt(null);
@@ -52,9 +59,10 @@ export const InstallAppPrompt: React.FC = () => {
       title="Установить приложение"
     >
       <Smartphone className="w-3.5 h-3.5 text-emerald-500 group-hover:text-emerald-600 transition" />
-      <span className="text-[10px] font-bold uppercase tracking-wider hidden sm:block">Установить приложение</span>
+      <span className="text-[10px] font-bold uppercase tracking-wider hidden sm:block">
+        Установить приложение
+      </span>
       <Download className="w-3 h-3 text-emerald-500 group-hover:text-emerald-600 transition hidden sm:block" />
     </button>
   );
 };
-

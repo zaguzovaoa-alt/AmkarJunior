@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { collection, doc, getDoc, setDoc, onSnapshot, updateDoc, deleteDoc, getDocFromServer, query, getDocs } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { 
-  Lead, Client, CRMTask, TrainingGroup, Coach, FinanceRecord, ChatMessage, LeadSource, Payment, TrainingSessionProtocol, FinanceCategory, FinancialPlan, CRMConfig, AppNotification
+  Lead, Client, CRMTask, TrainingGroup, Coach, FinanceRecord, ChatMessage, LeadSource, Payment, TrainingSessionProtocol, FinanceCategory, FinancialPlan, CRMConfig, AppNotification, Account, Product, StoreOrder, Homework, HomeworkSubmission
 } from '../types';
 
 // Types for User Profile
@@ -25,8 +25,24 @@ interface CRMContextType {
   finances: FinanceRecord[];
   financeCategories: FinanceCategory[];
   financialPlans: FinancialPlan[];
+  accounts: Account[];
+  addAccount: (acc: Omit<Account, 'id'>) => Promise<void>;
+  updateAccount: (id: string, acc: Partial<Omit<Account, 'id'>>) => Promise<void>;
+  deleteAccount: (id: string) => Promise<void>;
   trainingSessions: TrainingSessionProtocol[];
   messages: ChatMessage[];
+  products: Product[];
+  storeOrders: StoreOrder[];
+  homeworks: Homework[];
+  homeworkSubmissions: HomeworkSubmission[];
+  addProduct: (product: Omit<Product, 'id'>) => Promise<void>;
+  updateProduct: (id: string, updates: Partial<Product>) => Promise<void>;
+  deleteProduct: (id: string) => Promise<void>;
+  createOrder: (order: Omit<StoreOrder, 'id' | 'date'>) => Promise<void>;
+  updateOrderStatus: (id: string, status: 'completed' | 'cancelled') => Promise<void>;
+  addHomework: (hw: Omit<Homework, 'id' | 'dateAssigned'>) => Promise<void>;
+  deleteHomework: (id: string) => Promise<void>;
+  submitHomework: (homeworkId: string, clientId: string) => Promise<void>;
   calendarSyncEnabled: boolean;
   calendarSyncStatus: 'connected' | 'disconnected' | 'syncing';
   calendarSyncLog: string[];
@@ -53,7 +69,7 @@ interface CRMContextType {
     fileAttached?: string
   ) => void;
   uploadDocument: (clientId: string, type: 'medical' | 'insurance', fileName: string) => void;
-  markAttendance: (groupId: string, date: string, records: { clientId: string; status: 'present' | 'absent_sick' | 'absent'; reason?: string }[], mediaFile?: string, notes?: string) => void;
+  markAttendance: (groupId: string, date: string, records: { clientId: string; status: 'present' | 'absent_sick' | 'absent' | 'trial_free'; reason?: string }[], mediaFile?: string, notes?: string, assistantId?: string) => void;
   ratePlayer: (clientId: string, metrics: { technique: number; tactics: number; physical: number; discipline: number }) => void;
   addTask: (task: Omit<CRMTask, 'id' | 'status'>) => void;
   completeTask: (id: string) => void;
@@ -91,7 +107,7 @@ interface CRMContextType {
   addFinanceRecord: (record: Omit<FinanceRecord, 'id'>) => Promise<void>;
   updateClientNotes: (clientId: string, notes: string) => Promise<void>;
   updateClient: (clientId: string, updates: Partial<Omit<Client, 'id'>>) => Promise<void>;
-  createGroup: (name: string, year: number, birthYearFrom: number, birthYearTo: number, coachId: string, coachName: string, scheduleDays: string[], isSelectTeam?: boolean, targetCompetition?: string, selectedClientIds?: string[]) => Promise<void>;
+  createGroup: (name: string, year: number, birthYearFrom: number, birthYearTo: number, coachId: string, coachName: string, scheduleDays: string[], isSelectTeam?: boolean, targetCompetition?: string, selectedClientIds?: string[], venueCost?: number, maxCapacity?: number) => Promise<void>;
   deleteGroup: (id: string) => Promise<void>;
   updateGroup: (id: string, updates: Partial<Omit<TrainingGroup, 'id'>>) => Promise<void>;
   assignClientToGroup: (clientId: string, groupName: string | null) => Promise<void>;
@@ -141,6 +157,11 @@ const INITIAL_FINANCE_CATEGORIES: FinanceCategory[] = [
   { id: 'cat_ex_inv', type: 'expense', name: 'Инвентарь/Оборудование' },
 ];
 
+const INITIAL_ACCOUNTS: Account[] = [
+  { id: 'acc_cash', name: 'Наличные', balance: 0, type: 'cash' },
+  { id: 'acc_bank', name: 'Расчетный счет', balance: 0, type: 'bank' }
+];
+
 export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS);
   const [clients, setClients] = useState<Client[]>(INITIAL_CLIENTS);
@@ -148,6 +169,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [coaches, setCoaches] = useState<Coach[]>(INITIAL_COACHES);
   const [groups, setGroups] = useState<TrainingGroup[]>(INITIAL_GROUPS);
   const [finances, setFinances] = useState<FinanceRecord[]>(INITIAL_FINANCES);
+  const [accounts, setAccounts] = useState<Account[]>(() => {
+    const cached = localStorage.getItem('amkar_accounts');
+    return cached ? JSON.parse(cached) : INITIAL_ACCOUNTS;
+  });
   const [financeCategories, setFinanceCategories] = useState<FinanceCategory[]>(() => {
     const cached = localStorage.getItem('amkar_finance_categories');
     return cached ? JSON.parse(cached) : INITIAL_FINANCE_CATEGORIES;
@@ -158,6 +183,22 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
   const [trainingSessions, setTrainingSessions] = useState<TrainingSessionProtocol[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
+  const [products, setProducts] = useState<Product[]>(() => {
+    const cached = localStorage.getItem('amkar_products');
+    return cached ? JSON.parse(cached) : [];
+  });
+  const [storeOrders, setStoreOrders] = useState<StoreOrder[]>(() => {
+    const cached = localStorage.getItem('amkar_orders');
+    return cached ? JSON.parse(cached) : [];
+  });
+  const [homeworks, setHomeworks] = useState<Homework[]>(() => {
+    const cached = localStorage.getItem('amkar_homeworks');
+    return cached ? JSON.parse(cached) : [];
+  });
+  const [homeworkSubmissions, setHomeworkSubmissions] = useState<HomeworkSubmission[]>(() => {
+    const cached = localStorage.getItem('amkar_homework_submissions');
+    return cached ? JSON.parse(cached) : [];
+  });
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [firebaseReady, setFirebaseReady] = useState(false);
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
@@ -806,18 +847,22 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const markAttendance = async (
     groupId: string, 
     date: string, 
-    records: { clientId: string; status: 'present' | 'absent_sick' | 'absent'; reason?: string }[],
+    records: { clientId: string; status: 'present' | 'absent_sick' | 'absent' | 'trial_free'; reason?: string }[],
     mediaFile?: string,
-    notes?: string
+    notes?: string,
+    assistantId?: string
   ) => {
     const rawClients = clients; // avoid stale state issues in loops
-    const groupName = groups.find(g => g.id === groupId || g.name === groupId)?.name || groupId;
-    const coachId = groups.find(g => g.name === groupName)?.coachId || 'unknown';
-    const coachName = groups.find(g => g.name === groupName)?.coachName || 'Неизвестный тренер';
+    const groupObj = groups.find(g => g.id === groupId || g.name === groupId);
+    const groupName = groupObj?.name || groupId;
+    const coachId = groupObj?.coachId || 'unknown';
+    const coachName = groupObj?.coachName || 'Неизвестный тренер';
+    const assistantName = assistantId ? coaches.find(c => c.id === assistantId)?.name : undefined;
 
-    const presentCount = records.filter(r => r.status === 'present').length;
+    const presentCount = records.filter(r => r.status === 'present' || r.status === 'trial_free').length;
     const sickCount = records.filter(r => r.status === 'absent_sick').length;
     const absentCount = records.filter(r => r.status === 'absent').length;
+    const trialCount = records.filter(r => r.status === 'trial_free').length;
 
     const newProtocol: TrainingSessionProtocol = {
       id: `ts_${Date.now()}`,
@@ -827,11 +872,14 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       dateString: date,
       coachId,
       coachName,
+      assistantId,
+      assistantName,
       photoUrl: mediaFile,
       notes: notes,
       presentCount,
       absentCount,
       sickCount,
+      trialCount,
       records: records.map(r => {
         const clientObj = rawClients.find(c => c.id === r.clientId);
         return {
@@ -844,6 +892,48 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setTrainingSessions(prev => [newProtocol, ...prev]);
+    
+    // Auto-create expense for venue rental
+    if (groupObj?.venueCost && groupObj.venueCost > 0) {
+       addFinanceRecord({
+          type: 'expense',
+          category: 'Аренда',
+          amount: groupObj.venueCost,
+          date: new Date().toISOString().split('T')[0],
+          description: `Аренда площадки для тренировки (${groupName})`,
+          groupName: groupName,
+          isFixed: false
+       });
+    }
+
+    // Auto-create payroll expenses
+    const headCoachObj = coaches.find(c => c.id === coachId);
+    if (headCoachObj && headCoachObj.paymentType === 'per_session' && headCoachObj.rate && headCoachObj.rate > 0) {
+       addFinanceRecord({
+          type: 'expense',
+          category: 'Зарплата',
+          amount: headCoachObj.rate,
+          date: new Date().toISOString().split('T')[0],
+          description: `Оплата за тренировку: ${coachName} (${groupName})`,
+          groupName: groupName,
+          isFixed: false
+       });
+    }
+
+    if (assistantId) {
+      const astCoachObj = coaches.find(c => c.id === assistantId);
+      if (astCoachObj && astCoachObj.paymentType === 'per_session' && astCoachObj.rate && astCoachObj.rate > 0) {
+         addFinanceRecord({
+            type: 'expense',
+            category: 'Зарплата',
+            amount: astCoachObj.rate,
+            date: new Date().toISOString().split('T')[0],
+            description: `Оплата (Ассистент): ${astCoachObj.name} (${groupName})`,
+            groupName: groupName,
+            isFixed: false
+         });
+      }
+    }
 
     // Background sync of the session
     try {
@@ -1058,8 +1148,68 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Would save to Firestore if needed
   };
 
+  useEffect(() => {
+    localStorage.setItem('amkar_products', JSON.stringify(products));
+  }, [products]);
+  useEffect(() => {
+    localStorage.setItem('amkar_orders', JSON.stringify(storeOrders));
+  }, [storeOrders]);
+  useEffect(() => {
+    localStorage.setItem('amkar_homeworks', JSON.stringify(homeworks));
+  }, [homeworks]);
+  useEffect(() => {
+    localStorage.setItem('amkar_homework_submissions', JSON.stringify(homeworkSubmissions));
+  }, [homeworkSubmissions]);
+
+  const addProduct = async (product: Omit<Product, 'id'>) => {
+    setProducts(prev => [...prev, { ...product, id: `prod_${Date.now()}` }]);
+  };
+  const updateProduct = async (id: string, updates: Partial<Product>) => {
+    setProducts(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+  };
+  const deleteProduct = async (id: string) => {
+    setProducts(prev => prev.filter(p => p.id !== id));
+  };
+  
+  const createOrder = async (order: Omit<StoreOrder, 'id' | 'date'>) => {
+    setStoreOrders(prev => [{ ...order, id: `ord_${Date.now()}`, date: new Date().toISOString() }, ...prev]);
+  };
+  const updateOrderStatus = async (id: string, status: 'completed' | 'cancelled') => {
+    setStoreOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o));
+  };
+
+  const addHomework = async (hw: Omit<Homework, 'id' | 'dateAssigned'>) => {
+    setHomeworks(prev => [{ ...hw, id: `hw_${Date.now()}`, dateAssigned: new Date().toISOString() }, ...prev]);
+  };
+  const deleteHomework = async (id: string) => {
+    setHomeworks(prev => prev.filter(h => h.id !== id));
+    setHomeworkSubmissions(prev => prev.filter(s => s.homeworkId !== id));
+  };
+  const submitHomework = async (homeworkId: string, clientId: string) => {
+    setHomeworkSubmissions(prev => {
+      const existing = prev.find(s => s.homeworkId === homeworkId && s.clientId === clientId);
+      if (existing) return prev;
+      return [...prev, { id: `hws_${Date.now()}`, homeworkId, clientId, status: 'done', dateDone: new Date().toISOString() }];
+    });
+  };
+
   const deleteFinanceCategory = async (id: string) => {
     setFinanceCategories(prev => prev.filter(c => c.id !== id));
+  };
+
+  useEffect(() => {
+    localStorage.setItem('amkar_accounts', JSON.stringify(accounts));
+  }, [accounts]);
+
+  const addAccount = async (acc: Omit<Account, 'id'>) => {
+    const newAcc = { ...acc, id: `acc_${Date.now()}` };
+    setAccounts(prev => [...prev, newAcc]);
+  };
+  const updateAccount = async (id: string, updates: Partial<Omit<Account, 'id'>>) => {
+    setAccounts(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a));
+  };
+  const deleteAccount = async (id: string) => {
+    setAccounts(prev => prev.filter(a => a.id !== id));
   };
 
   const addFinanceRecord = async (record: Omit<FinanceRecord, 'id'>) => {
@@ -1361,7 +1511,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const createGroup = async (name: string, year: number, birthYearFrom: number, birthYearTo: number, coachId: string, coachName: string, scheduleDays: string[], isSelectTeam?: boolean, targetCompetition?: string, selectedClientIds?: string[]) => {
+  const createGroup = async (name: string, year: number, birthYearFrom: number, birthYearTo: number, coachId: string, coachName: string, scheduleDays: string[], isSelectTeam?: boolean, targetCompetition?: string, selectedClientIds?: string[], venueCost?: number, maxCapacity?: number) => {
     const newGroup: TrainingGroup = {
       id: `g_${Date.now()}`,
       name,
@@ -1375,7 +1525,9 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       scheduleDays,
       isSelectTeam,
       targetCompetition,
-      selectedClientIds: selectedClientIds || []
+      selectedClientIds: selectedClientIds || [],
+      venueCost,
+      maxCapacity
     };
     setGroups(prev => [...prev, newGroup]);
     setDoc(doc(db, 'groups', newGroup.id), newGroup).catch(err => {
@@ -1600,6 +1752,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       clearAllData,
       overwriteClients, overwriteLeads, overwriteFinances, overwriteCoaches,
       appendClients, appendLeads, appendFinances, appendCoaches,
+      accounts, addAccount, updateAccount, deleteAccount,
+      products, storeOrders, homeworks, homeworkSubmissions, addProduct, updateProduct, deleteProduct, createOrder, updateOrderStatus, addHomework, deleteHomework, submitHomework,
       deleteLead, deleteClient, deleteTask, deleteFinanceRecord, addFinanceCategory, deleteFinanceCategory, addFinanceRecord, updateFinancialPlan, updateClientNotes, updateClient,
       createGroup, deleteGroup, updateGroup, assignClientToGroup, assignClientToSelectTeam, removeClientFromSelectTeam,
       createCoach, deleteCoach, assignCoachToGroup, updateCoachContacts, updateCoach,

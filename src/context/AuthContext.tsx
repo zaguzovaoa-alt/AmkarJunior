@@ -20,6 +20,7 @@ interface AuthContextType {
   appUser: AppUser | null;
   loading: boolean;
   loginWithGoogle: () => Promise<void>;
+  fastLoginWithPhone: (phone: string) => Promise<boolean>;
   sendPhoneCode: (phone: string) => Promise<{ check_id: string; call_phone: string; call_phone_pretty: string }>;
   verifyPhoneCode: (check_id: string, phone: string) => Promise<boolean>;
   logout: () => Promise<void>;
@@ -247,6 +248,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const fastLoginWithPhone = async (phone: string) => {
+    setPhoneError(null);
+    try {
+      const qPhone = query(collection(db, 'systemUsers'), where('phone', '==', phone));
+      const phoneDocs = await getDocs(qPhone);
+      if (phoneDocs.empty) {
+        setPhoneError("Номер телефона не найден в базе данных.");
+        return false;
+      }
+      const cred = await signInAnonymously(auth);
+      await resolveAppUser(cred.user, phone);
+      return true;
+    } catch (err: any) {
+      console.error(err);
+      setPhoneError(err.message || "Ошибка авторизации.");
+      return false;
+    }
+  };
+
   const logout = async () => {
     setUser(null);
     setAppUser(null);
@@ -254,7 +274,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, appUser, loading, loginWithGoogle, sendPhoneCode, verifyPhoneCode, logout, phoneError }}>
+    <AuthContext.Provider value={{ user, appUser, loading, loginWithGoogle, fastLoginWithPhone, sendPhoneCode, verifyPhoneCode, logout, phoneError }}>
       {children}
     </AuthContext.Provider>
   );

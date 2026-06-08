@@ -14,6 +14,7 @@ import { HQSettings } from './components/HQSettings';
 import { GroupsModule } from './components/GroupsModule';
 import { DirectorUsers } from './components/DirectorUsers';
 import { JoinPage } from './components/JoinPage';
+import { AdminStore } from './components/AdminStore';
 import { Shield, RefreshCw, Menu } from 'lucide-react';
 import firebaseConfig from '../firebase-applet-config.json';
 
@@ -54,12 +55,14 @@ function DashboardContainer() {
           );
         }
         if (currentTab === 'hq_settings') return <HQSettings />;
+        if (currentTab === 'hq_store') return <AdminStore />;
         if (currentTab === 'director_groups' || currentTab === 'hq_groups') return <GroupsModule />;
         if (currentTab === 'director_users') return <DirectorUsers />;
         return <DirectorCRM />;
 
       case 'manager':
         if (currentTab === 'hq_settings') return <HQSettings />;
+        if (currentTab === 'hq_store') return <AdminStore />;
         if (currentTab === 'manager_leads' || currentTab === 'hq_leads') {
           return (
             <ManagerCRM 

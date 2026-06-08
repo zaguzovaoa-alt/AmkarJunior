@@ -55,6 +55,44 @@ export interface Achievement {
   icon: string;
 }
 
+export interface Product {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  photoUrl?: string;
+  category: string;
+}
+
+export interface StoreOrder {
+  id: string;
+  clientId: string;
+  clientName: string;
+  items: { productId: string; name: string; quantity: number; price: number }[];
+  totalAmount: number;
+  status: 'new' | 'completed' | 'cancelled';
+  date: string;
+}
+
+export interface Homework {
+  id: string;
+  groupId: string;
+  groupName: string;
+  title: string;
+  description: string;
+  videoUrl?: string; // YouTube or other
+  dueDate: string;
+  dateAssigned: string;
+}
+
+export interface HomeworkSubmission {
+  id: string;
+  homeworkId: string;
+  clientId: string;
+  status: 'done' | 'pending';
+  dateDone?: string;
+}
+
 export interface Client {
   id: string;
   parentName: string;
@@ -76,6 +114,9 @@ export interface Client {
   coachName: string | null;
   medicalCertificateUrl: string | null; // file name or base64 or status
   insuranceUrl: string | null;
+  bonusBalance?: number;
+  referralCode?: string;
+  invitedBy?: string;
   payments: Payment[];
   attendance: AttendanceRecord[];
   progress: ProgressMetrics;
@@ -114,6 +155,8 @@ export interface TrainingGroup {
   playersCount: number;
   attendanceRate: number;
   scheduleDays: string[]; // e.g. ["Пн 17:00", "Ср 17:00"]
+  venueCost?: number; // Cost of the venue per training session
+  maxCapacity?: number; // Max capacity of the group to calculate load percentage
   
   // For Select Teams (Сборные команды)
   isSelectTeam?: boolean;
@@ -140,6 +183,8 @@ export interface Coach {
     professionalism: number;
     results: number;
   };
+  paymentType?: 'fixed' | 'per_session'; // System payroll setting
+  rate?: number; // Rate per month or per session
 }
 
 export interface TrainingSessionProtocol {
@@ -150,15 +195,18 @@ export interface TrainingSessionProtocol {
   dateString: string;
   coachId: string;
   coachName: string;
+  assistantId?: string;
+  assistantName?: string;
   photoUrl?: string | null;
   notes?: string;
   presentCount: number;
   absentCount: number;
   sickCount: number;
+  trialCount?: number;
   records: {
     clientId: string;
     clientName: string;
-    status: 'present' | 'absent_sick' | 'absent';
+    status: 'present' | 'absent_sick' | 'absent' | 'trial_free';
     reason?: string;
   }[];
 }
@@ -172,6 +220,8 @@ export interface FinanceRecord {
   description: string;
   groupName?: string;
   targetMonth?: string; // YYYY-MM
+  accountId?: string; // Links to internal accounts
+  isFixed?: boolean; // Indicates if this is a recurring/fixed expense or income
 }
 
 export interface FinanceCategory {
@@ -179,6 +229,13 @@ export interface FinanceCategory {
   type: 'income' | 'expense';
   name: string;
   isSystem?: boolean;
+}
+
+export interface Account {
+  id: string;
+  name: string;
+  balance: number;
+  type: 'cash' | 'bank' | 'acquiring' | 'other';
 }
 
 export interface FinancialPlan {
@@ -200,6 +257,8 @@ export interface CRMConfig {
   price8: number;
   price4: number;
   price1: number;
+  referralBonusAmount: number;
+  referralBonusType: 'rubles' | 'sessions';
 }
 
 export interface ChatMessage {

@@ -1260,54 +1260,54 @@ export const DirectorCRM: React.FC = () => {
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50 text-gray-800 min-h-screen">
       {/* Tab Header Navigation Panel */}
-      <div className="bg-white border-b border-gray-150 px-4 md:px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 sticky top-0 z-10 shadow-sm w-full max-w-full overflow-hidden">
-        <div className="flex items-center space-x-3 text-left shrink-0">
-          <div className="p-2.5 bg-red-50 text-red-650 rounded-xl">
+      <div className="bg-white border-b border-gray-150 px-4 md:px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 sticky top-0 z-10 shadow-sm w-full">
+        <div className="flex items-center space-x-3 text-left">
+          <div className="p-2.5 bg-red-50 text-red-650 rounded-xl shrink-0">
             <Activity className="w-5 h-5 text-red-650 animate-pulse" />
           </div>
-          <div>
-            <h1 className="text-base font-black text-slate-905 tracking-tight uppercase">
+          <div className="min-w-0">
+            <h1 className="text-sm md:text-base font-black text-slate-905 tracking-tight uppercase truncate">
               Аналитический Кабинет
             </h1>
-            <p className="text-[10px] text-gray-400 font-medium font-sans mt-0.5">
+            <p className="text-[10px] text-gray-400 font-medium font-sans mt-0.5 truncate">
               Сводная аналитика и импорт данных
             </p>
           </div>
         </div>
 
-        <div className="flex bg-slate-100 rounded-xl p-1 border overflow-x-auto no-scrollbar w-full md:w-auto">
+        <div className="flex bg-slate-100 rounded-xl p-1 border overflow-x-auto no-scrollbar w-full md:w-auto shrink-0 flex-nowrap">
           <button
             onClick={() => setActiveSection("metrics")}
-            className={`flex items-center space-x-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition duration-150 whitespace-nowrap ${
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition duration-150 whitespace-nowrap shrink-0 ${
               activeSection === "metrics"
                 ? "bg-white text-slate-900 shadow-3xs border border-slate-200/50"
                 : "text-slate-500 hover:text-slate-800"
             }`}
           >
-            <TrendingUp className="w-4 h-4" />
-            <span>Сводная аналитика</span>
+            <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span>Аналитика</span>
           </button>
           <button
             onClick={() => setActiveSection("training_sessions")}
-            className={`flex items-center space-x-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition duration-150 whitespace-nowrap ${
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition duration-150 whitespace-nowrap shrink-0 ${
               activeSection === "training_sessions"
                 ? "bg-white text-slate-900 shadow-3xs border border-slate-200/50"
                 : "text-slate-500 hover:text-slate-800"
             }`}
           >
-            <Calendar className="w-4 h-4" />
-            <span>Журнал тренировок</span>
+            <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span>Тренировки</span>
           </button>
           <button
             onClick={() => setActiveSection("import")}
-            className={`flex items-center space-x-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition duration-150 whitespace-nowrap ${
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition duration-150 whitespace-nowrap shrink-0 ${
               activeSection === "import"
                 ? "bg-white text-slate-900 shadow-3xs border border-slate-200/50"
                 : "text-slate-500 hover:text-slate-800"
             }`}
           >
-            <Upload className="w-4 h-4" />
-            <span>Массовый импорт</span>
+            <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span>Импорт</span>
           </button>
         </div>
       </div>
