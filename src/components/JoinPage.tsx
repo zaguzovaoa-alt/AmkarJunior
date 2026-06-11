@@ -97,6 +97,8 @@ export const JoinPage: React.FC = () => {
             src={heroImage}
             alt="Футбол Амкар"
             className="w-full h-full object-cover opacity-80"
+            fetchPriority="high"
+            decoding="async"
           />
         </div>
 
@@ -245,16 +247,22 @@ export const JoinPage: React.FC = () => {
               src={gallery1}
               alt="Тренировка"
               className="w-full h-48 md:h-64 object-cover rounded-2xl shadow-sm"
+              loading="lazy"
+              decoding="async"
             />
             <img
               src={gallery2}
               alt="Команда"
               className="w-full h-48 md:h-64 object-cover rounded-2xl shadow-sm"
+              loading="lazy"
+              decoding="async"
             />
             <img
               src={gallery3}
               alt="Победа"
               className="w-full h-48 md:h-64 object-cover rounded-2xl shadow-sm hidden md:block"
+              loading="lazy"
+              decoding="async"
             />
           </div>
         </div>
