@@ -17,6 +17,9 @@ import {
   Briefcase,
   FileSpreadsheet,
   Lock,
+  Users,
+  BellRing,
+  Check,
 } from "lucide-react";
 import firebaseConfig from "../../firebase-applet-config.json";
 
@@ -55,6 +58,34 @@ export const HQSettings: React.FC = () => {
     setSuccessMsg("Настройки реферальной системы сохранены");
     setTimeout(() => setSuccessMsg(null), 3000);
   };
+
+  const [telegramBotToken, setTelegramBotToken] = useState(crmConfig?.telegramBotToken || "");
+  const [telegramGroupChatId, setTelegramGroupChatId] = useState(crmConfig?.telegramGroupChatId || "");
+  const [telegramAlerts, setTelegramAlerts] = useState<Record<string, boolean>>(crmConfig?.telegramAlerts || {
+    newLead: true,
+    newOrder: true,
+    churnRisk: true,
+    scheduleConflict: true
+  });
+
+  React.useEffect(() => {
+    if (crmConfig) {
+      setTelegramBotToken(crmConfig.telegramBotToken || "");
+      setTelegramGroupChatId(crmConfig.telegramGroupChatId || "");
+      if (crmConfig.telegramAlerts) {
+        setTelegramAlerts(crmConfig.telegramAlerts);
+      }
+      setReferralBonusAmount(crmConfig.referralBonusAmount || 500);
+      setReferralBonusType(crmConfig.referralBonusType || 'rubles');
+    }
+  }, [crmConfig]);
+
+  const handleSaveTelegram = () => {
+    updateCRMConfig({ telegramBotToken, telegramGroupChatId, telegramAlerts });
+    setSuccessMsg("Настройки Telegram алертов сохранены");
+    setTimeout(() => setSuccessMsg(null), 3000);
+  };
+
 
   // States for checkbox clearance config
   const [clearConfig, setClearConfig] = useState({
@@ -472,6 +503,74 @@ export const HQSettings: React.FC = () => {
           </div>
 
           <div className="space-y-6">
+            <div className="bg-white rounded-2xl p-5 border shadow-sm text-left space-y-4">
+              <h3 className="font-extrabold text-slate-900 border-b pb-2.5 text-sm flex items-center space-x-2">
+                <BellRing className="w-4 h-4 text-slate-650" />
+                <span>Telegram Алерты</span>
+              </h3>
+              
+              <div className="space-y-4">
+                <p className="text-xs text-slate-500 mb-2">Настройте бота и ID группы для системных и критических уведомлений руководству (риск оттока, заявки, конфликты).</p>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Токен Бота</label>
+                  <input 
+                    type="text" 
+                    value={telegramBotToken} 
+                    onChange={e => setTelegramBotToken(e.target.value)}
+                    placeholder="Например: 123456789:ABCDEF..."
+                    className="w-full text-xs p-2 border rounded-xl outline-none focus:border-emerald-500" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">ID Группы чата</label>
+                  <input 
+                    type="text" 
+                    value={telegramGroupChatId} 
+                    onChange={e => setTelegramGroupChatId(e.target.value)}
+                    placeholder="Например: @zdorovie_psichosomatika или -100123456789"
+                    className="w-full text-xs p-2 border rounded-xl outline-none focus:border-emerald-500" 
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1.5 leading-relaxed">
+                    Для публичных групп можно использовать ссылку с @ (например: <strong>@zdorovie_psichosomatika</strong>). <br />
+                    Для приватных групп используйте числовой ID (начинается с -100), его можно узнать, добавив в группу бота <strong>@getmyid_bot</strong>.<br />
+                    <strong className="text-amber-600">Важно:</strong> Не забудьте добавить вашего собственного бота в администраторы группы!
+                  </p>
+                </div>
+
+                <div className="pt-2 border-t space-y-3">
+                  <h4 className="text-xs font-bold text-slate-800">Активные системные алерты</h4>
+                  
+                  {[
+                    { id: 'newLead', label: 'Новая заявка (Лид / Воронка продаж)' },
+                    { id: 'newOrder', label: 'Новый заказ в магазине экипировки' },
+                    { id: 'churnRisk', label: 'Риск оттока (Пропуск 2+ тренировок подряд)' },
+                    { id: 'scheduleConflict', label: 'Нештатная ситуация: Конфликт расписания (пересечение у одного тренера)' }
+                  ].map(alert => (
+                    <label key={alert.id} className="flex items-center space-x-3 cursor-pointer group">
+                      <div className={`w-5 h-5 rounded flex items-center justify-center border transition-colors ${
+                        telegramAlerts[alert.id] !== false ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white border-slate-300 group-hover:border-emerald-400'
+                      }`}>
+                        {telegramAlerts[alert.id] !== false && <Check className="w-3.5 h-3.5" />}
+                      </div>
+                      <span className="text-sm font-medium text-slate-700">{alert.label}</span>
+                      <input 
+                        type="checkbox"
+                        className="hidden"
+                        checked={telegramAlerts[alert.id] !== false}
+                        onChange={(e) => {
+                          setTelegramAlerts(prev => ({ ...prev, [alert.id]: e.target.checked }));
+                        }}
+                      />
+                    </label>
+                  ))}
+                </div>
+
+                <div className="pt-2 border-t text-right">
+                  <button onClick={handleSaveTelegram} className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold uppercase rounded-xl tracking-wider transition">Сохранить</button>
+                </div>
+              </div>
+            </div>
+
             <div className="bg-white rounded-2xl p-5 border shadow-sm text-left space-y-4">
               <h3 className="font-extrabold text-slate-900 border-b pb-2.5 text-sm flex items-center space-x-2">
                 <Users className="w-4 h-4 text-slate-650" />

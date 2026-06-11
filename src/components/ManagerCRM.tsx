@@ -31,6 +31,7 @@ import {
   FileText,
   Settings,
   Shield,
+  Send,
 } from "lucide-react";
 import { Client, Lead, ClientStatus, CRMTask } from "../types";
 import { calculateAge, isBirthdayToday } from "../utils/dateUtils";
@@ -111,7 +112,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
   const [newChildName, setNewChildName] = useState("");
   const [newChildSurname, setNewChildSurname] = useState("");
   const [newChildBirthDate, setNewChildBirthDate] = useState("");
-  const [newPhone, setNewPhone] = useState("");
+  const [newPhone, setNewPhone] = useState("+7 ");
   const [newSource, setNewSource] = useState<
     "MAX" | "telegram" | "vk" | "листовка" | "рекомендация"
   >("MAX");
@@ -121,7 +122,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
   const [newDirectChildName, setNewDirectChildName] = useState("");
   const [newDirectChildSurname, setNewDirectChildSurname] = useState("");
   const [newDirectChildBirthDate, setNewDirectChildBirthDate] = useState("");
-  const [newDirectPhone, setNewDirectPhone] = useState("");
+  const [newDirectPhone, setNewDirectPhone] = useState("+7 ");
   const [newDirectEmail, setNewDirectEmail] = useState("");
   const [newDirectGroup, setNewDirectGroup] = useState("");
   const [newDirectStatus, setNewDirectStatus] =
@@ -383,22 +384,16 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
     }
   };
 
+  const [addLeadError, setAddLeadError] = useState<string | null>(null);
+
   const handleAddNewLead = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newParentName) {
-      alert("Пожалуйста, заполните поле 'ФИО Родителя'");
-      return;
-    }
-    if (!newChildName) {
-      alert("Пожалуйста, заполните поле 'Имя ученика'");
-      return;
-    }
-    if (!newPhone || newPhone.replace(/\D/g, "").length < 11) {
-      alert("Пожалуйста, заполните поле 'Телефон'");
-      return;
-    }
-
+    setAddLeadError(null);
     try {
+      if (!newParentName) throw new Error("Пожалуйста, заполните поле 'ФИО Родителя'.");
+      if (!newChildName) throw new Error("Пожалуйста, заполните поле 'Имя ученика'.");
+      if (!newPhone || newPhone.replace(/\D/g, "").length < 11) throw new Error("Пожалуйста, корректно заполните поле 'Телефон'.");
+
       await addLead({
         parentName: newParentName,
         parentPhone: newPhone || "+7 (900) 123-45-67",
@@ -420,9 +415,9 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
       setNewParentName("");
       setNewChildName("");
       setNewChildSurname("");
-      setNewPhone("");
+      setNewPhone("+7 ");
     } catch (err: any) {
-      alert("Ошибка при регистрации лида: " + (err.message || String(err)));
+      setAddLeadError("Ошибка при регистрации лида: " + (err.message || String(err)));
     }
   };
 
@@ -432,36 +427,24 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
     raw = raw.substring(0, 10);
     let formatted = "";
     if (raw.length > 0) formatted += "(" + raw.substring(0, 3);
-    if (raw.length >= 4) formatted += ") " + raw.substring(3, 6);
-    if (raw.length >= 7) formatted += "-" + raw.substring(6, 8);
-    if (raw.length >= 9) formatted += "-" + raw.substring(8, 10);
-    setter(raw.length > 0 ? "+7 " + formatted : "");
+    if (raw.length > 3) formatted += ") " + raw.substring(3, 6);
+    if (raw.length > 6) formatted += "-" + raw.substring(6, 8);
+    if (raw.length > 8) formatted += "-" + raw.substring(8, 10);
+    setter("+7 " + formatted);
   };
+
+  const [addClientError, setAddClientError] = useState<string | null>(null);
 
   const handleAddNewDirectClient = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newDirectParentName) {
-      alert("Пожалуйста, заполните поле 'ФИО Родителя'");
-      return;
-    }
-    if (!newDirectChildName) {
-      alert("Пожалуйста, заполните поле 'Имя ученика'");
-      return;
-    }
-    if (!newDirectChildSurname) {
-      alert("Пожалуйста, заполните поле 'Фамилия ученика'");
-      return;
-    }
-    if (!newDirectChildBirthDate) {
-      alert("Пожалуйста, заполните поле 'Дата рождения'");
-      return;
-    }
-    if (!newDirectPhone || newDirectPhone.replace(/\D/g, "").length < 11) {
-      alert("Пожалуйста, заполните поле 'Телефон'");
-      return;
-    }
-
+    setAddClientError(null);
     try {
+      if (!newDirectParentName) throw new Error("Пожалуйста, заполните поле 'ФИО Родителя'");
+      if (!newDirectChildName) throw new Error("Пожалуйста, заполните поле 'Имя ученика'");
+      if (!newDirectChildSurname) throw new Error("Пожалуйста, заполните поле 'Фамилия ученика'");
+      if (!newDirectChildBirthDate) throw new Error("Пожалуйста, заполните поле 'Дата рождения'");
+      if (!newDirectPhone || newDirectPhone.replace(/\D/g, "").length < 11) throw new Error("Пожалуйста, корректно заполните поле 'Телефон'");
+
       await addClient({
         parentName: newDirectParentName,
         parentPhone: newDirectPhone || "+7 (000) 000-00-00",
@@ -510,11 +493,11 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
       setNewDirectParentName("");
       setNewDirectChildName("");
       setNewDirectChildSurname("");
-      setNewDirectPhone("");
+      setNewDirectPhone("+7 ");
       setNewDirectEmail("");
       setNewDirectGroup("");
     } catch (err: any) {
-      alert("Ошибка при добавлении ученика: " + (err.message || String(err)));
+      setAddClientError("Ошибка при добавлении ученика: " + (err.message || String(err)));
     }
   };
 
@@ -742,10 +725,19 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                         <td className="p-3 text-right flex items-center justify-end space-x-2">
                           <button
                             onClick={() => setMaxChatLead(lead)}
-                            className="p-1.5 text-slate-500 hover:bg-slate-100 rounded transition bg-slate-50 border"
+                            className="p-1.5 text-[#7551FF] hover:bg-[#7551FF]/10 rounded-lg transition hover:scale-105 border border-transparent hover:border-[#7551FF]/20"
                             title="Чат MAX с родителем"
                           >
-                            <MessageSquare className="w-3.5 h-3.5" />
+                            <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current drop-shadow-sm">
+                              <defs>
+                                <linearGradient id="maxGradLead" x1="0%" y1="0%" x2="100%" y2="100%">
+                                  <stop offset="0%" stopColor="#2BC1FF" />
+                                  <stop offset="50%" stopColor="#7551FF" />
+                                  <stop offset="100%" stopColor="#9D38FF" />
+                                </linearGradient>
+                              </defs>
+                              <path fill="url(#maxGradLead)" d="M12 2C6.477 2 2 6.477 2 12c0 1.905.534 3.684 1.464 5.203.208.337.262.748.118 1.112l-1.246 3.165a.6.6 0 00.776.776l3.164-1.246a1.18 1.18 0 011.112.118C8.91 21.936 10.418 22.5 12 22.5c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 15.5c-3.037 0-5.5-2.463-5.5-5.5S8.963 6.5 12 6.5s5.5 2.463 5.5 5.5-2.463 5.5-5.5 5.5z" />
+                            </svg>
                           </button>
                           {lead.status === "new" ||
                           lead.status === "contacted" ? (
@@ -2610,14 +2602,10 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                               const url = `https://t.me/+${tgPhone}`;
                               window.open(url, "_blank");
                             }}
-                            className="flex-1 py-1.5 bg-[#2AABEE] hover:bg-[#229ED9] text-white text-center rounded font-bold text-[11px] flex items-center justify-center space-x-1 transition"
+                            className="flex-1 py-1.5 bg-[#2AABEE] hover:bg-[#229ED9] text-white text-center rounded-lg font-bold text-[11px] flex items-center justify-center space-x-1 transition"
                           >
-                            <svg
-                              viewBox="0 0 24 24"
-                              className="w-3.5 h-3.5"
-                              fill="currentColor"
-                            >
-                              <path d="M11.944 0a12 12 0 0 0-11.8 14.1L2.1 19.8c.2.6.9.8 1.4.3l3-2.6 4.9 3.6c.6.4 1.4.1 1.6-.6l3.5-16.7c.1-.8-.6-1.5-1.3-1.3zM6.9 14.2l-.3 3.5c.4 0 .6-.2.8-.4l2-1.9 4 3c.7.4 1.3.1 1.5-.7l2.8-13.4c.3-1.3-.5-1.9-1.2-1.6L4.5 9.8c-1.3.5-1.3 1.2-.2 1.6l3.2 1 7.5-4.7c.4-.2.7-.1.5.1z" />
+                            <svg viewBox="0 0 24 24" className="w-4 h-4 fill-white flex-shrink-0">
+                               <path d="M12 0C5.372 0 0 5.373 0 12s5.372 12 12 12 12-5.373 12-12S18.628 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.223-.548.223l.188-2.85 5.18-4.686c.223-.195-.054-.304-.346-.11l-6.4 4.024-2.76-.86c-.6-.185-.61-.595.125-.89l10.82-4.172c.504-.197.942.115.807.94z"/>
                             </svg>
                             <span>Telegram</span>
                           </button>
@@ -2625,16 +2613,14 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                             onClick={() => {
                               setMaxChatClient(selectedClient);
                             }}
-                            className="flex-1 py-1.5 bg-black hover:bg-slate-800 text-white text-center rounded font-bold text-[11px] flex items-center justify-center space-x-1.5 transition"
+                            className="flex-1 py-1.5 bg-gradient-to-r from-[#2BC1FF] via-[#7551FF] to-[#9D38FF] hover:from-[#21A8E3] hover:via-[#613CDC] hover:to-[#8B23E9] text-white text-center rounded-lg font-bold text-[11px] flex items-center justify-center space-x-1.5 transition shadow-sm overflow-hidden relative group"
                           >
-                            <svg
-                              viewBox="0 0 24 24"
-                              className="w-3.5 h-3.5"
-                              fill="currentColor"
-                            >
-                              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-5l-2.25 2.25L6.5 11.5V16.5h-2v-9h2l2.25 2.25L11 7.5h2v9h-2zm6 0h-2l-1.5-2.5h-1V16.5h-2v-9h2v4h1l1.5-2.5h2l-2 3.5 2 4z" />
+                            <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                            <svg viewBox="0 0 24 24" className="w-4 h-4 text-white flex-shrink-0 fill-current drop-shadow-sm relative z-10">
+                              <path d="M12 2C6.477 2 2 6.477 2 12c0 1.905.534 3.684 1.464 5.203.208.337.262.748.118 1.112l-1.246 3.165a.6.6 0 00.776.776l3.164-1.246a1.18 1.18 0 011.112.118C8.91 21.936 10.418 22.5 12 22.5c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 15.5c-3.037 0-5.5-2.463-5.5-5.5S8.963 6.5 12 6.5s5.5 2.463 5.5 5.5-2.463 5.5-5.5 5.5z" />
+                                <circle cx="12" cy="12" r="6" fill="currentColor" fillOpacity="0.2" />
                             </svg>
-                            <span>Чат MAX</span>
+                            <span className="relative z-10 tracking-wide">Чат MAX</span>
                           </button>
                         </div>
 
@@ -2972,6 +2958,12 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                 </select>
               </div>
 
+              {addLeadError && (
+                <div className="bg-red-50 border-s-4 border-red-500 text-red-700 px-3 py-2 text-xs font-semibold shadow-sm rounded-r-lg">
+                  {addLeadError}
+                </div>
+              )}
+
               <div className="flex space-x-3 pt-4 border-t">
                 <button
                   type="submit"
@@ -3157,6 +3149,12 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                   <option value="1_session">Разовое</option>
                 </select>
               </div>
+
+              {addClientError && (
+                <div className="bg-red-50 border-s-4 border-red-500 text-red-700 px-3 py-2 text-xs font-semibold shadow-sm rounded-r-lg">
+                  {addClientError}
+                </div>
+              )}
 
               <div className="flex space-x-3 pt-4 border-t">
                 <button
@@ -3955,10 +3953,12 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
       {(maxChatClient || maxChatLead) && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 z-[60]">
           <div className="bg-white rounded-3xl w-full max-w-md max-h-full flex flex-col overflow-hidden border shadow-xl h-[600px]">
-            <div className="p-4 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white flex justify-between items-center shrink-0">
+            <div className="p-4 bg-gradient-to-r from-[#2BC1FF] via-[#7551FF] to-[#9D38FF] text-white flex justify-between items-center shrink-0">
               <div className="flex items-center space-x-3">
                 <div className="bg-white/20 p-2 rounded-xl">
-                  <MessageSquare className="w-5 h-5 text-white" />
+                  <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white">
+                     <path d="M12 2C6.477 2 2 6.477 2 12c0 1.905.534 3.684 1.464 5.203.208.337.262.748.118 1.112l-1.246 3.165a.6.6 0 00.776.776l3.164-1.246a1.18 1.18 0 011.112.118C8.91 21.936 10.418 22.5 12 22.5c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 15.5c-3.037 0-5.5-2.463-5.5-5.5S8.963 6.5 12 6.5s5.5 2.463 5.5 5.5-2.463 5.5-5.5 5.5z" />
+                  </svg>
                 </div>
                 <div>
                   <h3 className="font-bold text-white text-sm">
@@ -3966,7 +3966,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                       ? maxChatClient.parentName
                       : maxChatLead?.parentName}
                   </h3>
-                  <p className="text-[10px] text-emerald-100 font-medium">
+                  <p className="text-[10px] text-white/80 font-medium">
                     Чат MAX (Официальный канал)
                   </p>
                 </div>

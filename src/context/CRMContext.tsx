@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { collection, doc, getDoc, setDoc, onSnapshot, updateDoc, deleteDoc, getDocFromServer, query, getDocs } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
+import { sendTelegramAlert } from '../utils/telegram';
 import { 
   Lead, Client, CRMTask, TrainingGroup, Coach, FinanceRecord, ChatMessage, LeadSource, Payment, TrainingSessionProtocol, FinanceCategory, FinancialPlan, CRMConfig, AppNotification, Account, Product, StoreOrder, Homework, HomeworkSubmission
 } from '../types';
@@ -668,9 +669,24 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ...prev
       ]);
     }
+    
+    // TELEGRAM ALERT: New Lead
+    if (crmConfig.telegramAlerts?.newLead !== false) {
+      sendTelegramAlert(
+        crmConfig.telegramBotToken,
+        crmConfig.telegramGroupChatId,
+        `🚨 <b>НОВАЯ ЗАЯВКА</b>\n<b>Имя:</b> ${newLead.childSurname} ${newLead.childName} (${newLead.childAge} лет)\n<b>Источник:</b> ${newLead.source}\n<b>Родитель:</b> ${newLead.parentName}\n<b>Телефон:</b> ${newLead.parentPhone}`
+      );
+    }
   };
 
   async function addClient(clientData: Omit<Client, 'id' | 'attendance' | 'payments' | 'progress' | 'achievements'>) {
+    if (!clientData.parentName?.trim()) throw new Error("Пожалуйста, заполните поле 'ФИО Родителя'.");
+    if (!clientData.childName?.trim()) throw new Error("Пожалуйста, заполните поле 'Имя ученика'.");
+    if (!clientData.childSurname?.trim()) throw new Error("Пожалуйста, заполните поле 'Фамилия ученика'.");
+    if (!clientData.childBirthDate) throw new Error("Пожалуйста, заполните поле 'Дата рождения'.");
+    if (!clientData.parentPhone || clientData.parentPhone.replace(/\D/g, "").length < 11) throw new Error("Пожалуйста, корректно заполните поле 'Телефон'.");
+
     const clientId = `cl_${Date.now()}`;
     const newClient: Client = {
       ...clientData,
@@ -980,6 +996,19 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (c) {
         const wasPresent = record.status === 'present';
         const isSessionDeducted = wasPresent && c.abonementSessionsLeft > 0;
+        
+        // TELEGRAM ALERT: check if 2+ absences in a row
+        if (!wasPresent && record.status !== 'trial_free' && crmConfig.telegramAlerts?.churnRisk !== false) {
+           const pastAbsences = c.attendance.slice(0, 1).every(a => a.status === 'absent' || a.status === 'absent_sick');
+           if (pastAbsences) {
+              sendTelegramAlert(
+                crmConfig.telegramBotToken,
+                crmConfig.telegramGroupChatId,
+                `⚠️ <b>РИСК ОТТОКА</b>\n<b>Ученик:</b> ${c.childSurname} ${c.childName}\n<b>Группа:</b> ${c.groupName}\nПропущено 2 и более тренировок подряд.\nТребуется помощь менеджера!`
+              );
+           }
+        }
+
         updateDoc(doc(db, 'clients', c.id), {
           abonementSessionsLeft: isSessionDeducted ? c.abonementSessionsLeft - 1 : c.abonementSessionsLeft,
           notes: mediaFile ? `${c.notes}\n[Посещаемость ${date}]: Тренер прикрепил фото ${mediaFile}.` : c.notes,
@@ -1172,7 +1201,18 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
   
   const createOrder = async (order: Omit<StoreOrder, 'id' | 'date'>) => {
-    setStoreOrders(prev => [{ ...order, id: `ord_${Date.now()}`, date: new Date().toISOString() }, ...prev]);
+    const newOrder = { ...order, id: `ord_${Date.now()}`, date: new Date().toISOString() };
+    setStoreOrders(prev => [newOrder, ...prev]);
+
+    // TELEGRAM ALERT: New Store Order
+    if (crmConfig.telegramAlerts?.newOrder !== false) {
+      const itemsStr = newOrder.items.map(i => `- ${i.name} (${i.quantity}x)`).join('\n');
+      sendTelegramAlert(
+        crmConfig.telegramBotToken,
+        crmConfig.telegramGroupChatId,
+        `🛒 <b>НОВЫЙ ЗАКАЗ В МАГАЗИНЕ</b>\n<b>Клиент:</b> ${newOrder.clientName}\n<b>Сумма:</b> ${newOrder.totalAmount} руб.\n<b>Товары:</b>\n${itemsStr}`
+      );
+    }
   };
   const updateOrderStatus = async (id: string, status: 'completed' | 'cancelled') => {
     setStoreOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o));
@@ -1512,6 +1552,21 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const createGroup = async (name: string, year: number, birthYearFrom: number, birthYearTo: number, coachId: string, coachName: string, scheduleDays: string[], isSelectTeam?: boolean, targetCompetition?: string, selectedClientIds?: string[], venueCost?: number, maxCapacity?: number) => {
+    // TELEGRAM ALERT: Check schedule conflict
+    if (crmConfig.telegramAlerts?.scheduleConflict !== false) {
+      const hasConflict = groups.some(g => 
+        g.coachId === coachId && 
+        g.scheduleDays.some(day => scheduleDays.includes(day))
+      );
+      if (hasConflict) {
+        sendTelegramAlert(
+          crmConfig.telegramBotToken,
+          crmConfig.telegramGroupChatId,
+          `⚠️ <b>КОНФЛИКТ РАСПИСАНИЯ</b>\n<b>Тренер:</b> ${coachName}\n<b>Новая Группа:</b> ${name}\nПересечение времени тренировок у одного тренера!`
+        );
+      }
+    }
+
     const newGroup: TrainingGroup = {
       id: `g_${Date.now()}`,
       name,
@@ -1538,6 +1593,27 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateGroup = async (id: string, updates: Partial<Omit<TrainingGroup, 'id'>>) => {
     const oldGroup = groups.find(g => g.id === id);
     const oldName = oldGroup?.name;
+
+    // TELEGRAM ALERT: Check schedule conflict
+    if ((updates.scheduleDays || updates.coachId) && crmConfig.telegramAlerts?.scheduleConflict !== false) {
+      const newSchedule = updates.scheduleDays || oldGroup?.scheduleDays || [];
+      const newCoachId = updates.coachId || oldGroup?.coachId;
+      const newCoachName = updates.coachName || oldGroup?.coachName || "";
+      const newGroupName = updates.name || oldGroup?.name || "";
+
+      const hasConflict = groups.some(g => 
+        g.id !== id &&
+        g.coachId === newCoachId && 
+        g.scheduleDays.some(day => newSchedule.includes(day))
+      );
+      if (hasConflict) {
+        sendTelegramAlert(
+          crmConfig.telegramBotToken,
+          crmConfig.telegramGroupChatId,
+          `⚠️ <b>КОНФЛИКТ РАСПИСАНИЯ</b>\n<b>Тренер:</b> ${newCoachName}\n<b>Группа:</b> ${newGroupName}\nИзменения привели к пересечению времени тренировок!`
+        );
+      }
+    }
 
     setGroups(prev => prev.map(g => g.id === id ? { ...g, ...updates } : g));
     updateDoc(doc(db, 'groups', id), updates).catch(err => {

@@ -259,6 +259,9 @@ export interface CRMConfig {
   price1: number;
   referralBonusAmount: number;
   referralBonusType: 'rubles' | 'sessions';
+  telegramBotToken?: string;
+  telegramGroupChatId?: string;
+  telegramAlerts?: Record<string, boolean>;
 }
 
 export interface ChatMessage {

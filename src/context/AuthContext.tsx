@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db } from '../firebase';
-import { onAuthStateChanged, User, GoogleAuthProvider, signInWithPopup, signInAnonymously, signOut } from 'firebase/auth';
+import { onAuthStateChanged, User, signInAnonymously, signOut } from 'firebase/auth';
 import { collection, query, where, getDocs, setDoc, doc, getDoc, deleteDoc } from 'firebase/firestore';
 
 export type UserRole = 'admin' | 'director' | 'manager' | 'trainer' | 'parent';
@@ -19,7 +19,6 @@ interface AuthContextType {
   user: User | null;
   appUser: AppUser | null;
   loading: boolean;
-  loginWithGoogle: () => Promise<void>;
   fastLoginWithPhone: (phone: string) => Promise<boolean>;
   sendPhoneCode: (phone: string) => Promise<{ check_id: string; call_phone: string; call_phone_pretty: string }>;
   verifyPhoneCode: (check_id: string, phone: string) => Promise<boolean>;
@@ -166,16 +165,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const loginWithGoogle = async () => {
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-    } catch (err: any) {
-      console.error(err);
-      alert("Ошибка входа Google: " + err.message);
-    }
-  };
-
   const sendPhoneCode = async (phone: string) => {
     setPhoneError(null);
     try {
@@ -274,7 +263,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, appUser, loading, loginWithGoogle, fastLoginWithPhone, sendPhoneCode, verifyPhoneCode, logout, phoneError }}>
+    <AuthContext.Provider value={{ user, appUser, loading, fastLoginWithPhone, sendPhoneCode, verifyPhoneCode, logout, phoneError }}>
       {children}
     </AuthContext.Provider>
   );

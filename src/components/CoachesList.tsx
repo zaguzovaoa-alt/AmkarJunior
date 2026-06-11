@@ -589,10 +589,9 @@ export const CoachesList: React.FC = () => {
 
                                   {ch.telegram ? (
                                     <div className="flex items-center space-x-1.5 text-xs text-slate-700">
-                                      <Send
-                                        className="w-3 h-3 text-[#0088cc] shrink-0 select-none"
-                                        style={{ transform: "rotate(-20deg)" }}
-                                      />
+                                      <svg viewBox="0 0 24 24" className="w-3 h-3 fill-[#0088cc] shrink-0">
+                                         <path d="M12 0C5.372 0 0 5.373 0 12s5.372 12 12 12 12-5.373 12-12S18.628 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.223-.548.223l.188-2.85 5.18-4.686c.223-.195-.054-.304-.346-.11l-6.4 4.024-2.76-.86c-.6-.185-.61-.595.125-.89l10.82-4.172c.504-.197.942.115.807.94z"/>
+                                      </svg>
                                       <span className="font-mono text-[11px] text-[#0088cc] font-semibold truncate">
                                         {ch.telegram.startsWith("@")
                                           ? ch.telegram

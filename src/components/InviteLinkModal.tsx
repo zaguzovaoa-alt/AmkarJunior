@@ -113,7 +113,9 @@ export const InviteLinkModal: React.FC<InviteLinkModalProps> = ({
                 className="w-full py-3 bg-[#0088cc]/10 hover:bg-[#0088cc]/20 text-[#0088cc] font-bold rounded-2xl flex flex-col justify-center items-center gap-1 transition text-xs border border-[#0088cc]/20"
               >
                 <div className="bg-[#0088cc] text-white p-2 rounded-full mb-1">
-                  <Send className="w-4 h-4 -translate-y-px -translate-x-px" />
+                  <svg viewBox="0 0 24 24" className="w-4 h-4 fill-white -translate-y-[0.5px] -translate-x-[1px]">
+                     <path d="M12 0C5.372 0 0 5.373 0 12s5.372 12 12 12 12-5.373 12-12S18.628 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.223-.548.223l.188-2.85 5.18-4.686c.223-.195-.054-.304-.346-.11l-6.4 4.024-2.76-.86c-.6-.185-.61-.595.125-.89l10.82-4.172c.504-.197.942.115.807.94z"/>
+                  </svg>
                 </div>
                 <span>Telegram</span>
               </button>

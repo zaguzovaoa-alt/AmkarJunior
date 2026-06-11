@@ -259,7 +259,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
 
   const handleAttendanceChange = (
     playerId: string,
-    status: "present" | "absent_sick" | "absent",
+    status: "present" | "absent_sick" | "absent" | "trial_free",
     reason = "",
   ) => {
     setAttendanceRecords((prev) => ({
@@ -1285,16 +1285,16 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                       });
 
                       const stats = {
-                        present: Object.values(attendanceRecords).filter(
+                        present: (Object.values(attendanceRecords) as any[]).filter(
                           (r) => r.status === "present",
                         ).length,
-                        sick: Object.values(attendanceRecords).filter(
+                        sick: (Object.values(attendanceRecords) as any[]).filter(
                           (r) => r.status === "absent_sick",
                         ).length,
-                        absent: Object.values(attendanceRecords).filter(
+                        absent: (Object.values(attendanceRecords) as any[]).filter(
                           (r) => r.status === "absent",
                         ).length,
-                        trial: Object.values(attendanceRecords).filter(
+                        trial: (Object.values(attendanceRecords) as any[]).filter(
                           (r) => r.status === "trial_free",
                         ).length,
                       };
