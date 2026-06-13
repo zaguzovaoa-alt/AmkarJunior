@@ -57,8 +57,27 @@ export const AdminStore: React.FC = () => {
                   <input type="number" className="w-full p-2 border rounded-xl outline-none" value={newProduct.price || ''} onChange={e => setNewProduct({...newProduct, price: Number(e.target.value)})} />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-400 mb-1">URL Фото (необязательно)</label>
-                  <input type="text" className="w-full p-2 border rounded-xl outline-none" value={newProduct.photoUrl || ''} onChange={e => setNewProduct({...newProduct, photoUrl: e.target.value})} />
+                  <label className="block text-xs font-bold text-gray-400 mb-1">Фото товара (Загрузить)</label>
+                  <input 
+                    type="file" 
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          setNewProduct({...newProduct, photoUrl: reader.result as string});
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }} 
+                    className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" 
+                  />
+                  {newProduct.photoUrl && (
+                    <div className="mt-2">
+                      <img src={newProduct.photoUrl} alt="Preview" className="h-16 w-16 object-cover rounded-lg border" />
+                    </div>
+                  )}
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-xs font-bold text-gray-400 mb-1">Описание</label>
@@ -73,16 +92,28 @@ export const AdminStore: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {products.map(p => (
-              <div key={p.id} className="bg-white border shadow-sm rounded-2xl p-4 flex flex-col justify-between">
-                <div>
-                   <div className="text-[10px] uppercase font-bold text-gray-400">{p.category}</div>
-                   <h4 className="font-bold text-slate-800 leading-tight">{p.name}</h4>
-                   <div className="text-xl font-black text-slate-900 mt-2">{p.price} ₽</div>
-                </div>
-                <div className="mt-4 flex justify-end space-x-2">
-                   <button onClick={() => deleteProduct(p.id)} className="p-2 text-gray-400 hover:text-red-500 bg-slate-50 rounded-xl transition">
-                      <Trash2 className="w-4 h-4" />
-                   </button>
+              <div key={p.id} className="bg-white border shadow-sm rounded-2xl flex flex-col overflow-hidden">
+                {p.photoUrl ? (
+                  <div className="h-48 w-full bg-slate-100 relative">
+                    <img src={p.photoUrl} alt={p.name} className="absolute inset-0 w-full h-full object-cover" />
+                  </div>
+                ) : (
+                  <div className="h-48 w-full bg-slate-100 flex items-center justify-center text-slate-300">
+                    <ShoppingBag className="w-12 h-12 opacity-50" />
+                  </div>
+                )}
+                <div className="p-4 flex flex-col justify-between flex-1">
+                  <div>
+                     <div className="text-[10px] uppercase font-bold text-gray-400">{p.category}</div>
+                     <h4 className="font-bold text-slate-800 leading-tight mt-1">{p.name}</h4>
+                     <div className="text-xl font-black text-slate-900 mt-2">{p.price} ₽</div>
+                  </div>
+                  <div className="mt-4 flex justify-end space-x-2">
+                     <button onClick={() => deleteProduct(p.id)} className="p-2 text-gray-400 hover:text-red-500 bg-slate-50 rounded-xl transition hover:bg-red-50 relative group">
+                        <Trash2 className="w-4 h-4" />
+                        <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">Удалить</span>
+                     </button>
+                  </div>
                 </div>
               </div>
             ))}

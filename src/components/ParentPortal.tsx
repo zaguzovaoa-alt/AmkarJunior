@@ -528,8 +528,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                 </div>
               )}
 
-              {(myClient.abonementSessionsLeft <= 2 ||
-                myClient.abonementStatus === "Ожидает оплаты") &&
+              {myClient.abonementSessionsLeft === 1 &&
                 myClient.abonement !== "none" && (
                   <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm animate-pulse">
                     <div className="flex items-center space-x-3">

@@ -57,23 +57,79 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const resolveAppUser = async (u: User, optionalPhone?: string) => {
     try {
+      const activePhone = u.phoneNumber || optionalPhone;
+      
+      let isCoach = false;
+      let coachData: any = null;
+      if (activePhone) {
+        const qCoach = query(collection(db, 'coaches'), where('phone', '==', activePhone));
+        const coachDocs = await getDocs(qCoach);
+        if (!coachDocs.empty) {
+          isCoach = true;
+          coachData = coachDocs.docs[0].data();
+        }
+      }
+      
+      let maxRole: UserRole | null = null;
+      let existingPhoneDocs: any[] = [];
+      const roleWeights: Record<string, number> = { admin: 5, director: 4, manager: 3, trainer: 2, parent: 1 };
+      
+      if (activePhone) {
+        const qPhone = query(collection(db, 'systemUsers'), where('phone', '==', activePhone));
+        const phoneSnap = await getDocs(qPhone);
+        existingPhoneDocs = phoneSnap.docs;
+        
+        for (const pd of existingPhoneDocs) {
+          const r = pd.data().role as UserRole;
+          if (!maxRole || (roleWeights[r] || 0) > (roleWeights[maxRole] || 0)) {
+            maxRole = r;
+          }
+        }
+      }
+
       const docRef = doc(db, 'systemUsers', u.uid);
       const docSnap = await getDoc(docRef);
       
-      if (docSnap.exists()) {
-        const data = docSnap.data() as AppUser;
-        const isAdmin = data.email === 'zaguzovsv@gmail.com' || u.email === 'zaguzovsv@gmail.com' || data.phone === '+79825885477' || optionalPhone === '+79825885477' || u.phoneNumber === '+79825885477';
-        
+      const reconcileData = async (data: AppUser) => {
+        const isAdmin = data.email === 'zaguzovsv@gmail.com' || u.email === 'zaguzovsv@gmail.com' || data.phone === '+79825885477' || activePhone === '+79825885477';
+        let updated = false;
+
+        if (activePhone && !data.phone) {
+          data.phone = activePhone;
+          updated = true;
+        }
+
+        if (maxRole && (roleWeights[maxRole] || 0) > (roleWeights[data.role] || 0)) {
+           data.role = maxRole;
+           updated = true;
+        }
+
         if (isAdmin && data.role !== 'admin') {
           data.role = 'admin';
-          await setDoc(docRef, data, { merge: true });
+          updated = true;
+        } else if (!isAdmin && isCoach && data.role !== 'director' && data.role !== 'admin') {
+          data.role = 'trainer';
+          updated = true;
+        } else if (!isAdmin && !isCoach && data.role === 'trainer') {
+          // If they were trainer but no longer in coaches, but let's keep them as is to be safe
         }
-        // Sync anonymous user phone
-        if (optionalPhone && !data.phone) {
-          data.phone = optionalPhone;
-          await setDoc(docRef, data, { merge: true });
+
+        if (isCoach && (!data.fullName || data.fullName.startsWith('Пользователь'))) {
+          data.fullName = coachData?.name || data.fullName;
+          updated = true;
         }
+
+        return { data, updated };
+      };
+
+      if (docSnap.exists()) {
+        const { data, updated } = await reconcileData(docSnap.data() as AppUser);
+        if (updated) await setDoc(docRef, data, { merge: true });
         setAppUser(data);
+        
+        for (const pd of existingPhoneDocs) {
+           if (pd.id !== u.uid) await deleteDoc(doc(db, 'systemUsers', pd.id));
+        }
         return;
       }
 
@@ -83,17 +139,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const qEmail = query(collection(db, 'systemUsers'), where('email', '==', u.email));
         const emailDocs = await getDocs(qEmail);
         if (!emailDocs.empty) {
-          const matchedDoc = emailDocs.docs[0];
-          const userData = matchedDoc.data() as AppUser;
-          const isAdmin = userData.email === 'zaguzovsv@gmail.com' || u.email === 'zaguzovsv@gmail.com' || userData.phone === '+79825885477' || optionalPhone === '+79825885477' || u.phoneNumber === '+79825885477';
-          
-          if (isAdmin) userData.role = 'admin';
+          const roleWeights: Record<string, number> = { admin: 5, director: 4, manager: 3, trainer: 2, parent: 1 };
+          const sortedDocs = [...emailDocs.docs].sort((a, b) => {
+            const roleA = (a.data().role as string) || 'parent';
+            const roleB = (b.data().role as string) || 'parent';
+            return (roleWeights[roleB] || 0) - (roleWeights[roleA] || 0);
+          });
+          const matchedDoc = sortedDocs[0];
+          const { data: userData, updated } = await reconcileData(matchedDoc.data() as AppUser);
           
           const newAppUser = { ...userData, uid: u.uid };
           await setDoc(docRef, newAppUser);
           
-          if (matchedDoc.id !== u.uid) {
-             await deleteDoc(doc(db, 'systemUsers', matchedDoc.id));
+          for (const docSnap of sortedDocs) {
+            if (docSnap.id !== u.uid) {
+               await deleteDoc(doc(db, 'systemUsers', docSnap.id));
+            }
           }
           
           setAppUser(newAppUser);
@@ -102,22 +163,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      const activePhone = u.phoneNumber || optionalPhone;
       if (!foundUser && activePhone) {
         const qPhone = query(collection(db, 'systemUsers'), where('phone', '==', activePhone));
         const phoneDocs = await getDocs(qPhone);
         if (!phoneDocs.empty) {
-          const matchedDoc = phoneDocs.docs[0];
-          const userData = matchedDoc.data() as AppUser;
-          const isAdmin = userData.email === 'zaguzovsv@gmail.com' || u.email === 'zaguzovsv@gmail.com' || userData.phone === '+79825885477' || optionalPhone === '+79825885477' || u.phoneNumber === '+79825885477';
+          // Prioritize by role: admin > director > manager > trainer > parent
+          const roleWeights: Record<string, number> = { admin: 5, director: 4, manager: 3, trainer: 2, parent: 1 };
+          const sortedDocs = [...phoneDocs.docs].sort((a, b) => {
+            const roleA = (a.data().role as string) || 'parent';
+            const roleB = (b.data().role as string) || 'parent';
+            return (roleWeights[roleB] || 0) - (roleWeights[roleA] || 0);
+          });
+          const matchedDoc = sortedDocs[0];
+          const { data: userData } = await reconcileData(matchedDoc.data() as AppUser);
           
-          if (isAdmin) userData.role = 'admin';
-                    
           const newAppUser = { ...userData, uid: u.uid };
           await setDoc(docRef, newAppUser);
           
-          if (matchedDoc.id !== u.uid) {
-             await deleteDoc(doc(db, 'systemUsers', matchedDoc.id));
+          // Clean up old duplicated or matched ones
+          for (const docSnap of sortedDocs) {
+            if (docSnap.id !== u.uid) {
+               await deleteDoc(doc(db, 'systemUsers', docSnap.id));
+            }
           }
           
           setAppUser(newAppUser);
@@ -126,8 +193,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // If it's an anonymous user and we have no phone to identify them, 
-      // wait until we do before creating a dummy record, to avoid race conditions.
       if (u.isAnonymous && !activePhone) {
         return;
       }
@@ -136,12 +201,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const isFirst = allUsersSnap.empty;
       const isAdminEmailOrPhone = u.email === 'zaguzovsv@gmail.com' || activePhone === '+79825885477';
 
+      let initialRole: UserRole = 'parent';
+      if (isAdminEmailOrPhone) initialRole = 'admin';
+      else if (isFirst) initialRole = 'director';
+      else if (isCoach) initialRole = 'trainer';
+
       const newUser: AppUser = {
         uid: u.uid,
         email: u.email,
         phone: activePhone || null,
-        fullName: u.displayName || (activePhone ? `Пользователь ${activePhone}` : "Новый Пользователь"),
-        role: isAdminEmailOrPhone ? 'admin' : (isFirst ? 'director' : 'parent'),
+        fullName: isCoach ? (coachData?.name || `Тренер ${activePhone}`) : (u.displayName || (activePhone ? `Пользователь ${activePhone}` : "Новый Пользователь")),
+        role: initialRole,
         createdAt: Date.now()
       };
 
@@ -242,7 +312,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const qPhone = query(collection(db, 'systemUsers'), where('phone', '==', phone));
       const phoneDocs = await getDocs(qPhone);
-      if (phoneDocs.empty) {
+      
+      const qCoach = query(collection(db, 'coaches'), where('phone', '==', phone));
+      const coachDocs = await getDocs(qCoach);
+      
+      if (phoneDocs.empty && coachDocs.empty) {
         setPhoneError("Номер телефона не найден в базе данных.");
         return false;
       }

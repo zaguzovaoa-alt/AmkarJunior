@@ -89,7 +89,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       case "director":
         return [
           { id: "hq_home", label: "Главная", icon: BarChart },
-          { id: "hq_store", label: "Магазин (Админ)", icon: ShoppingCart },
           { id: "hq_clients", label: "Клиенты", icon: Users },
           {
             id: "hq_leads",
@@ -118,12 +117,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             label: "Google Календарь",
             icon: RefreshCw,
           },
+          { id: "hq_store", label: "Магазин (Админ)", icon: ShoppingCart },
           { id: "hq_settings", label: "Настройки", icon: Settings },
         ];
       case "manager":
         return [
           { id: "hq_home", label: "Главная", icon: BarChart },
-          { id: "hq_store", label: "Магазин (Админ)", icon: ShoppingCart },
           { id: "hq_clients", label: "Клиенты", icon: Users },
           {
             id: "hq_leads",
@@ -147,6 +146,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             label: "Google Календарь",
             icon: RefreshCw,
           },
+          { id: "hq_store", label: "Магазин (Админ)", icon: ShoppingCart },
         ];
       default:
         return [];

@@ -84,7 +84,15 @@ export const AuthScreen: React.FC = () => {
               >
                 Политикой конфиденциальности
               </a>{" "}
-              и даю согласие на обработку моих персональных данных.
+              и даю согласие на{" "}
+              <a
+                href="/safety"
+                className="text-emerald-600 hover:text-emerald-700 underline font-medium"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                обработку моих персональных данных
+              </a>.
             </label>
           </div>
 
@@ -143,7 +151,7 @@ export const AuthScreen: React.FC = () => {
           </span>
         </div>
       </motion.div>
-      <div className="mt-8 text-center">
+      <div className="mt-8 flex flex-col items-center gap-2">
         <a
           href="/privacy"
           target="_blank"
@@ -151,6 +159,14 @@ export const AuthScreen: React.FC = () => {
           className="text-xs text-slate-400 hover:text-slate-300 transition-colors uppercase tracking-wider font-semibold"
         >
           Политика конфиденциальности
+        </a>
+        <a
+          href="/safety"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-slate-400 hover:text-slate-300 transition-colors uppercase tracking-wider font-semibold"
+        >
+          Обработка персональных данных
         </a>
       </div>
     </div>

@@ -317,9 +317,12 @@ service cloud.firestore {
                 <span className="text-xs font-bold text-slate-800 uppercase tracking-widest">Амкар Юниор</span>
               </div>
               
-              <div className="text-center sm:text-right">
+              <div className="text-center sm:text-right flex flex-col items-center sm:items-end gap-1">
                 <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-xs text-slate-500 hover:text-red-600 font-medium transition-colors">
                   Политика конфиденциальности
+                </a>
+                <a href="/safety" target="_blank" rel="noopener noreferrer" className="text-xs text-slate-500 hover:text-red-600 font-medium transition-colors">
+                  Обработка персональных данных
                 </a>
                 <p className="text-[10px] text-slate-400 mt-1">
                   © {new Date().getFullYear()} ИП Тюкалов Е.Е. Все права защищены.
@@ -384,6 +387,8 @@ import { StaffRegistrationPage } from './components/StaffRegistrationPage';
 import { NotificationListener } from './components/NotificationListener';
 import { PrivacyPolicy } from './components/PrivacyPolicy';
 import { AmkarLogo } from './components/AmkarLogo';
+import { SafetyPolicy } from './components/SafetyPolicy';
+import { PhotoPolicy } from './components/PhotoPolicy';
 
 export default function App() {
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
@@ -406,6 +411,14 @@ export default function App() {
 
   if (currentPath === '/privacy') {
     return <PrivacyPolicy onBack={() => { window.history.back() }} />;
+  }
+
+  if (currentPath === '/safety') {
+    return <SafetyPolicy onBack={() => { window.history.back() }} />;
+  }
+
+  if (currentPath === '/photo') {
+    return <PhotoPolicy onBack={() => { window.history.back() }} />;
   }
 
   if (currentPath === '/join' || currentPath === '/payment') {

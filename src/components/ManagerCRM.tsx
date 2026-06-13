@@ -147,13 +147,6 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
   const [editAbonementSessions, setEditAbonementSessions] = useState(0);
   const [editAvatarUrl, setEditAvatarUrl] = useState("");
 
-  // MAX Chat State
-  const [maxChatClient, setMaxChatClient] = useState<Client | null>(null);
-  const [maxChatMessages, setMaxChatMessages] = useState<
-    { sender: "manager" | "client"; text: string; time: string }[]
-  >([]);
-  const [maxChatInput, setMaxChatInput] = useState("");
-  const [maxChatLead, setMaxChatLead] = useState<Lead | null>(null);
   const [editGroup, setEditGroup] = useState<string>("");
   const [editRelationshipRisk, setEditRelationshipRisk] = useState<
     "none" | "low" | "high"
@@ -225,6 +218,28 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
 
   const [itemsPerPage, setItemsPerPage] = useState<number>(10);
   const [currentPage, setCurrentPage] = useState<number>(1);
+
+  const handleOpenMaxChat = (phone: string | undefined) => {
+    if (!phone) {
+      alert("Не указан номер телефона");
+      return;
+    }
+    const cleanPhone = phone.replace(/[^\d+]/g, "");
+    const wantsApp = window.confirm(
+      "Запустить приложение MAX, если оно установлено?\nНажмите Отмена, чтобы использовать Web-версию.",
+    );
+    if (wantsApp) {
+      // Try to open using a generic deep link approach. Usually just the web URL will redirect if Universal Links are set up.
+      // But we can also try to use a custom scheme if we had one.
+      const appUrl = `max://chat?phone=${encodeURIComponent(cleanPhone)}`;
+      window.location.href = appUrl;
+      setTimeout(() => {
+        window.open(`https://web.max.ru/?phone=${encodeURIComponent(cleanPhone)}`, "_blank");
+      }, 1500);
+    } else {
+      window.open(`https://web.max.ru/?phone=${encodeURIComponent(cleanPhone)}`, "_blank");
+    }
+  };
 
   const handleStartEditClient = (client: Client) => {
     setEditClientId(client.id);
@@ -724,7 +739,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                         </td>
                         <td className="p-3 text-right flex items-center justify-end space-x-2">
                           <button
-                            onClick={() => setMaxChatLead(lead)}
+                            onClick={() => handleOpenMaxChat(lead.parentPhone)}
                             className="p-1.5 text-[#7551FF] hover:bg-[#7551FF]/10 rounded-lg transition hover:scale-105 border border-transparent hover:border-[#7551FF]/20"
                             title="Чат MAX с родителем"
                           >
@@ -2611,7 +2626,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                           </button>
                           <button
                             onClick={() => {
-                              setMaxChatClient(selectedClient);
+                              handleOpenMaxChat(selectedClient.parentPhone);
                             }}
                             className="flex-1 py-1.5 bg-gradient-to-r from-[#2BC1FF] via-[#7551FF] to-[#9D38FF] hover:from-[#21A8E3] hover:via-[#613CDC] hover:to-[#8B23E9] text-white text-center rounded-lg font-bold text-[11px] flex items-center justify-center space-x-1.5 transition shadow-sm overflow-hidden relative group"
                           >
@@ -3949,117 +3964,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
         confirmText="Удалить ученика"
       />
 
-      {/* MAX Chat Modal */}
-      {(maxChatClient || maxChatLead) && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 z-[60]">
-          <div className="bg-white rounded-3xl w-full max-w-md max-h-full flex flex-col overflow-hidden border shadow-xl h-[600px]">
-            <div className="p-4 bg-gradient-to-r from-[#2BC1FF] via-[#7551FF] to-[#9D38FF] text-white flex justify-between items-center shrink-0">
-              <div className="flex items-center space-x-3">
-                <div className="bg-white/20 p-2 rounded-xl">
-                  <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white">
-                     <path d="M12 2C6.477 2 2 6.477 2 12c0 1.905.534 3.684 1.464 5.203.208.337.262.748.118 1.112l-1.246 3.165a.6.6 0 00.776.776l3.164-1.246a1.18 1.18 0 011.112.118C8.91 21.936 10.418 22.5 12 22.5c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 15.5c-3.037 0-5.5-2.463-5.5-5.5S8.963 6.5 12 6.5s5.5 2.463 5.5 5.5-2.463 5.5-5.5 5.5z" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="font-bold text-white text-sm">
-                    {maxChatClient
-                      ? maxChatClient.parentName
-                      : maxChatLead?.parentName}
-                  </h3>
-                  <p className="text-[10px] text-white/80 font-medium">
-                    Чат MAX (Официальный канал)
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setMaxChatClient(null);
-                  setMaxChatLead(null);
-                  setMaxChatMessages([]);
-                }}
-                className="text-white hover:text-emerald-100 font-bold p-2"
-              >
-                ✕
-              </button>
-            </div>
 
-            <div className="flex-1 p-4 overflow-y-auto bg-slate-50 space-y-4">
-              <div className="text-center">
-                <span className="text-[10px] font-bold text-gray-400 bg-white px-2 py-1 rounded-full border">
-                  Сегодня
-                </span>
-              </div>
-              {(maxChatMessages.length
-                ? maxChatMessages
-                : [
-                    {
-                      sender: "client",
-                      text: "Здравствуйте! Мы по поводу тренировок.",
-                      time: "10:00",
-                    } as any,
-                  ]
-              ).map((m, i) => (
-                <div
-                  key={i}
-                  className={`flex ${m.sender === "manager" ? "justify-end" : "justify-start"}`}
-                >
-                  <div
-                    className={`max-w-[80%] rounded-2xl p-3 text-sm relative ${m.sender === "manager" ? "bg-emerald-500 text-white rounded-tr-sm" : "bg-white border text-slate-800 rounded-tl-sm shadow-sm"}`}
-                  >
-                    <p>{m.text}</p>
-                    <span
-                      className={`text-[9px] mt-1 block font-mono ${m.sender === "manager" ? "text-emerald-100 text-right" : "text-gray-400 text-left"}`}
-                    >
-                      {m.time}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="p-3 bg-white border-t flex items-center space-x-2 shrink-0">
-              <input
-                type="text"
-                placeholder="Написать сообщение..."
-                className="flex-1 bg-slate-50 border rounded-full px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
-                value={maxChatInput}
-                onChange={(e) => setMaxChatInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && maxChatInput.trim()) {
-                    setMaxChatMessages([
-                      ...maxChatMessages,
-                      {
-                        sender: "manager",
-                        text: maxChatInput,
-                        time: new Date().toLocaleTimeString().substring(0, 5),
-                      },
-                    ]);
-                    setMaxChatInput("");
-                  }
-                }}
-              />
-              <button
-                className="bg-emerald-500 hover:bg-emerald-600 text-white p-2.5 rounded-full transition"
-                onClick={() => {
-                  if (maxChatInput.trim()) {
-                    setMaxChatMessages([
-                      ...maxChatMessages,
-                      {
-                        sender: "manager",
-                        text: maxChatInput,
-                        time: new Date().toLocaleTimeString().substring(0, 5),
-                      },
-                    ]);
-                    setMaxChatInput("");
-                  }
-                }}
-              >
-                <Send className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

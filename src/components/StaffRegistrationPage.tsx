@@ -220,7 +220,15 @@ export const StaffRegistrationPage: React.FC = () => {
                       >
                         Политикой конфиденциальности
                       </a>{" "}
-                      и даю согласие на обработку моих персональных данных.
+                      и даю согласие на{" "}
+                      <a
+                        href="/safety"
+                        className="text-emerald-600 hover:text-emerald-700 underline font-medium"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        обработку моих персональных данных
+                      </a>.
                       Место работы: АМКАР ЮНИОР.
                     </label>
                   </div>

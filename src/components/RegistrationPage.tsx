@@ -25,6 +25,7 @@ export const RegistrationPage: React.FC = () => {
   const [childBirthDate, setChildBirthDate] = useState("");
 
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const [photoAccepted, setPhotoAccepted] = useState(false);
 
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
@@ -46,6 +47,11 @@ export const RegistrationPage: React.FC = () => {
 
     if (!privacyAccepted) {
       setError("Необходимо согласие с Политикой конфиденциальности");
+      return;
+    }
+
+    if (!photoAccepted) {
+      setError("Необходимо согласие на фотосъёмку");
       return;
     }
 
@@ -266,7 +272,7 @@ export const RegistrationPage: React.FC = () => {
                       id="reg-privacy"
                       checked={privacyAccepted}
                       onChange={(e) => setPrivacyAccepted(e.target.checked)}
-                      className="mt-1 w-4 h-4 text-red-600 rounded border-slate-300 focus:ring-red-500 cursor-pointer"
+                      className="mt-1 w-4 h-4 text-red-600 rounded border-slate-300 focus:ring-red-500 cursor-pointer flex-shrink-0"
                     />
                     <label
                       htmlFor="reg-privacy"
@@ -281,13 +287,46 @@ export const RegistrationPage: React.FC = () => {
                       >
                         Политикой конфиденциальности
                       </a>{" "}
-                      и даю согласие на обработку моих персональных данных.
+                      и даю согласие на{" "}
+                      <a
+                        href="/safety"
+                        className="text-red-600 hover:text-red-700 underline font-medium"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        обработку моих персональных данных
+                      </a>.
+                    </label>
+                  </div>
+
+                  <div className="flex items-start space-x-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <input
+                      type="checkbox"
+                      id="reg-photo"
+                      checked={photoAccepted}
+                      onChange={(e) => setPhotoAccepted(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-red-600 rounded border-slate-300 focus:ring-red-500 cursor-pointer flex-shrink-0"
+                    />
+                    <label
+                      htmlFor="reg-photo"
+                      className="text-[11px] text-slate-500 leading-tight"
+                    >
+                      Я даю свое{" "}
+                      <a
+                        href="/photo"
+                        className="text-red-600 hover:text-red-700 underline font-medium"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        согласие на фотосъёмку
+                      </a>{" "}
+                      меня и моего ребенка.
                     </label>
                   </div>
 
                   <button
                     type="submit"
-                    disabled={!privacyAccepted}
+                    disabled={!privacyAccepted || !photoAccepted}
                     className="w-full py-4 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-black rounded-xl shadow-lg shadow-red-500/30 flex items-center justify-center space-x-2 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 disabled:shadow-none"
                   >
                     <Send className="w-5 h-5" />

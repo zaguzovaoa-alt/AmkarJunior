@@ -34,12 +34,12 @@ export const PrivacyPolicy: React.FC<{ onBack?: () => void }> = ({
               персональных данных (далее — Данные), которые могут быть запрошены
               у пользователей (далее — Пользователь) на сайте{" "}
               <a
-                href="https://vk.com/amkarkids"
+                href="https://amkarjunior.ru"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-red-600 hover:underline font-medium"
               >
-                https://vk.com/amkarkids
+                https://amkarjunior.ru
               </a>{" "}
               (далее — Сайт), а также способы обработки таких данных.
             </p>

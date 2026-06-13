@@ -380,7 +380,15 @@ export const JoinPage: React.FC = () => {
                     >
                       Политикой конфиденциальности
                     </a>{" "}
-                    и даю согласие на обработку персональных данных.
+                    и даю согласие на{" "}
+                    <a
+                      href="/safety"
+                      className="text-red-600 hover:text-red-700 underline font-medium"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      обработку персональных данных
+                    </a>.
                   </label>
                 </div>
 
@@ -434,6 +442,12 @@ export const JoinPage: React.FC = () => {
               className="text-slate-600 hover:text-slate-400 text-xs mt-4 transition"
             >
               Политика конфиденциальности
+            </a>
+            <a
+              href="/safety"
+              className="text-slate-600 hover:text-slate-400 text-xs mt-1 transition"
+            >
+              Обработка персональных данных
             </a>
             <p className="text-slate-700 text-xs mt-2">
               © {new Date().getFullYear()} {schoolName || "Амкар Юниор"}. Все
