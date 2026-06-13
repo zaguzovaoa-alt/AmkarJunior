@@ -104,7 +104,8 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
   const handleCopyReferral = () => {
     if (myClient) {
       const code = myClient.referralCode || myClient.id;
-      navigator.clipboard.writeText(`https://amkar-crm.ru/ref/${code}`);
+      const refLink = `${window.location.origin}/register?ref=${code}`;
+      navigator.clipboard.writeText(refLink);
       setStoreStatus("Реферальная ссылка скопирована!");
       setTimeout(() => setStoreStatus(null), 3000);
     }
@@ -1058,7 +1059,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                           {absentSickCount}
                         </div>
                         <div className="text-[9px] text-gray-400 font-medium mt-0.5">
-                          Уваж. пропуск
+                          Уважительная
                         </div>
                       </div>
                       <div>
@@ -1066,7 +1067,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                           {absentCount}
                         </div>
                         <div className="text-[9px] text-gray-400 font-medium mt-0.5">
-                          Болезнь/прогул
+                          Прогул
                         </div>
                       </div>
                     </div>
@@ -1128,11 +1129,11 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                       </div>
                       <div className="flex items-center space-x-1">
                         <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
-                        <span>Уважительный</span>
+                        <span>Уважительная</span>
                       </div>
                       <div className="flex items-center space-x-1">
                         <span className="w-2.5 h-2.5 rounded-full bg-slate-200"></span>
-                        <span>Пропуск/Болен</span>
+                        <span>Прогул</span>
                       </div>
                     </div>
                   </div>
@@ -1158,7 +1159,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                          <span className="text-xl font-black text-orange-600">{myClient.bonusBalance || 0} ₽</span>
                       </div>
                       <p className="text-[11px] text-orange-700 leading-relaxed mb-3">
-                         Отправьте ссылку другу. Если он запишется и купит абонемент, вы получите <strong className="font-bold">{crmConfig?.referralBonusAmount || 500} {crmConfig?.referralBonusType === 'rubles' ? 'рублей' : 'занятий'}</strong> на баланс!
+                        Отправьте ссылку другу. Если он запишется и купит абонемент, вы получите <strong className="font-bold">{crmConfig?.referralBonusAmount || 500} {crmConfig?.referralBonusType === 'rubles' ? 'рублей' : 'баллов'}</strong> на баланс!
                       </p>
                       <button 
                         onClick={handleCopyReferral}
@@ -1320,8 +1321,8 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                             {att.status === "present"
                               ? "Присутствовал"
                               : att.status === "absent_sick"
-                                ? "Болел (уваж.)"
-                                : "Пропуск"}
+                                ? "Уважительная"
+                                : "Прогул"}
                           </span>
                         </td>
                         <td className="p-3 font-medium text-slate-600">

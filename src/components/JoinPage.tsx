@@ -37,6 +37,9 @@ export const JoinPage: React.FC = () => {
     e.preventDefault();
     if (!parentName || !parentPhone) return;
 
+    const params = new URLSearchParams(window.location.search);
+    const refCode = params.get("ref");
+
     // Add as a new lead
     addLead({
       parentName,
@@ -45,7 +48,7 @@ export const JoinPage: React.FC = () => {
       childSurname: "",
       childAge: 0,
       source: "Лендинг",
-      note: "Заявка с посадочной страницы на бесплатную тренировку",
+      note: `Заявка с посадочной страницы на бесплатную тренировку${refCode ? `. Пригласил: ${refCode}` : ''}`,
     });
 
     setSubmitted(true);

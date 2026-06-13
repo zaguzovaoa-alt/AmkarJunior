@@ -1312,7 +1312,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                             </div>
                             <div className="text-center bg-white/10 px-3 py-2 rounded-lg flex-1 min-w-[80px]">
                               <div className="text-[10px] text-blue-300 font-bold uppercase tracking-wider">
-                                Отсутствуют
+                                Уважительная
                               </div>
                               <div className="text-lg font-black">
                                 {stats.sick}
@@ -1328,7 +1328,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                             </div>
                             <div className="text-center bg-red-500/20 px-3 py-2 rounded-lg flex-1 min-w-[80px]">
                               <div className="text-[10px] text-red-300 font-bold uppercase tracking-wider">
-                                Без причины
+                                Прогул
                               </div>
                               <div className="text-lg font-black text-red-400">
                                 {stats.absent}
@@ -1388,7 +1388,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                                         : "bg-white text-gray-500 ring-gray-200 hover:bg-slate-50"
                                     }`}
                                   >
-                                    По болезни
+                                    Уважительная
                                   </button>
                                   <button
                                     onClick={() =>
@@ -1401,7 +1401,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                                         : "bg-white text-gray-500 ring-gray-200 hover:bg-slate-50"
                                     }`}
                                   >
-                                    Неявка
+                                    Прогул
                                   </button>
                                   <button
                                     onClick={() =>

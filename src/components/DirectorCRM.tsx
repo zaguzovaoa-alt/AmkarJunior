@@ -1753,13 +1753,13 @@ export const DirectorCRM: React.FC = () => {
 
             <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden">
               <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
-                Сохранено по болезни
+                Уважительная причина
               </span>
               <div className="text-3xl font-black text-indigo-600 mt-1 font-display tracking-tight">
                 {trainingSessions.reduce((sum, s) => sum + s.sickCount, 0)} зан.
               </div>
               <div className="text-[10px] text-indigo-500 font-semibold mt-1">
-                Заморозка по мед. справкам
+                Тренировки сохранены (уваж.)
               </div>
             </div>
           </div>
@@ -1817,12 +1817,12 @@ export const DirectorCRM: React.FC = () => {
                             </span>
                             {session.sickCount > 0 && (
                               <span className="text-blue-650 font-bold bg-blue-50 px-1.5 py-0.5 rounded">
-                                🤒 {session.sickCount} больн.
+                                Уваж. {session.sickCount}
                               </span>
                             )}
                             {session.absentCount > 0 && (
                               <span className="text-amber-650 font-bold bg-amber-50 px-1.5 py-0.5 rounded">
-                                ⚠️ {session.absentCount} отсут.
+                                Прогул {session.absentCount}
                               </span>
                             )}
                           </div>
@@ -2073,11 +2073,11 @@ export const DirectorCRM: React.FC = () => {
                                 </span>
                               ) : rec.status === "absent_sick" ? (
                                 <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold text-[9px] uppercase tracking-wide">
-                                  🤒 Болен {rec.reason ? `(${rec.reason})` : ""}
+                                  Уважительная {rec.reason ? `(${rec.reason})` : ""}
                                 </span>
                               ) : (
                                 <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold text-[9px] uppercase tracking-wide">
-                                  ⚠️ Пропуск{" "}
+                                  Прогул{" "}
                                   {rec.reason ? `(${rec.reason})` : ""}
                                 </span>
                               )}

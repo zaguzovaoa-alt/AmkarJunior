@@ -59,6 +59,9 @@ export const RegistrationPage: React.FC = () => {
       parseInt(childBirthDate.split("-")[0]) || new Date().getFullYear();
     const childAge = new Date().getFullYear() - birthYear;
 
+    const params = new URLSearchParams(window.location.search);
+    const refCode = params.get("ref");
+
     // Create new client directly
     const newClient = {
       id: `cl_${Date.now()}`,
@@ -83,6 +86,7 @@ export const RegistrationPage: React.FC = () => {
       attendance: [],
       progress: { technique: 0, tactics: 0, physical: 0, discipline: 0 },
       achievements: [],
+      invitedBy: refCode || undefined,
       notes: "Регистрация через портал профиля",
     };
 

@@ -5,6 +5,24 @@ import { collection, query, where, getDocs, setDoc, doc, getDoc, deleteDoc } fro
 
 export type UserRole = 'admin' | 'director' | 'manager' | 'trainer' | 'parent';
 
+export const normalizePhoneNumber = (phone: string): string => {
+  if (!phone) return "";
+  let clean = phone.replace(/[^\d+]/g, '');
+  if (clean.startsWith('8') && clean.length === 11) {
+    clean = '+7' + clean.slice(1);
+  }
+  if (clean.startsWith('7') && clean.length === 11) {
+    clean = '+' + clean;
+  }
+  if (!clean.startsWith('+') && clean.length === 10) {
+    clean = '+7' + clean;
+  }
+  if (!clean.startsWith('+') && clean.length > 0) {
+    clean = '+' + clean;
+  }
+  return clean;
+};
+
 export interface AppUser {
   uid: string;
   email?: string | null;
@@ -57,16 +75,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const resolveAppUser = async (u: User, optionalPhone?: string) => {
     try {
-      const activePhone = u.phoneNumber || optionalPhone;
+      const dbPhone = u.phoneNumber || optionalPhone;
+      const activePhone = dbPhone ? normalizePhoneNumber(dbPhone) : null;
       
       let isCoach = false;
       let coachData: any = null;
       if (activePhone) {
-        const qCoach = query(collection(db, 'coaches'), where('phone', '==', activePhone));
-        const coachDocs = await getDocs(qCoach);
-        if (!coachDocs.empty) {
-          isCoach = true;
-          coachData = coachDocs.docs[0].data();
+        const coachCandidates = Array.from(new Set([
+          activePhone,
+          activePhone.replace('+7', '8'),
+          activePhone.replace(/^\+7/, ''),
+          dbPhone?.trim()
+        ])).filter(Boolean);
+
+        for (const p of coachCandidates) {
+          const qCoach = query(collection(db, 'coaches'), where('phone', '==', p));
+          const coachDocs = await getDocs(qCoach);
+          if (!coachDocs.empty) {
+            isCoach = true;
+            coachData = coachDocs.docs[0].data();
+            break;
+          }
         }
       }
       
@@ -75,9 +104,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const roleWeights: Record<string, number> = { admin: 5, director: 4, manager: 3, trainer: 2, parent: 1 };
       
       if (activePhone) {
-        const qPhone = query(collection(db, 'systemUsers'), where('phone', '==', activePhone));
-        const phoneSnap = await getDocs(qPhone);
-        existingPhoneDocs = phoneSnap.docs;
+        const userCandidates = Array.from(new Set([
+          activePhone,
+          activePhone.replace('+7', '8'),
+          activePhone.replace(/^\+7/, ''),
+          dbPhone?.trim()
+        ])).filter(Boolean);
+
+        for (const p of userCandidates) {
+          const qPhone = query(collection(db, 'systemUsers'), where('phone', '==', p));
+          const phoneSnap = await getDocs(qPhone);
+          if (!phoneSnap.empty) {
+            existingPhoneDocs = phoneSnap.docs;
+            break;
+          }
+        }
         
         for (const pd of existingPhoneDocs) {
           const r = pd.data().role as UserRole;
@@ -91,7 +132,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const docSnap = await getDoc(docRef);
       
       const reconcileData = async (data: AppUser) => {
-        const isAdmin = data.email === 'zaguzovsv@gmail.com' || u.email === 'zaguzovsv@gmail.com' || data.phone === '+79825885477' || activePhone === '+79825885477';
+        const cleanDataPhone = data.phone ? normalizePhoneNumber(data.phone) : '';
+        const cleanActivePhone = activePhone ? normalizePhoneNumber(activePhone) : '';
+        const rawPhoneClean = dbPhone ? normalizePhoneNumber(dbPhone) : '';
+
+        const isAdmin = data.email === 'zaguzovsv@gmail.com' || 
+                        u.email === 'zaguzovsv@gmail.com' || 
+                        cleanDataPhone === '+79825885477' || 
+                        cleanActivePhone === '+79825885477' ||
+                        rawPhoneClean === '+79825885477';
         let updated = false;
 
         if (activePhone && !data.phone) {
@@ -110,8 +159,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } else if (!isAdmin && isCoach && data.role !== 'director' && data.role !== 'admin') {
           data.role = 'trainer';
           updated = true;
-        } else if (!isAdmin && !isCoach && data.role === 'trainer') {
-          // If they were trainer but no longer in coaches, but let's keep them as is to be safe
         }
 
         if (isCoach && (!data.fullName || data.fullName.startsWith('Пользователь'))) {
@@ -139,21 +186,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const qEmail = query(collection(db, 'systemUsers'), where('email', '==', u.email));
         const emailDocs = await getDocs(qEmail);
         if (!emailDocs.empty) {
-          const roleWeights: Record<string, number> = { admin: 5, director: 4, manager: 3, trainer: 2, parent: 1 };
           const sortedDocs = [...emailDocs.docs].sort((a, b) => {
             const roleA = (a.data().role as string) || 'parent';
             const roleB = (b.data().role as string) || 'parent';
             return (roleWeights[roleB] || 0) - (roleWeights[roleA] || 0);
           });
           const matchedDoc = sortedDocs[0];
-          const { data: userData, updated } = await reconcileData(matchedDoc.data() as AppUser);
+          const { data: userData } = await reconcileData(matchedDoc.data() as AppUser);
           
           const newAppUser = { ...userData, uid: u.uid };
           await setDoc(docRef, newAppUser);
           
-          for (const docSnap of sortedDocs) {
-            if (docSnap.id !== u.uid) {
-               await deleteDoc(doc(db, 'systemUsers', docSnap.id));
+          for (const d of sortedDocs) {
+            if (d.id !== u.uid) {
+               await deleteDoc(doc(db, 'systemUsers', d.id));
             }
           }
           
@@ -164,11 +210,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (!foundUser && activePhone) {
-        const qPhone = query(collection(db, 'systemUsers'), where('phone', '==', activePhone));
-        const phoneDocs = await getDocs(qPhone);
-        if (!phoneDocs.empty) {
-          // Prioritize by role: admin > director > manager > trainer > parent
-          const roleWeights: Record<string, number> = { admin: 5, director: 4, manager: 3, trainer: 2, parent: 1 };
+        const userCandidates = Array.from(new Set([
+          activePhone,
+          activePhone.replace('+7', '8'),
+          activePhone.replace(/^\+7/, ''),
+          dbPhone?.trim()
+        ])).filter(Boolean);
+
+        let phoneDocs: any = null;
+        for (const p of userCandidates) {
+          const qPhone = query(collection(db, 'systemUsers'), where('phone', '==', p));
+          const snap = await getDocs(qPhone);
+          if (!snap.empty) {
+            phoneDocs = snap;
+            break;
+          }
+        }
+
+        if (phoneDocs && !phoneDocs.empty) {
           const sortedDocs = [...phoneDocs.docs].sort((a, b) => {
             const roleA = (a.data().role as string) || 'parent';
             const roleB = (b.data().role as string) || 'parent';
@@ -180,10 +239,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const newAppUser = { ...userData, uid: u.uid };
           await setDoc(docRef, newAppUser);
           
-          // Clean up old duplicated or matched ones
-          for (const docSnap of sortedDocs) {
-            if (docSnap.id !== u.uid) {
-               await deleteDoc(doc(db, 'systemUsers', docSnap.id));
+          for (const d of sortedDocs) {
+            if (d.id !== u.uid) {
+               await deleteDoc(doc(db, 'systemUsers', d.id));
             }
           }
           
@@ -199,7 +257,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const allUsersSnap = await getDocs(query(collection(db, 'systemUsers')));
       const isFirst = allUsersSnap.empty;
-      const isAdminEmailOrPhone = u.email === 'zaguzovsv@gmail.com' || activePhone === '+79825885477';
+      
+      const cleanActivePhone = activePhone ? normalizePhoneNumber(activePhone) : '';
+      const rawPhoneClean = dbPhone ? normalizePhoneNumber(dbPhone) : '';
+      const isAdminEmailOrPhone = u.email === 'zaguzovsv@gmail.com' || 
+                                  cleanActivePhone === '+79825885477' || 
+                                  rawPhoneClean === '+79825885477';
 
       let initialRole: UserRole = 'parent';
       if (isAdminEmailOrPhone) initialRole = 'admin';
@@ -209,8 +272,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const newUser: AppUser = {
         uid: u.uid,
         email: u.email,
-        phone: activePhone || null,
-        fullName: isCoach ? (coachData?.name || `Тренер ${activePhone}`) : (u.displayName || (activePhone ? `Пользователь ${activePhone}` : "Новый Пользователь")),
+        phone: activePhone || dbPhone || null,
+        fullName: isCoach ? (coachData?.name || `Тренер ${activePhone || dbPhone}`) : (u.displayName || (activePhone || dbPhone ? `Пользователь ${activePhone || dbPhone}` : "Новый Пользователь")),
         role: initialRole,
         createdAt: Date.now()
       };
@@ -224,12 +287,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         console.error("Error resolving AppUser:", err);
       }
+      
+      const rawPhone = u.phoneNumber || optionalPhone;
+      const cleanRawPhone = rawPhone ? normalizePhoneNumber(rawPhone) : '';
+      const isAdmin = u.email === 'zaguzovsv@gmail.com' || cleanRawPhone === '+79825885477';
+
       setAppUser({
         uid: u.uid,
         email: u.email,
-        phone: u.phoneNumber || optionalPhone,
+        phone: rawPhone || null,
         fullName: u.displayName || "Посетитель (Без БД)",
-        role: (u.email === 'zaguzovsv@gmail.com' || (u.phoneNumber || optionalPhone) === '+79825885477') ? 'admin' : 'director', 
+        role: isAdmin ? 'admin' : 'director', 
         createdAt: Date.now()
       });
     }
@@ -310,13 +378,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const fastLoginWithPhone = async (phone: string) => {
     setPhoneError(null);
     try {
-      const qPhone = query(collection(db, 'systemUsers'), where('phone', '==', phone));
-      const phoneDocs = await getDocs(qPhone);
+      const cleanPhone = normalizePhoneNumber(phone);
+      const isAdmin = cleanPhone === '+79825885477';
+
+      const phoneCandidates = Array.from(new Set([
+        phone.trim(), 
+        cleanPhone, 
+        phone.replace(/\s+/g, ''),
+        cleanPhone.replace('+7', '8'),
+        cleanPhone.replace(/^\+7/, '')
+      ])).filter(Boolean);
+
+      let found = false;
       
-      const qCoach = query(collection(db, 'coaches'), where('phone', '==', phone));
-      const coachDocs = await getDocs(qCoach);
-      
-      if (phoneDocs.empty && coachDocs.empty) {
+      // Check systemUsers
+      for (const p of phoneCandidates) {
+        const q = query(collection(db, 'systemUsers'), where('phone', '==', p));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        // Check coaches
+        for (const p of phoneCandidates) {
+          const q = query(collection(db, 'coaches'), where('phone', '==', p));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            found = true;
+            break;
+          }
+        }
+      }
+
+      if (!found) {
+        // Check clients
+        for (const p of phoneCandidates) {
+          const q = query(collection(db, 'clients'), where('parentPhone', '==', p));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            found = true;
+            break;
+          }
+        }
+      }
+
+      if (!isAdmin && !found) {
         setPhoneError("Номер телефона не найден в базе данных.");
         return false;
       }
