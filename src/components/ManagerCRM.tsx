@@ -72,6 +72,8 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
     setViewingClientId,
     setCurrentRole,
     setCurrentTab,
+    currentRole,
+    addFinanceRecord,
   } = useCRM();
 
   const [deleteLeadModal, setDeleteLeadModal] = useState<{
@@ -101,6 +103,49 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
     "info" | "abos" | "visits" | "payments" | "history"
   >("info");
   const [clientNotes, setClientNotes] = useState<{ [key: string]: string }>({});
+
+  // Manual payment entry state variables
+  const [manualPaymentDate, setManualPaymentDate] = useState<string>(
+    () => new Date().toISOString().substring(0, 10)
+  );
+  const [manualPaymentType, setManualPaymentType] = useState<
+    "12_sessions" | "8_sessions" | "4_sessions" | "1_session"
+  >("12_sessions");
+  const [manualPaymentAmount, setManualPaymentAmount] = useState<number>(0);
+  const [manualPaymentExpires, setManualPaymentExpires] = useState<string>("");
+  const [manualPaymentLoading, setManualPaymentLoading] = useState(false);
+  const [manualPaymentError, setManualPaymentError] = useState<string | null>(null);
+  const [manualPaymentSuccess, setManualPaymentSuccess] = useState<string | null>(null);
+
+  // Auto-calculate payment amount when subscription type changes
+  React.useEffect(() => {
+    if (!crmConfig) return;
+    let baseAmount = 0;
+    switch (manualPaymentType) {
+      case "12_sessions":
+        baseAmount = crmConfig.price12 || 0;
+        break;
+      case "8_sessions":
+        baseAmount = crmConfig.price8 || 0;
+        break;
+      case "4_sessions":
+        baseAmount = crmConfig.price4 || 0;
+        break;
+      case "1_session":
+        baseAmount = crmConfig.price1 || 0;
+        break;
+    }
+    setManualPaymentAmount(baseAmount);
+  }, [manualPaymentType, crmConfig]);
+
+  // Auto-calculate expiration date (30 days from payment date)
+  React.useEffect(() => {
+    if (!manualPaymentDate) return;
+    const dateObj = new Date(manualPaymentDate);
+    if (isNaN(dateObj.getTime())) return;
+    dateObj.setDate(dateObj.getDate() + 30);
+    setManualPaymentExpires(dateObj.toISOString().substring(0, 10));
+  }, [manualPaymentDate]);
 
   // Client form modal state
   const [selectedClientIds, setSelectedClientIds] = useState<Set<string>>(
@@ -385,6 +430,80 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
       });
     }
   }, [selectedClient]);
+
+  const handleSaveManualPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedClient) {
+      setManualPaymentError("Клиент не выбран.");
+      return;
+    }
+    setManualPaymentLoading(true);
+    setManualPaymentError(null);
+    setManualPaymentSuccess(null);
+
+    try {
+      const type = manualPaymentType;
+      const amount = Number(manualPaymentAmount) || 0;
+      const paymentDate = manualPaymentDate;
+      const expiresDate = manualPaymentExpires;
+
+      const sessionsMap = {
+        "12_sessions": 12,
+        "8_sessions": 8,
+        "4_sessions": 4,
+        "1_session": 1,
+      };
+      const sessions = sessionsMap[type];
+
+      // Calculate total sessions left
+      const updatedSessionsLeft = (selectedClient.abonementSessionsLeft || 0) + sessions;
+
+      const itemLabel = type === "1_session"
+        ? `Разовая тренировка (Вручную)`
+        : `Абонемент на ${sessions} занятий (Вручную)`;
+
+      const newPayment = {
+        id: `p_manual_${Date.now()}`,
+        date: paymentDate,
+        amount,
+        item: itemLabel,
+        status: "Оплачено" as const,
+      };
+
+      const updatedPayments = [newPayment, ...(selectedClient.payments || [])];
+
+      const clientUpdates = {
+        abonement: type,
+        abonementStatus: "Оплачено" as const,
+        abonementTotalSessions: updatedSessionsLeft,
+        abonementSessionsLeft: updatedSessionsLeft,
+        abonementExpirationDate: expiresDate,
+        payments: updatedPayments,
+      };
+
+      // Call context function to update client locally & in firestore db
+      await updateClient(selectedClient.id, clientUpdates);
+
+      // Save finance record automatically in backend/firestore
+      const categoryName = type === "1_session" ? "Разовые тренировки" : "Абонементы";
+      await addFinanceRecord({
+        type: "income",
+        category: categoryName,
+        amount,
+        date: paymentDate,
+        description: `Ручное внесение: ${itemLabel} (${selectedClient.childSurname} ${selectedClient.childName})`,
+        accountId: "acc_bank",
+        isFixed: false,
+      });
+
+      setManualPaymentSuccess("Платёж успешно занесён вручную и сохранён!");
+    } catch (err: any) {
+      console.error(err);
+      setManualPaymentError(err?.message || "Не удалось занести платёж.");
+    } finally {
+      setManualPaymentLoading(false);
+    }
+  };
 
   const handleSaveNotes = async (id: string, text: string) => {
     setClientNotes((prev) => ({
@@ -2530,24 +2649,135 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                           )}
 
                           {clientDetailTab === "payments" && (
-                            <div className="space-y-1">
-                              <strong>Детали платежных поручений:</strong>
-                              {selectedClient.payments.length === 0 ? (
-                                <p className="text-gray-400 italic">
-                                  Транзакций не обнаружено.
-                                </p>
-                              ) : (
-                                selectedClient.payments.map((p, i) => (
-                                  <div
-                                    key={i}
-                                    className="flex justify-between p-1.5 bg-slate-50 rounded text-[11px]"
-                                  >
-                                    <span>{p.item}</span>
-                                    <span className="font-mono font-bold text-slate-850">
-                                      {p.amount} Р
-                                    </span>
+                            <div className="space-y-4">
+                              <div>
+                                <strong className="text-xs text-slate-700 block mb-2">Детали платежных поручений:</strong>
+                                {selectedClient.payments && selectedClient.payments.length > 0 ? (
+                                  <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                                    {selectedClient.payments.map((p, i) => (
+                                      <div
+                                        key={p.id || i}
+                                        className="flex justify-between items-center p-2 bg-slate-50 border border-slate-100 rounded-lg text-[11px] hover:bg-slate-100 transition"
+                                      >
+                                        <div className="flex flex-col">
+                                          <span className="font-semibold text-slate-800">{p.item}</span>
+                                          <span className="text-[9px] text-slate-400">{p.date}</span>
+                                        </div>
+                                        <div className="text-right">
+                                          <span className="font-mono font-bold text-emerald-600 block">
+                                            +{p.amount} ₽
+                                          </span>
+                                          <span className="text-[8px] bg-emerald-50 text-emerald-600 px-1 py-0.5 rounded font-bold uppercase tracking-wider">
+                                            {p.status || "Оплачено"}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    ))}
                                   </div>
-                                ))
+                                ) : (
+                                  <p className="text-gray-400 text-xs italic">
+                                    Транзакций не обнаружено.
+                                  </p>
+                                )}
+                              </div>
+
+                              {/* Manual payment addition for Administrator and Director */}
+                              {(currentRole === "admin" || currentRole === "director") && (
+                                <div className="border-t pt-3 mt-2 space-y-3">
+                                  <div className="flex items-center space-x-1.5">
+                                    <span className="text-lg">✍️</span>
+                                    <h4 className="text-xs font-black uppercase text-slate-700 tracking-wider">
+                                      Внести платёж вручную <span className="text-[10px] text-red-600 lowercase font-medium">({currentRole})</span>
+                                    </h4>
+                                  </div>
+
+                                  <form onSubmit={handleSaveManualPayment} className="space-y-3 p-3 bg-slate-50 border border-slate-150 rounded-xl">
+                                    {manualPaymentSuccess && (
+                                      <div className="p-2 text-[10px] bg-emerald-50 border border-emerald-100 text-emerald-800 rounded-lg font-medium">
+                                        ✅ {manualPaymentSuccess}
+                                      </div>
+                                    )}
+                                    {manualPaymentError && (
+                                      <div className="p-2 text-[10px] bg-red-50 border border-red-100 text-red-800 rounded-lg font-medium">
+                                        ❌ {manualPaymentError}
+                                      </div>
+                                    )}
+
+                                    <div className="grid grid-cols-2 gap-2">
+                                      {/* Subscription option */}
+                                      <div className="col-span-2">
+                                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">
+                                          Тип абонемента / Тренировки
+                                        </label>
+                                        <select
+                                          value={manualPaymentType}
+                                          onChange={(e) => setManualPaymentType(e.target.value as any)}
+                                          className="w-full text-[11px] p-2 bg-white border border-slate-200 rounded-lg outline-none focus:border-red-500 transition font-medium"
+                                        >
+                                          <option value="12_sessions">Абонемент на 12 занятий</option>
+                                          <option value="8_sessions">Абонемент на 8 занятий</option>
+                                          <option value="4_sessions">Абонемент на 4 занятия</option>
+                                          <option value="1_session">Разовое занятие / Тренировка</option>
+                                        </select>
+                                      </div>
+
+                                      {/* Date of Payment */}
+                                      <div>
+                                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">
+                                          Дата платежа
+                                        </label>
+                                        <input
+                                          type="date"
+                                          value={manualPaymentDate}
+                                          onChange={(e) => setManualPaymentDate(e.target.value)}
+                                          className="w-full text-[11px] p-2 bg-white border border-slate-200 rounded-lg outline-none focus:border-red-500 transition font-mono"
+                                          required
+                                        />
+                                      </div>
+
+                                      {/* Subscription Expiration */}
+                                      <div>
+                                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">
+                                          Срок действия до
+                                        </label>
+                                        <input
+                                          type="date"
+                                          value={manualPaymentExpires}
+                                          onChange={(e) => setManualPaymentExpires(e.target.value)}
+                                          className="w-full text-[11px] p-2 bg-white border border-slate-200 rounded-lg outline-none focus:border-red-500 transition font-mono"
+                                        />
+                                      </div>
+
+                                      {/* Amount */}
+                                      <div className="col-span-2">
+                                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">
+                                          Сумма к оплате (₽)
+                                        </label>
+                                        <input
+                                          type="number"
+                                          value={manualPaymentAmount}
+                                          onChange={(e) => setManualPaymentAmount(Number(e.target.value))}
+                                          className="w-full text-[11px] p-2 bg-white border border-slate-200 rounded-lg outline-none focus:border-red-500 transition font-mono font-bold"
+                                          placeholder="Напр. 4500"
+                                          min="0"
+                                          required
+                                        />
+                                      </div>
+                                    </div>
+
+                                    <button
+                                      type="submit"
+                                      disabled={manualPaymentLoading}
+                                      className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs rounded-lg shadow-sm transition active:scale-[0.98] disabled:opacity-50 flex items-center justify-center space-x-1"
+                                    >
+                                      {manualPaymentLoading ? (
+                                        <span>Сохранение...</span>
+                                      ) : (
+                                        <span>Внести оплату вручную</span>
+                                      )}
+                                    </button>
+                                  </form>
+                                </div>
                               )}
                             </div>
                           )}
