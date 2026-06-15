@@ -505,6 +505,37 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
     }
   };
 
+  const handleDeletePayment = async (paymentId: string) => {
+    if (!selectedClient) return;
+    if (!window.confirm("Удалить этот платёж? Действие нельзя отменить.")) return;
+
+    try {
+      const updatedPayments = (selectedClient.payments || []).filter((p) => p.id !== paymentId);
+      await updateClient(selectedClient.id, { payments: updatedPayments });
+    } catch (err) {
+      console.error("Ошибка при удалении платежа:", err);
+      alert("Не удалось удалить платёж.");
+    }
+  };
+
+  const handleClearSubscription = async () => {
+    if (!selectedClient) return;
+    if (!window.confirm("Вы уверены, что хотите обнулить абонемент у клиента? Остаток занятий сбросится на 0.")) return;
+
+    try {
+      await updateClient(selectedClient.id, {
+        abonement: 'none',
+        abonementStatus: 'Нет абонемента',
+        abonementSessionsLeft: 0,
+        abonementTotalSessions: 0,
+        abonementExpirationDate: '',
+      });
+    } catch (err) {
+      console.error("Ошибка при удалении абонемента:", err);
+      alert("Не удалось обнулить абонемент.");
+    }
+  };
+
   const handleSaveNotes = async (id: string, text: string) => {
     setClientNotes((prev) => ({
       ...prev,
@@ -2612,6 +2643,17 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                   </div>
                                 </div>
                               )}
+
+                              {/* Manual subscription reset for Administrator, Director and Manager */}
+                              {(currentRole === "admin" || currentRole === "director" || currentRole === "manager") && selectedClient.abonement !== "none" && (
+                                <button
+                                  onClick={handleClearSubscription}
+                                  className="w-full py-2 bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs rounded-xl border border-red-100 transition flex justify-center items-center mt-2 group"
+                                >
+                                  <span className="group-hover:hidden">Обнулить абонемент</span>
+                                  <span className="hidden group-hover:inline">Подтвердить обнуление (x)</span>
+                                </button>
+                              )}
                             </div>
                           )}
 
@@ -2659,17 +2701,28 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                         key={p.id || i}
                                         className="flex justify-between items-center p-2 bg-slate-50 border border-slate-100 rounded-lg text-[11px] hover:bg-slate-100 transition"
                                       >
-                                        <div className="flex flex-col">
+                                        <div className="flex flex-col flex-1">
                                           <span className="font-semibold text-slate-800">{p.item}</span>
                                           <span className="text-[9px] text-slate-400">{p.date}</span>
                                         </div>
-                                        <div className="text-right">
-                                          <span className="font-mono font-bold text-emerald-600 block">
-                                            +{p.amount} ₽
-                                          </span>
-                                          <span className="text-[8px] bg-emerald-50 text-emerald-600 px-1 py-0.5 rounded font-bold uppercase tracking-wider">
-                                            {p.status || "Оплачено"}
-                                          </span>
+                                        <div className="text-right flex items-center space-x-3">
+                                          <div>
+                                            <span className="font-mono font-bold text-emerald-600 block">
+                                              +{p.amount} ₽
+                                            </span>
+                                            <span className="text-[8px] bg-emerald-50 text-emerald-600 px-1 py-0.5 rounded font-bold uppercase tracking-wider">
+                                              {p.status || "Оплачено"}
+                                            </span>
+                                          </div>
+                                          {(currentRole === "admin" || currentRole === "director" || currentRole === "manager") && p.id && (
+                                            <button
+                                              onClick={() => handleDeletePayment(p.id!)}
+                                              className="p-1.5 text-red-400 hover:bg-red-100 hover:text-red-600 rounded transition"
+                                              title="Удалить платёж"
+                                            >
+                                              <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                          )}
                                         </div>
                                       </div>
                                     ))}
@@ -2681,8 +2734,8 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                 )}
                               </div>
 
-                              {/* Manual payment addition for Administrator and Director */}
-                              {(currentRole === "admin" || currentRole === "director") && (
+                              {/* Manual payment addition for Administrator, Director and Manager */}
+                              {(currentRole === "admin" || currentRole === "director" || currentRole === "manager") && (
                                 <div className="border-t pt-3 mt-2 space-y-3">
                                   <div className="flex items-center space-x-1.5">
                                     <span className="text-lg">✍️</span>
