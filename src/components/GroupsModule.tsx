@@ -84,7 +84,15 @@ export const GroupsModule: React.FC = () => {
   const [selectedClientIdToAssign, setSelectedClientIdToAssign] = useState("");
   const [targetGroupForClient, setTargetGroupForClient] = useState("");
 
-  // 3. Dynamic metrics
+  // 3. Date Filters for Attendance Analysis
+  const [attendanceStartDate, setAttendanceStartDate] = useState(
+    new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().substring(0, 10)
+  );
+  const [attendanceEndDate, setAttendanceEndDate] = useState(
+    new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().substring(0, 10)
+  );
+
+  // 4. Dynamic metrics
   const totalGroupsCount = groups.length;
   const totalClientsInGroups = clients.filter(
     (c) =>
@@ -317,12 +325,34 @@ export const GroupsModule: React.FC = () => {
 
         {/* VENUE ANALYTICS SECTION */}
         <div className="space-y-4 pt-2">
-          <h2 className="text-sm font-extrabold text-slate-950 uppercase tracking-wider font-mono">
-            Аналитика по площадкам и группам
-          </h2>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <h2 className="text-sm font-extrabold text-slate-950 uppercase tracking-wider font-mono">
+              Аналитика по площадкам и группам
+            </h2>
+            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-gray-200">
+              <span className="text-xs font-semibold text-gray-500">За период:</span>
+              <input
+                type="date"
+                value={attendanceStartDate}
+                onChange={(e) => setAttendanceStartDate(e.target.value)}
+                className="bg-transparent border-none text-xs font-bold text-slate-800 outline-none focus:ring-0 p-0"
+              />
+              <span className="text-gray-300">-</span>
+              <input
+                type="date"
+                value={attendanceEndDate}
+                onChange={(e) => setAttendanceEndDate(e.target.value)}
+                className="bg-transparent border-none text-xs font-bold text-slate-800 outline-none focus:ring-0 p-0"
+              />
+            </div>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {groups.map((g) => {
-              const sessions = trainingSessions?.filter(s => s.groupId === g.id || s.groupName === g.name) || [];
+              const sessions = trainingSessions?.filter(s => 
+                (s.groupId === g.id || s.groupName === g.name) &&
+                s.dateString >= attendanceStartDate &&
+                s.dateString <= attendanceEndDate
+              ) || [];
               const totalCost = sessions.length * (g.venueCost || 0);
               const totalPresent = sessions.reduce((acc, s) => acc + s.presentCount, 0);
               const avgAttendanceCount = sessions.length > 0 ? (totalPresent / sessions.length) : 0;
@@ -330,14 +360,15 @@ export const GroupsModule: React.FC = () => {
               const loadPercent = sessions.length > 0 ? Math.round((avgAttendanceCount / maxCap) * 100) : 0;
 
               return (
-                <div key={g.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-left">
-                  <div className="font-bold text-slate-900 border-b pb-2 tracking-tight">
-                    {g.name}
+                <div key={g.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-left hover:shadow-md transition">
+                  <div className="font-bold text-slate-900 border-b pb-2 tracking-tight flex justify-between items-center">
+                    <span>{g.name}</span>
+                    <span className="text-[10px] font-mono text-gray-400 bg-slate-100 px-2 py-0.5 rounded">Вместимость: {maxCap}</span>
                   </div>
                   <div className="pt-3 space-y-2">
                     <div className="flex justify-between items-center text-xs">
                       <span className="text-slate-500 font-semibold">Проведено тренировок:</span>
-                      <span className="font-bold text-slate-900">{sessions.length}</span>
+                      <span className="font-bold text-slate-900 bg-slate-100 px-2 rounded-md">{sessions.length}</span>
                     </div>
                     <div className="flex justify-between items-center text-xs">
                       <span className="text-slate-500 font-semibold">Затраты на аренду:</span>
@@ -345,11 +376,11 @@ export const GroupsModule: React.FC = () => {
                     </div>
                     <div className="flex justify-between items-center text-xs">
                       <span className="text-slate-500 font-semibold">Ср. посещаемость (чел):</span>
-                      <span className="font-bold text-emerald-600">{avgAttendanceCount.toFixed(1)}</span>
+                      <span className="font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">{avgAttendanceCount.toFixed(1)}</span>
                     </div>
                     <div className="flex justify-between items-center text-xs">
                       <span className="text-slate-500 font-semibold">Загруженность группы:</span>
-                      <span className="font-bold text-blue-600">{loadPercent}%</span>
+                      <span className={`font-bold px-2 py-0.5 rounded-md ${loadPercent >= 80 ? 'text-emerald-700 bg-emerald-100' : loadPercent >= 50 ? 'text-amber-700 bg-amber-100' : 'text-red-700 bg-red-100'}`}>{loadPercent}%</span>
                     </div>
                   </div>
                 </div>

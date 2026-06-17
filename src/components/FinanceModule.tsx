@@ -56,12 +56,43 @@ export const FinanceModule: React.FC = () => {
     "dashboard" | "input" | "cashflow" | "pnl" | "directories" | "plan" | "accounts"
   >("dashboard");
 
+  const currentMonthStr = new Date().toISOString().substring(0, 7);
+
+  // States for date range filtering on dashboard
+  const defaultStartDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+    .toISOString()
+    .substring(0, 10);
+  const defaultEndDate = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)
+    .toISOString()
+    .substring(0, 10);
+
+  const [dashStartDate, setDashStartDate] = useState(defaultStartDate);
+  const [dashEndDate, setDashEndDate] = useState(defaultEndDate);
+
+  // Unify all finances including client payments
+  const allFinances = useMemo(() => {
+    const clientPayments = (clients || []).flatMap((c) =>
+      (c.payments || []).map((p) => ({
+        id: p.id || `cp_${Date.now()}_${Math.random()}`,
+        type: "income" as const,
+        category: "Абонементы",
+        amount: Number(p.amount) || 0,
+        date: p.date.substring(0, 10),
+        description: `Оплата от: ${c.childSurname} ${c.childName} (${p.item})`,
+        targetMonth: p.date.substring(0, 7),
+        accountId: "acc_all",
+        isFixed: false,
+      }))
+    );
+    return [...finances, ...clientPayments];
+  }, [finances, clients]);
+
   // Dashboard Logic
-  const totalIncomes = finances
-    .filter((f) => f.type === "income")
+  const totalIncomes = allFinances
+    .filter((f) => f.type === "income" && f.date >= dashStartDate && f.date <= dashEndDate)
     .reduce((acc, f) => acc + Number(f.amount || 0), 0);
-  const totalExpenses = finances
-    .filter((f) => f.type === "expense")
+  const totalExpenses = allFinances
+    .filter((f) => f.type === "expense" && f.date >= dashStartDate && f.date <= dashEndDate)
     .reduce((acc, f) => acc + Number(f.amount || 0), 0);
   const operatingProfit = totalIncomes - totalExpenses;
   const unpaidClients = (clients || []).filter(
@@ -70,8 +101,6 @@ export const FinanceModule: React.FC = () => {
       (c.abonementStatus === "unpaid" || c.abonementStatus === "expired"),
   );
   const totalDebts = unpaidClients.length * 4500;
-
-  const currentMonthStr = new Date().toISOString().substring(0, 7);
 
   // States for input form
   const [fType, setFType] = useState<"income" | "expense">("income");
@@ -186,13 +215,13 @@ export const FinanceModule: React.FC = () => {
   // New Dashboard calculations
   const dashboardData = useMemo(() => {
     // Top Stats metrics
-    const currentM = finances.filter(
-      (f) => (f.targetMonth || f.date.substring(0, 7)) === currentMonthStr,
+    const periodData = allFinances.filter(
+      (f) => f.date >= dashStartDate && f.date <= dashEndDate,
     );
-    const mIncomes = currentM
+    const mIncomes = periodData
       .filter((f) => f.type === "income")
       .reduce((acc, f) => acc + Number(f.amount || 0), 0);
-    const mExpenses = currentM
+    const mExpenses = periodData
       .filter((f) => f.type === "expense")
       .reduce((acc, f) => acc + Number(f.amount || 0), 0);
     const mProfit = mIncomes - mExpenses;
@@ -202,7 +231,7 @@ export const FinanceModule: React.FC = () => {
       string,
       { name: string; Доходы: number; Расходы: number }
     >();
-    finances.forEach((f) => {
+    allFinances.forEach((f) => {
       const tm = f.targetMonth || f.date.substring(0, 7);
       if (!monthsMap.has(tm))
         monthsMap.set(tm, { name: tm, Доходы: 0, Расходы: 0 });
@@ -237,7 +266,7 @@ export const FinanceModule: React.FC = () => {
 
     // Pie chart for expenses
     const pieMap = new Map<string, number>();
-    currentM
+    periodData
       .filter((f) => f.type === "expense")
       .forEach((f) => {
         pieMap.set(
@@ -263,7 +292,7 @@ export const FinanceModule: React.FC = () => {
     }));
 
     return { mIncomes, mExpenses, mProfit, dynamicChartData, pieData };
-  }, [finances, currentMonthStr]);
+  }, [allFinances, dashStartDate, dashEndDate]);
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50 text-gray-800 min-h-screen">
@@ -327,6 +356,27 @@ export const FinanceModule: React.FC = () => {
       <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4 md:space-y-6">
         {activeTab === "dashboard" && (
           <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+              <div className="text-sm font-bold text-slate-800">
+                Финансовые показатели за период:
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={dashStartDate}
+                  onChange={(e) => setDashStartDate(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                />
+                <span className="text-slate-400 font-medium">—</span>
+                <input
+                  type="date"
+                  value={dashEndDate}
+                  onChange={(e) => setDashEndDate(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                />
+              </div>
+            </div>
+
             {/* Top Stats */}
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
               <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between">
@@ -859,7 +909,7 @@ export const FinanceModule: React.FC = () => {
         )}
 
         {activeTab === "cashflow" && (() => {
-          let visibleFinances = finances.filter(f => f.date.substring(0, 7) === gridFilterMonth);
+          let visibleFinances = allFinances.filter(f => f.date.substring(0, 7) === gridFilterMonth);
           if (gridFilterType !== "all") {
             visibleFinances = visibleFinances.filter(f => f.type === gridFilterType);
           }
@@ -1015,7 +1065,7 @@ export const FinanceModule: React.FC = () => {
                   {financeCategories
                     .filter((c) => c.type === "income")
                     .map((cat) => {
-                      const sum = finances
+                      const sum = allFinances
                         .filter(
                           (f) =>
                             f.type === "income" &&
@@ -1042,7 +1092,7 @@ export const FinanceModule: React.FC = () => {
                   <div className="flex justify-between items-center text-sm font-black pt-3 border-t border-emerald-200/50 text-emerald-900">
                     <span>Итого Доходы:</span>
                     <span className="font-mono text-lg">
-                      {finances
+                      {allFinances
                         .filter(
                           (f) =>
                             f.type === "income" &&
@@ -1066,7 +1116,7 @@ export const FinanceModule: React.FC = () => {
                   {financeCategories
                     .filter((c) => c.type === "expense")
                     .map((cat) => {
-                      const sum = finances
+                      const sum = allFinances
                         .filter(
                           (f) =>
                             f.type === "expense" &&
@@ -1093,7 +1143,7 @@ export const FinanceModule: React.FC = () => {
                   <div className="flex justify-between items-center text-sm font-black pt-3 border-t border-orange-200/50 text-orange-900">
                     <span>Итого Расходы:</span>
                     <span className="font-mono text-lg">
-                      {finances
+                      {allFinances
                         .filter(
                           (f) =>
                             f.type === "expense" &&
@@ -1115,7 +1165,7 @@ export const FinanceModule: React.FC = () => {
                 </span>
                 <span className="text-3xl font-black font-mono tracking-tight text-emerald-400 drop-shadow-md">
                   {(
-                    finances
+                    allFinances
                       .filter(
                         (f) =>
                           f.type === "income" &&
@@ -1123,7 +1173,7 @@ export const FinanceModule: React.FC = () => {
                             currentMonthStr,
                       )
                       .reduce((a, b) => a + Number(b.amount || 0), 0) -
-                    finances
+                    allFinances
                       .filter(
                         (f) =>
                           f.type === "expense" &&
