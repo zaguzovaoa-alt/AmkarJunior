@@ -1172,41 +1172,47 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                   </p>
 
                   {/* Upload File Option */}
-                  <div className="flex flex-col sm:flex-row gap-2.5 items-center pt-2">
-                    <label className="flex-1 w-full bg-slate-50 border border-gray-200 rounded-lg shrink-0 cursor-pointer hover:bg-slate-100 transition relative">
+                  <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center pt-2">
+                    <div className="flex-1 w-full bg-slate-50 border border-gray-200 rounded-lg shrink-0">
                       <div className="flex items-center px-4 py-3">
                         <Camera className="w-5 h-5 text-slate-400 mr-2" />
                         <div className="flex flex-col">
                           <span className="text-sm font-semibold text-slate-700">
-                            Сделать или загрузить фото с устройства
+                            Фотоотчет присутствия
                           </span>
                           <span className="text-[10px] text-slate-400">
-                            Только фото, подтверждающее присутствие группы
+                            {uploadedAttendancePhoto ? "Фото добавлено к ведомости" : "Необходимо загрузить фото площадки"}
                           </span>
                         </div>
                       </div>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            compressImage(file, (base64) =>
-                              setUploadedAttendancePhoto(base64),
-                            );
-                          }
-                        }}
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setUploadedAttendancePhoto(null)}
-                      className="px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm rounded-lg transition shrink-0 h-full"
-                    >
-                      Сбросить фото
-                    </button>
+                    </div>
+                    {uploadedAttendancePhoto ? (
+                      <button
+                        type="button"
+                        onClick={() => setUploadedAttendancePhoto(null)}
+                        className="px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-semibold text-sm rounded-lg transition shrink-0 flex items-center justify-center sm:h-[66px]"
+                      >
+                        Удалить фото
+                      </button>
+                    ) : (
+                      <label className="px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm rounded-lg transition shrink-0 cursor-pointer flex items-center justify-center relative overflow-hidden sm:h-[66px]">
+                        <span>Прикрепить фото</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              compressImage(file, (base64) =>
+                                setUploadedAttendancePhoto(base64)
+                              );
+                            }
+                          }}
+                        />
+                      </label>
+                    )}
                   </div>
 
                   {uploadedAttendancePhoto &&
@@ -1352,10 +1358,28 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                                     <div className="font-bold text-slate-850 text-sm">
                                       {p.childSurname} {p.childName}
                                     </div>
-                                    {isTrial && (
+                                    {isTrial ? (
                                       <span className="inline-block mt-1 px-2 py-0.5 rounded bg-orange-100 text-orange-800 text-[9px] font-black uppercase tracking-wider">
                                         ПРОБНОЕ ЗАНЯТИЕ
                                       </span>
+                                    ) : (
+                                      <div className="mt-1 flex flex-wrap gap-1 items-center">
+                                        {p.abonement && p.abonement !== "none" ? (
+                                          (p.abonementSessionsLeft || 0) > 0 ? (
+                                            <span className="inline-block px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[9px] font-black uppercase tracking-wider">
+                                              Абонемент: {p.abonementSessionsLeft} ост.
+                                            </span>
+                                          ) : (
+                                            <span className="inline-block px-2 py-0.5 rounded bg-red-100 text-red-800 text-[9px] font-black uppercase tracking-wider">
+                                              Абонемент 0 (закончился)
+                                            </span>
+                                          )
+                                        ) : (
+                                          <span className="inline-block px-2 py-0.5 rounded bg-red-50 border border-red-100 text-red-600 text-[9px] font-black uppercase tracking-wider">
+                                            Нет абонемента
+                                          </span>
+                                        )}
+                                      </div>
                                     )}
                                   </div>
                                 </div>

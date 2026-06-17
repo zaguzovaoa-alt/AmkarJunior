@@ -106,6 +106,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           { id: "hq_finances", label: "Финансы", icon: DollarSign },
           { id: "hq_analytics", label: "Бонусы и Аналитика", icon: Sparkles },
           { id: "hq_attendance", label: "Посещения", icon: CheckSquare },
+          { id: "hq_tasks", label: "Задачи", icon: CheckSquare },
           {
             id: "hq_messages",
             label: "Сообщения",
@@ -135,6 +136,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           { id: "hq_finances", label: "Финансы", icon: DollarSign },
           { id: "hq_analytics", label: "Бонусы и Аналитика", icon: Sparkles },
           { id: "hq_attendance", label: "Посещения", icon: CheckSquare },
+          { id: "hq_tasks", label: "Задачи", icon: CheckSquare },
           {
             id: "hq_messages",
             label: "Сообщения",

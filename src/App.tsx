@@ -15,6 +15,7 @@ import { GroupsModule } from './components/GroupsModule';
 import { DirectorUsers } from './components/DirectorUsers';
 import { JoinPage } from './components/JoinPage';
 import { AdminStore } from './components/AdminStore';
+import { TasksModule } from './components/TasksModule';
 import { Shield, RefreshCw, Menu } from 'lucide-react';
 import firebaseConfig from '../firebase-applet-config.json';
 
@@ -32,7 +33,7 @@ function DashboardContainer() {
     switch (currentRole) {
       case 'admin':
       case 'director':
-        if (currentTab === 'director_home' || currentTab === 'hq_home') return <DirectorCRM />;
+        if (currentTab === 'director_home' || currentTab === 'hq_home') return <DirectorCRM setActiveTab={setCurrentTab} />;
         if (currentTab === 'director_finances' || currentTab === 'hq_finances') return <FinanceModule />;
         if (currentTab === 'director_coaches' || currentTab === 'hq_coaches') return <CoachesList />;
         if (currentTab === 'director_sync' || currentTab === 'hq_calendar_sync') return <GoogleCalendarSync />;
@@ -56,9 +57,10 @@ function DashboardContainer() {
         }
         if (currentTab === 'hq_settings') return <HQSettings />;
         if (currentTab === 'hq_store') return <AdminStore />;
+        if (currentTab === 'hq_tasks') return <TasksModule />;
         if (currentTab === 'director_groups' || currentTab === 'hq_groups') return <GroupsModule />;
         if (currentTab === 'director_users') return <DirectorUsers />;
-        return <DirectorCRM />;
+        return <DirectorCRM setActiveTab={setCurrentTab} />;
 
       case 'manager':
         if (currentTab === 'hq_settings') return <HQSettings />;
@@ -83,9 +85,10 @@ function DashboardContainer() {
         if (currentTab === 'manager_sync' || currentTab === 'hq_calendar_sync') return <GoogleCalendarSync />;
         if (currentTab === 'manager_coaches' || currentTab === 'hq_coaches') return <CoachesList />;
         if (currentTab === 'manager_groups' || currentTab === 'hq_groups') return <GroupsModule />;
+        if (currentTab === 'hq_tasks') return <TasksModule />;
         if (currentTab === 'hq_attendance') return <TrainerCRM activeTab="trainer_attendance" setActiveTab={setCurrentTab} />;
         if (currentTab === 'hq_messages') return <TrainerCRM activeTab="trainer_messages" setActiveTab={setCurrentTab} />;
-        if (currentTab === 'hq_home') return <DirectorCRM />;
+        if (currentTab === 'hq_home') return <DirectorCRM setActiveTab={setCurrentTab} />;
         return (
           <ManagerCRM 
             activeTab="hq_leads" 
@@ -109,7 +112,7 @@ function DashboardContainer() {
         return <ParentPortal activeTab={currentTab} setActiveTab={setCurrentTab} />;
 
       default:
-        return <DirectorCRM />;
+        return <DirectorCRM setActiveTab={setCurrentTab} />;
     }
   };
 

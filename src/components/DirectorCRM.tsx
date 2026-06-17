@@ -179,7 +179,11 @@ const FIELD_DEFINITIONS = {
   ],
 };
 
-export const DirectorCRM: React.FC = () => {
+interface DirectorCRMProps {
+  setActiveTab?: (tab: string) => void;
+}
+
+export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
   const {
     clients,
     leads,
@@ -198,6 +202,7 @@ export const DirectorCRM: React.FC = () => {
     appendLeads,
     appendFinances,
     appendCoaches,
+    currentRole,
   } = useCRM();
 
   const activeClients = clients.filter((c) => c.status === "active");
@@ -463,12 +468,10 @@ export const DirectorCRM: React.FC = () => {
   const handleAddDirectorTask = () => {
     if (!newDirectorTask.trim()) return;
     const newTask = {
-      id: `task_${Date.now()}`,
       title: newDirectorTask.trim(),
       description: "Добавлено с дашборда",
       dueDate: new Date().toLocaleDateString("ru-RU"),
-      assignedTo: "director" as const,
-      status: "pending" as const,
+      assignedTo: currentRole as 'manager' | 'trainer' | 'director' || "director",
     };
     addTask(newTask);
     setNewDirectorTask("");
@@ -1541,11 +1544,19 @@ export const DirectorCRM: React.FC = () => {
             <div className="space-y-6">
               {/* Задачник руководителя - Image 7 bottom right */}
               <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-4 text-left">
-                <div className="flex border-b pb-3 items-center justify-between">
+                <div className="flex border-b pb-3 items-center justify-between group">
                   <h3 className="font-extrabold text-slate-950 text-sm">
                     Мониторинг управленческих задач
                   </h3>
-                  <ClipboardList className="w-4 h-4 text-gray-400" />
+                  {setActiveTab && (
+                    <button
+                      onClick={() => setActiveTab("hq_tasks")}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-semibold"
+                    >
+                      Перейти →
+                    </button>
+                  )}
+                  <ClipboardList className="w-4 h-4 text-gray-400 ml-2" />
                 </div>
 
                 <div className="flex items-center space-x-2">
