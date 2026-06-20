@@ -12,11 +12,17 @@ export const TasksModule: React.FC = () => {
 
   const handleAddTask = () => {
     if (!newTaskTitle.trim()) return;
+    
+    // Ensure we only use allowed roles for assignedTo
+    const validRole = ['manager', 'trainer', 'director'].includes(currentRole) 
+      ? (currentRole as 'manager' | 'trainer' | 'director') 
+      : 'director';
+      
     addTask({
       title: newTaskTitle.trim(),
       description: "Создано из панели задач",
       dueDate: new Date().toLocaleDateString("ru-RU"),
-      assignedTo: currentRole as 'manager' | 'trainer' | 'director',
+      assignedTo: validRole,
     });
     setNewTaskTitle("");
   };

@@ -471,7 +471,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
       title: newDirectorTask.trim(),
       description: "Добавлено с дашборда",
       dueDate: new Date().toLocaleDateString("ru-RU"),
-      assignedTo: currentRole as 'manager' | 'trainer' | 'director' || "director",
+      assignedTo: "director" as const,
     };
     addTask(newTask);
     setNewDirectorTask("");
