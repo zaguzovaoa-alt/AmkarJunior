@@ -170,10 +170,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [coaches, setCoaches] = useState<Coach[]>(INITIAL_COACHES);
   const [groups, setGroups] = useState<TrainingGroup[]>(INITIAL_GROUPS);
   const [finances, setFinances] = useState<FinanceRecord[]>(INITIAL_FINANCES);
-  const [accounts, setAccounts] = useState<Account[]>(() => {
-    const cached = localStorage.getItem('amkar_accounts');
-    return cached ? JSON.parse(cached) : INITIAL_ACCOUNTS;
-  });
+  const [accounts, setAccounts] = useState<Account[]>(INITIAL_ACCOUNTS);
   const [financeCategories, setFinanceCategories] = useState<FinanceCategory[]>(() => {
     const cached = localStorage.getItem('amkar_finance_categories');
     return cached ? JSON.parse(cached) : INITIAL_FINANCE_CATEGORIES;
@@ -540,6 +537,22 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setNotifications(list);
     }, (err) => handleSnapshotErr(err, 'notifications'));
 
+    const unsubAccounts = onSnapshot(collection(db, 'accounts'), (snapshot) => {
+      const list: Account[] = [];
+      snapshot.forEach((doc) => {
+        list.push(doc.data() as Account);
+      });
+      list.sort((a, b) => a.name.localeCompare(b.name));
+      if (list.length === 0) {
+        // Init default if entirely empty empty
+        INITIAL_ACCOUNTS.forEach(acc => {
+          setDoc(doc(db, 'accounts', acc.id), acc).catch(() => {});
+        });
+      } else {
+        setAccounts(list);
+      }
+    }, (err) => handleSnapshotErr(err, 'accounts'));
+
     return () => {
       unsubLeads();
       unsubClients();
@@ -550,6 +563,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubTrainingSessions();
       unsubMessages();
       unsubNotifications();
+      unsubAccounts();
     };
   }, [firebaseReady]);
 
@@ -1237,19 +1251,19 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setFinanceCategories(prev => prev.filter(c => c.id !== id));
   };
 
-  useEffect(() => {
-    localStorage.setItem('amkar_accounts', JSON.stringify(accounts));
-  }, [accounts]);
-
   const addAccount = async (acc: Omit<Account, 'id'>) => {
-    const newAcc = { ...acc, id: `acc_${Date.now()}` };
+    const id = `acc_${Date.now()}`;
+    const newAcc = { ...acc, id };
     setAccounts(prev => [...prev, newAcc]);
+    setDoc(doc(db, 'accounts', id), newAcc).catch(e => console.warn(e));
   };
   const updateAccount = async (id: string, updates: Partial<Omit<Account, 'id'>>) => {
     setAccounts(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a));
+    updateDoc(doc(db, 'accounts', id), updates).catch(e => console.warn(e));
   };
   const deleteAccount = async (id: string) => {
     setAccounts(prev => prev.filter(a => a.id !== id));
+    deleteDoc(doc(db, 'accounts', id)).catch(e => console.warn(e));
   };
 
   const addFinanceRecord = async (record: Omit<FinanceRecord, 'id'>) => {

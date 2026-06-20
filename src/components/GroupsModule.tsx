@@ -91,6 +91,9 @@ export const GroupsModule: React.FC = () => {
   const [attendanceEndDate, setAttendanceEndDate] = useState(
     new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().substring(0, 10)
   );
+  
+  // Analytics modal state
+  const [analyticsGroup, setAnalyticsGroup] = useState<any | null>(null);
 
   // 4. Dynamic metrics
   const totalGroupsCount = groups.length;
@@ -382,6 +385,13 @@ export const GroupsModule: React.FC = () => {
                       <span className="text-slate-500 font-semibold">Загруженность группы:</span>
                       <span className={`font-bold px-2 py-0.5 rounded-md ${loadPercent >= 80 ? 'text-emerald-700 bg-emerald-100' : loadPercent >= 50 ? 'text-amber-700 bg-amber-100' : 'text-red-700 bg-red-100'}`}>{loadPercent}%</span>
                     </div>
+                    
+                    <button
+                      onClick={() => setAnalyticsGroup(g)}
+                      className="w-full mt-2 py-1.5 flex items-center justify-center gap-1 bg-slate-50 text-slate-600 text-xs font-bold rounded-lg hover:bg-slate-100 transition border border-slate-200"
+                    >
+                      Подробная аналитика
+                    </button>
                   </div>
                 </div>
               );
@@ -1158,6 +1168,109 @@ export const GroupsModule: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* ANALYTICS MODAL */}
+      {analyticsGroup && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95">
+            <div className="sticky top-0 bg-white border-b border-gray-100 p-6 flex justify-between items-center z-10">
+              <div>
+                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">
+                  Аналитика: {analyticsGroup.name}
+                </h3>
+                <p className="text-xs font-semibold text-gray-500 mt-1">
+                  С {attendanceStartDate} по {attendanceEndDate}
+                </p>
+              </div>
+              <button
+                onClick={() => setAnalyticsGroup(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              {(() => {
+                const sessions = trainingSessions?.filter(s => 
+                  (s.groupId === analyticsGroup.id || s.groupName === analyticsGroup.name) &&
+                  s.dateString >= attendanceStartDate &&
+                  s.dateString <= attendanceEndDate
+                ).sort((a,b) => b.dateString.localeCompare(a.dateString)) || [];
+
+                if (sessions.length === 0) {
+                  return (
+                    <div className="p-10 text-center text-gray-500 text-sm font-medium border-2 border-dashed border-gray-200 rounded-xl">
+                      Отсутствуют данные за выбранный период.
+                    </div>
+                  );
+                }
+
+                const totalPresent = sessions.reduce((acc, s) => acc + s.presentCount, 0);
+                const totalAbsent = sessions.reduce((acc, s) => acc + s.absentCount, 0);
+                const totalSick = sessions.reduce((acc, s) => acc + s.sickCount, 0);
+                
+                return (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-4 gap-4">
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                        <div className="text-[10px] uppercase font-bold text-slate-500">Всего тренировок</div>
+                        <div className="text-2xl font-black text-slate-800 mt-1">{sessions.length}</div>
+                      </div>
+                      <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4">
+                        <div className="text-[10px] uppercase font-bold text-emerald-600">Посещений</div>
+                        <div className="text-2xl font-black text-emerald-700 mt-1">{totalPresent}</div>
+                      </div>
+                      <div className="bg-red-50 border border-red-100 rounded-xl p-4">
+                        <div className="text-[10px] uppercase font-bold text-red-600">Пропусков</div>
+                        <div className="text-2xl font-black text-red-700 mt-1">{totalAbsent}</div>
+                      </div>
+                      <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
+                        <div className="text-[10px] uppercase font-bold text-amber-600">По болезни</div>
+                        <div className="text-2xl font-black text-amber-700 mt-1">{totalSick}</div>
+                      </div>
+                    </div>
+
+                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                      <div className="bg-slate-50 grid grid-cols-12 gap-4 px-4 py-3 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-widest">
+                        <div className="col-span-3">Дата</div>
+                        <div className="col-span-2 text-center">Присутствовали</div>
+                        <div className="col-span-2 text-center">Отсутствовали</div>
+                        <div className="col-span-3">Ассистент</div>
+                        <div className="col-span-2">Тренер</div>
+                      </div>
+                      <div className="max-h-[50vh] overflow-y-auto divide-y divide-slate-100">
+                        {sessions.map(s => (
+                          <div key={s.id} className="grid grid-cols-12 gap-4 px-4 py-3 hover:bg-slate-50 transition items-center">
+                            <div className="col-span-3 font-mono text-xs font-bold text-slate-800">
+                              {new Date(s.date).toLocaleDateString('ru-RU')} <span className="text-slate-400 font-medium">{new Date(s.date).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
+                            <div className="col-span-2 text-center font-bold text-emerald-600 bg-emerald-50 py-1 rounded w-16 mx-auto">
+                              {s.presentCount}
+                            </div>
+                            <div className="col-span-2 text-center font-bold text-red-500 bg-red-50 py-1 rounded w-16 mx-auto">
+                              {s.absentCount + s.sickCount}
+                            </div>
+                            <div className="col-span-3 text-xs font-medium text-slate-700 truncate pr-2">
+                              {s.assistantName ? (
+                                <span className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded-md font-bold whitespace-nowrap">{s.assistantName}</span>
+                              ) : (
+                                <span className="text-slate-400 italic">Нет</span>
+                              )}
+                            </div>
+                            <div className="col-span-2 text-xs font-bold text-slate-800 truncate">
+                              {s.coachName}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
           </div>
         </div>
       )}

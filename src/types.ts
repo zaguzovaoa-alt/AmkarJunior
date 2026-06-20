@@ -249,6 +249,7 @@ export interface FinancialPlan {
   price12: number;
   price8: number;
   price4: number;
+  categoryTargets?: Record<string, number>;
 }
 
 export interface CRMConfig {

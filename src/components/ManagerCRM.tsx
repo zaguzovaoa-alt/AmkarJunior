@@ -74,6 +74,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
     setCurrentTab,
     currentRole,
     addFinanceRecord,
+    accounts,
   } = useCRM();
 
   const [deleteLeadModal, setDeleteLeadModal] = useState<{
@@ -113,6 +114,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
   >("12_sessions");
   const [manualPaymentAmount, setManualPaymentAmount] = useState<number>(0);
   const [manualPaymentExpires, setManualPaymentExpires] = useState<string>("");
+  const [manualPaymentAccountId, setManualPaymentAccountId] = useState<string>("");
   const [manualPaymentLoading, setManualPaymentLoading] = useState(false);
   const [manualPaymentError, setManualPaymentError] = useState<string | null>(null);
   const [manualPaymentSuccess, setManualPaymentSuccess] = useState<string | null>(null);
@@ -492,7 +494,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
         amount,
         date: paymentDate,
         description: `Ручное внесение: ${itemLabel} (${selectedClient.childSurname} ${selectedClient.childName})`,
-        accountId: "acc_bank",
+        accountId: manualPaymentAccountId || "acc_bank",
         isFixed: false,
       });
 
@@ -2815,6 +2817,23 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                           min="0"
                                           required
                                         />
+                                      </div>
+                                      {/* Account selector */}
+                                      <div className="col-span-2">
+                                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">
+                                          Счет зачисления
+                                        </label>
+                                        <select
+                                          value={manualPaymentAccountId}
+                                          onChange={(e) => setManualPaymentAccountId(e.target.value)}
+                                          className="w-full text-[11px] p-2 bg-white border border-slate-200 rounded-lg outline-none focus:border-red-500 transition font-bold text-slate-700"
+                                          required
+                                        >
+                                          <option value="" disabled>-- Выберите счет --</option>
+                                          {accounts.map(acc => (
+                                            <option key={acc.id} value={acc.id}>{acc.name} (текущий баланс: {acc.balance.toLocaleString('ru-RU')} ₽)</option>
+                                          ))}
+                                        </select>
                                       </div>
                                     </div>
 

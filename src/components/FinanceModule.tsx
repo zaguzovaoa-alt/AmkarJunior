@@ -45,6 +45,8 @@ export const FinanceModule: React.FC = () => {
     addFinanceCategory,
     deleteFinanceCategory,
     addFinanceRecord,
+    addAccount,
+    deleteAccount,
     updateFinancialPlan,
     financialPlans,
     deleteFinanceRecord,
@@ -69,29 +71,11 @@ export const FinanceModule: React.FC = () => {
   const [dashStartDate, setDashStartDate] = useState(defaultStartDate);
   const [dashEndDate, setDashEndDate] = useState(defaultEndDate);
 
-  // Unify all finances including client payments
-  const allFinances = useMemo(() => {
-    const clientPayments = (clients || []).flatMap((c) =>
-      (c.payments || []).map((p) => ({
-        id: p.id || `cp_${Date.now()}_${Math.random()}`,
-        type: "income" as const,
-        category: "Абонементы",
-        amount: Number(p.amount) || 0,
-        date: p.date.substring(0, 10),
-        description: `Оплата от: ${c.childSurname} ${c.childName} (${p.item})`,
-        targetMonth: p.date.substring(0, 7),
-        accountId: "acc_all",
-        isFixed: false,
-      }))
-    );
-    return [...finances, ...clientPayments];
-  }, [finances, clients]);
-
   // Dashboard Logic
-  const totalIncomes = allFinances
+  const totalIncomes = finances
     .filter((f) => f.type === "income" && f.date >= dashStartDate && f.date <= dashEndDate)
     .reduce((acc, f) => acc + Number(f.amount || 0), 0);
-  const totalExpenses = allFinances
+  const totalExpenses = finances
     .filter((f) => f.type === "expense" && f.date >= dashStartDate && f.date <= dashEndDate)
     .reduce((acc, f) => acc + Number(f.amount || 0), 0);
   const operatingProfit = totalIncomes - totalExpenses;
@@ -150,6 +134,22 @@ export const FinanceModule: React.FC = () => {
     setNewCatName("");
   };
 
+  // Accounts Form State
+  const [newAccName, setNewAccName] = useState("");
+  const [newAccType, setNewAccType] = useState<"cash" | "bank" | "acquiring" | "other">("cash");
+  const [newAccBalance, setNewAccBalance] = useState<number>(0);
+
+  const handleAddAccount = () => {
+    if (!newAccName.trim()) return;
+    addAccount({
+      name: newAccName.trim(),
+      type: newAccType,
+      balance: newAccBalance || 0
+    });
+    setNewAccName("");
+    setNewAccBalance(0);
+  };
+
   // Plan State
   const activePlan = financialPlans.find(
     (p) => p.month === currentMonthStr,
@@ -164,13 +164,14 @@ export const FinanceModule: React.FC = () => {
     price12: crmConfig.price12,
     price8: crmConfig.price8,
     price4: crmConfig.price4,
+    categoryTargets: {},
   };
   const [plan, setPlan] = useState<typeof activePlan>(activePlan);
 
   React.useEffect(() => {
     const current = financialPlans.find((p) => p.month === currentMonthStr);
     if (current) {
-      setPlan(current);
+      setPlan({ ...current, categoryTargets: current.categoryTargets || {} });
     } else {
       setPlan({
         month: currentMonthStr,
@@ -183,6 +184,7 @@ export const FinanceModule: React.FC = () => {
         price12: crmConfig.price12,
         price8: crmConfig.price8,
         price4: crmConfig.price4,
+        categoryTargets: {},
       });
     }
   }, [financialPlans, currentMonthStr]);
@@ -215,7 +217,7 @@ export const FinanceModule: React.FC = () => {
   // New Dashboard calculations
   const dashboardData = useMemo(() => {
     // Top Stats metrics
-    const periodData = allFinances.filter(
+    const periodData = finances.filter(
       (f) => f.date >= dashStartDate && f.date <= dashEndDate,
     );
     const mIncomes = periodData
@@ -231,7 +233,7 @@ export const FinanceModule: React.FC = () => {
       string,
       { name: string; Доходы: number; Расходы: number }
     >();
-    allFinances.forEach((f) => {
+    finances.forEach((f) => {
       const tm = f.targetMonth || f.date.substring(0, 7);
       if (!monthsMap.has(tm))
         monthsMap.set(tm, { name: tm, Доходы: 0, Расходы: 0 });
@@ -292,7 +294,7 @@ export const FinanceModule: React.FC = () => {
     }));
 
     return { mIncomes, mExpenses, mProfit, dynamicChartData, pieData };
-  }, [allFinances, dashStartDate, dashEndDate]);
+  }, [finances, dashStartDate, dashEndDate]);
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50 text-gray-800 min-h-screen">
@@ -909,7 +911,7 @@ export const FinanceModule: React.FC = () => {
         )}
 
         {activeTab === "cashflow" && (() => {
-          let visibleFinances = allFinances.filter(f => f.date.substring(0, 7) === gridFilterMonth);
+          let visibleFinances = finances.filter(f => f.date.substring(0, 7) === gridFilterMonth);
           if (gridFilterType !== "all") {
             visibleFinances = visibleFinances.filter(f => f.type === gridFilterType);
           }
@@ -1065,7 +1067,7 @@ export const FinanceModule: React.FC = () => {
                   {financeCategories
                     .filter((c) => c.type === "income")
                     .map((cat) => {
-                      const sum = allFinances
+                      const sum = finances
                         .filter(
                           (f) =>
                             f.type === "income" &&
@@ -1092,7 +1094,7 @@ export const FinanceModule: React.FC = () => {
                   <div className="flex justify-between items-center text-sm font-black pt-3 border-t border-emerald-200/50 text-emerald-900">
                     <span>Итого Доходы:</span>
                     <span className="font-mono text-lg">
-                      {allFinances
+                      {finances
                         .filter(
                           (f) =>
                             f.type === "income" &&
@@ -1116,7 +1118,7 @@ export const FinanceModule: React.FC = () => {
                   {financeCategories
                     .filter((c) => c.type === "expense")
                     .map((cat) => {
-                      const sum = allFinances
+                      const sum = finances
                         .filter(
                           (f) =>
                             f.type === "expense" &&
@@ -1143,7 +1145,7 @@ export const FinanceModule: React.FC = () => {
                   <div className="flex justify-between items-center text-sm font-black pt-3 border-t border-orange-200/50 text-orange-900">
                     <span>Итого Расходы:</span>
                     <span className="font-mono text-lg">
-                      {allFinances
+                      {finances
                         .filter(
                           (f) =>
                             f.type === "expense" &&
@@ -1165,7 +1167,7 @@ export const FinanceModule: React.FC = () => {
                 </span>
                 <span className="text-3xl font-black font-mono tracking-tight text-emerald-400 drop-shadow-md">
                   {(
-                    allFinances
+                    finances
                       .filter(
                         (f) =>
                           f.type === "income" &&
@@ -1173,7 +1175,7 @@ export const FinanceModule: React.FC = () => {
                             currentMonthStr,
                       )
                       .reduce((a, b) => a + Number(b.amount || 0), 0) -
-                    allFinances
+                    finances
                       .filter(
                         (f) =>
                           f.type === "expense" &&
@@ -1190,256 +1192,473 @@ export const FinanceModule: React.FC = () => {
         )}
 
         {activeTab === "plan" && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="space-y-6">
-              <h2 className="text-xl font-bold text-slate-900 border-b border-gray-100 pb-3">
-                Финмодель и план продаж
+          <div className="space-y-6 border-none">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <div className="space-y-6">
+                <h2 className="text-xl font-bold text-slate-900 border-b border-gray-100 pb-3">
+                  Финмодель и план продаж
+                  <br />
+                  <span className="text-sm font-medium text-gray-500">
+                    Месяц: {plan.month}
+                  </span>
+                </h2>
+
+                <div>
+                  <h3 className="text-[11px] font-bold text-indigo-600 mb-3 uppercase tracking-widest bg-indigo-50 inline-block px-2 py-1 rounded">
+                    Продление базы (Сущ. клиенты)
+                  </h3>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-slate-50 p-3 rounded-xl border border-gray-100">
+                      <label className="text-[10px] text-gray-500 block mb-1 font-bold">
+                        12 тренировок (шт)
+                      </label>
+                      <input
+                        type="number"
+                        value={plan.renew12Count}
+                        onChange={(e) =>
+                          setPlan({
+                            ...plan,
+                            renew12Count: Number(e.target.value),
+                          })
+                        }
+                        className="w-full bg-white border outline-none font-bold text-center py-1 rounded shadow-sm focus:ring-1 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-xl border border-gray-100">
+                      <label className="text-[10px] text-gray-500 block mb-1 font-bold">
+                        8 тренировок (шт)
+                      </label>
+                      <input
+                        type="number"
+                        value={plan.renew8Count}
+                        onChange={(e) =>
+                          setPlan({
+                            ...plan,
+                            renew8Count: Number(e.target.value),
+                          })
+                        }
+                        className="w-full bg-white border outline-none font-bold text-center py-1 rounded shadow-sm focus:ring-1 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-xl border border-gray-100">
+                      <label className="text-[10px] text-gray-500 block mb-1 font-bold">
+                        4 тренировки (шт)
+                      </label>
+                      <input
+                        type="number"
+                        value={plan.renew4Count}
+                        onChange={(e) =>
+                          setPlan({
+                            ...plan,
+                            renew4Count: Number(e.target.value),
+                          })
+                        }
+                        className="w-full bg-white border outline-none font-bold text-center py-1 rounded shadow-sm focus:ring-1 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-[11px] font-bold text-emerald-600 mb-3 uppercase tracking-widest bg-emerald-50 inline-block px-2 py-1 rounded">
+                    Привлечение (Новые клиенты)
+                  </h3>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-100">
+                      <label className="text-[10px] text-emerald-800 block mb-1 font-bold">
+                        12 тренировок (шт)
+                      </label>
+                      <input
+                        type="number"
+                        value={plan.new12Count}
+                        onChange={(e) =>
+                          setPlan({ ...plan, new12Count: Number(e.target.value) })
+                        }
+                        className="w-full bg-white border border-emerald-200 outline-none font-bold text-center py-1 rounded shadow-sm focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-100">
+                      <label className="text-[10px] text-emerald-800 block mb-1 font-bold">
+                        8 тренировок (шт)
+                      </label>
+                      <input
+                        type="number"
+                        value={plan.new8Count}
+                        onChange={(e) =>
+                          setPlan({ ...plan, new8Count: Number(e.target.value) })
+                        }
+                        className="w-full bg-white border border-emerald-200 outline-none font-bold text-center py-1 rounded shadow-sm focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-100">
+                      <label className="text-[10px] text-emerald-800 block mb-1 font-bold">
+                        4 тренировки (шт)
+                      </label>
+                      <input
+                        type="number"
+                        value={plan.new4Count}
+                        onChange={(e) =>
+                          setPlan({ ...plan, new4Count: Number(e.target.value) })
+                        }
+                        className="w-full bg-white border border-emerald-200 outline-none font-bold text-center py-1 rounded shadow-sm focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  id="savePlanBtn"
+                  onClick={savePlan}
+                  className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold tracking-wide rounded-xl transition shadow-lg shadow-slate-200"
+                >
+                  Зафиксировать базовые KPI
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <h2 className="text-xl font-bold text-slate-900 border-b border-gray-100 pb-3">
+                  Unit-Экономика (Прайс)
+                </h2>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="text-center bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
+                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2 block">
+                      Прайс 12 зан.
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={plan.price12}
+                        onChange={(e) =>
+                          setPlan({ ...plan, price12: Number(e.target.value) })
+                        }
+                        className="w-full text-center font-black text-lg bg-transparent border-b-2 border-slate-200 focus:border-indigo-500 outline-none pb-1"
+                      />
+                      <span className="absolute right-2 bottom-1.5 text-gray-300 font-bold">
+                        ₽
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-center bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
+                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2 block">
+                      Прайс 8 зан.
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={plan.price8}
+                        onChange={(e) =>
+                          setPlan({ ...plan, price8: Number(e.target.value) })
+                        }
+                        className="w-full text-center font-black text-lg bg-transparent border-b-2 border-slate-200 focus:border-indigo-500 outline-none pb-1"
+                      />
+                      <span className="absolute right-2 bottom-1.5 text-gray-300 font-bold">
+                        ₽
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-center bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
+                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2 block">
+                      Прайс 4 зан.
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={plan.price4}
+                        onChange={(e) =>
+                          setPlan({ ...plan, price4: Number(e.target.value) })
+                        }
+                        className="w-full text-center font-black text-lg bg-transparent border-b-2 border-slate-200 focus:border-indigo-500 outline-none pb-1"
+                      />
+                      <span className="absolute right-2 bottom-1.5 text-gray-300 font-bold">
+                        ₽
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-indigo-900 to-slate-900 text-white p-6 rounded-2xl shadow-xl shadow-indigo-900/10">
+                  <div className="mb-6">
+                    <span className="block text-xs text-indigo-300 font-bold uppercase tracking-widest mb-1">
+                      Прогноз выручки (Абонементы)
+                    </span>
+                    <span className="text-4xl font-black text-white">
+                      {planRevenue.toLocaleString()} ₽
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 border-t border-indigo-800/50 pt-5">
+                    <div>
+                      <span className="flex items-center text-[10px] text-indigo-300 uppercase tracking-wider font-bold mb-1">
+                        План продаж
+                      </span>
+                      <span className="text-2xl font-black">
+                        {planCount}{" "}
+                        <span className="text-sm font-medium text-indigo-400">
+                          шт
+                        </span>
+                      </span>
+                    </div>
+                    <div>
+                      <span className="flex items-center text-[10px] text-indigo-300 uppercase tracking-wider font-bold mb-1">
+                        Средний чек (ARPU)
+                      </span>
+                      <span className="text-2xl font-black">
+                        {Math.round(avgCheck).toLocaleString()}{" "}
+                        <span className="text-sm font-medium text-indigo-400">
+                          ₽
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ДИНАМИКА И ВЫПОЛНЕНИЕ ПЛАНА (ТРАТЫ И ДОХОДЫ) */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 max-w-5xl">
+              <h2 className="text-xl font-bold text-slate-900 border-b border-gray-100 pb-3 mb-6">
+                Выполнение финансового плана (по категориям)
                 <br />
                 <span className="text-sm font-medium text-gray-500">
                   Месяц: {plan.month}
                 </span>
               </h2>
 
-              <div>
-                <h3 className="text-[11px] font-bold text-indigo-600 mb-3 uppercase tracking-widest bg-indigo-50 inline-block px-2 py-1 rounded">
-                  Продление базы (Сущ. клиенты)
-                </h3>
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-slate-50 p-3 rounded-xl border border-gray-100">
-                    <label className="text-[10px] text-gray-500 block mb-1 font-bold">
-                      12 тренировок (шт)
-                    </label>
-                    <input
-                      type="number"
-                      value={plan.renew12Count}
-                      onChange={(e) =>
-                        setPlan({
-                          ...plan,
-                          renew12Count: Number(e.target.value),
-                        })
-                      }
-                      className="w-full bg-white border outline-none font-bold text-center py-1 rounded shadow-sm focus:ring-1 focus:ring-indigo-500"
-                    />
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-xl border border-gray-100">
-                    <label className="text-[10px] text-gray-500 block mb-1 font-bold">
-                      8 тренировок (шт)
-                    </label>
-                    <input
-                      type="number"
-                      value={plan.renew8Count}
-                      onChange={(e) =>
-                        setPlan({
-                          ...plan,
-                          renew8Count: Number(e.target.value),
-                        })
-                      }
-                      className="w-full bg-white border outline-none font-bold text-center py-1 rounded shadow-sm focus:ring-1 focus:ring-indigo-500"
-                    />
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-xl border border-gray-100">
-                    <label className="text-[10px] text-gray-500 block mb-1 font-bold">
-                      4 тренировки (шт)
-                    </label>
-                    <input
-                      type="number"
-                      value={plan.renew4Count}
-                      onChange={(e) =>
-                        setPlan({
-                          ...plan,
-                          renew4Count: Number(e.target.value),
-                        })
-                      }
-                      className="w-full bg-white border outline-none font-bold text-center py-1 rounded shadow-sm focus:ring-1 focus:ring-indigo-500"
-                    />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Расходы блок */}
+                <div>
+                  <h3 className="text-sm font-bold text-red-600 mb-4 flex items-center gap-2 uppercase tracking-wide">
+                    План по расходам
+                  </h3>
+                  <div className="space-y-4">
+                    {financeCategories.filter((c) => c.type === 'expense').map((cat) => {
+                      const target = plan.categoryTargets?.[cat.id] || 0;
+                      
+                      const actual = finances.filter(
+                        (f) =>
+                          f.type === "expense" &&
+                          f.category === cat.name &&
+                          (f.targetMonth || f.date.substring(0, 7)) === plan.month
+                      ).reduce((a, b) => a + Number(b.amount || 0), 0);
+
+                      const percent = target > 0 ? Math.min(Math.round((actual / target) * 100), 999) : (actual > 0 ? 100 : 0);
+                      const isOverspent = actual > target && target > 0;
+
+                      return (
+                        <div key={cat.id} className="bg-slate-50 p-4 rounded-xl border border-gray-100">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-bold text-slate-800 text-sm truncate">{cat.name}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-400">План:</span>
+                              <input 
+                                type="number" 
+                                value={target}
+                                onChange={(e) => {
+                                  setPlan({
+                                    ...plan,
+                                    categoryTargets: {
+                                      ...(plan.categoryTargets || {}),
+                                      [cat.id]: Number(e.target.value)
+                                    }
+                                  });
+                                }}
+                                onBlur={savePlan}
+                                className="w-20 bg-white border border-gray-200 outline-none font-bold text-right py-1 px-2 rounded-lg text-sm focus:border-red-500"
+                              />
+                            </div>
+                          </div>
+                          
+                          {/* Progress Bar */}
+                          <div className="relative pt-1">
+                            <div className="flex mb-2 items-center justify-between">
+                              <div>
+                                <span className="text-xs font-semibold inline-block text-slate-500">
+                                  Факт: {actual.toLocaleString()} ₽
+                                </span>
+                              </div>
+                              <div className="text-right">
+                                <span className={`text-xs font-black inline-block ${isOverspent ? 'text-red-600' : 'text-slate-700'}`}>
+                                  {percent}%
+                                </span>
+                              </div>
+                            </div>
+                            <div className="overflow-hidden h-2.5 mb-2 text-xs flex rounded-full bg-slate-200">
+                              <div 
+                                style={{ width: `${Math.min(percent, 100)}%` }} 
+                                className={`shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center transition-all duration-500 ${isOverspent ? 'bg-red-500' : 'bg-slate-600'}`}
+                              ></div>
+                            </div>
+                            {isOverspent && (
+                              <p className="text-[10px] text-red-500 font-bold mt-1">
+                                Перерасход: {(actual - target).toLocaleString()} ₽
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
+
+                {/* Доходы блок */}
+                <div>
+                  <h3 className="text-sm font-bold text-emerald-600 mb-4 flex items-center gap-2 uppercase tracking-wide">
+                    План по доходам
+                  </h3>
+                  <div className="space-y-4">
+                    {financeCategories.filter((c) => c.type === 'income').map((cat) => {
+                      const target = plan.categoryTargets?.[cat.id] || 0;
+                      
+                      const actual = finances.filter(
+                        (f) =>
+                          f.type === "income" &&
+                          f.category === cat.name &&
+                          (f.targetMonth || f.date.substring(0, 7)) === plan.month
+                      ).reduce((a, b) => a + Number(b.amount || 0), 0);
+
+                      const percent = target > 0 ? Math.min(Math.round((actual / target) * 100), 999) : (actual > 0 ? 100 : 0);
+                      const isAchieved = target > 0 && actual >= target;
+
+                      return (
+                        <div key={cat.id} className="bg-emerald-50/30 p-4 rounded-xl border border-emerald-100">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-bold text-slate-800 text-sm truncate">{cat.name}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-400">План:</span>
+                              <input 
+                                type="number" 
+                                value={target}
+                                onChange={(e) => {
+                                  setPlan({
+                                    ...plan,
+                                    categoryTargets: {
+                                      ...(plan.categoryTargets || {}),
+                                      [cat.id]: Number(e.target.value)
+                                    }
+                                  });
+                                }}
+                                onBlur={savePlan}
+                                className="w-20 bg-white border border-gray-200 outline-none font-bold text-right py-1 px-2 rounded-lg text-sm focus:border-emerald-500"
+                              />
+                            </div>
+                          </div>
+                          
+                          {/* Progress Bar */}
+                          <div className="relative pt-1">
+                            <div className="flex mb-2 items-center justify-between">
+                              <div>
+                                <span className="text-xs font-semibold inline-block text-slate-500">
+                                  Факт: {actual.toLocaleString()} ₽
+                                </span>
+                              </div>
+                              <div className="text-right">
+                                <span className={`text-xs font-black inline-block ${isAchieved ? 'text-emerald-600' : 'text-slate-700'}`}>
+                                  {percent}%
+                                </span>
+                              </div>
+                            </div>
+                            <div className="overflow-hidden h-2.5 mb-2 text-xs flex rounded-full bg-slate-200">
+                              <div 
+                                style={{ width: `${Math.min(percent, 100)}%` }} 
+                                className={`shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center transition-all duration-500 ${isAchieved ? 'bg-emerald-500' : 'bg-emerald-400'}`}
+                              ></div>
+                            </div>
+                            {isAchieved && (
+                              <p className="text-[10px] text-emerald-600 font-bold mt-1">
+                                Перевыполнение: {(actual - target).toLocaleString()} ₽
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
               </div>
 
-              <div>
-                <h3 className="text-[11px] font-bold text-emerald-600 mb-3 uppercase tracking-widest bg-emerald-50 inline-block px-2 py-1 rounded">
-                  Привлечение (Новые клиенты)
-                </h3>
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-100">
-                    <label className="text-[10px] text-emerald-800 block mb-1 font-bold">
-                      12 тренировок (шт)
-                    </label>
-                    <input
-                      type="number"
-                      value={plan.new12Count}
-                      onChange={(e) =>
-                        setPlan({ ...plan, new12Count: Number(e.target.value) })
-                      }
-                      className="w-full bg-white border border-emerald-200 outline-none font-bold text-center py-1 rounded shadow-sm focus:ring-1 focus:ring-emerald-500"
-                    />
-                  </div>
-                  <div className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-100">
-                    <label className="text-[10px] text-emerald-800 block mb-1 font-bold">
-                      8 тренировок (шт)
-                    </label>
-                    <input
-                      type="number"
-                      value={plan.new8Count}
-                      onChange={(e) =>
-                        setPlan({ ...plan, new8Count: Number(e.target.value) })
-                      }
-                      className="w-full bg-white border border-emerald-200 outline-none font-bold text-center py-1 rounded shadow-sm focus:ring-1 focus:ring-emerald-500"
-                    />
-                  </div>
-                  <div className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-100">
-                    <label className="text-[10px] text-emerald-800 block mb-1 font-bold">
-                      4 тренировки (шт)
-                    </label>
-                    <input
-                      type="number"
-                      value={plan.new4Count}
-                      onChange={(e) =>
-                        setPlan({ ...plan, new4Count: Number(e.target.value) })
-                      }
-                      className="w-full bg-white border border-emerald-200 outline-none font-bold text-center py-1 rounded shadow-sm focus:ring-1 focus:ring-emerald-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <button
-                id="savePlanBtn"
-                onClick={savePlan}
-                className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold tracking-wide rounded-xl transition shadow-lg shadow-slate-200"
-              >
-                Зафиксировать KPI план
-              </button>
-            </div>
-
-            <div className="space-y-6">
-              <h2 className="text-xl font-bold text-slate-900 border-b border-gray-100 pb-3">
-                Unit-Экономика (Прайс)
-              </h2>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="text-center bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
-                  <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2 block">
-                    Прайс 12 зан.
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      value={plan.price12}
-                      onChange={(e) =>
-                        setPlan({ ...plan, price12: Number(e.target.value) })
-                      }
-                      className="w-full text-center font-black text-lg bg-transparent border-b-2 border-slate-200 focus:border-indigo-500 outline-none pb-1"
-                    />
-                    <span className="absolute right-2 bottom-1.5 text-gray-300 font-bold">
-                      ₽
-                    </span>
-                  </div>
-                </div>
-                <div className="text-center bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
-                  <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2 block">
-                    Прайс 8 зан.
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      value={plan.price8}
-                      onChange={(e) =>
-                        setPlan({ ...plan, price8: Number(e.target.value) })
-                      }
-                      className="w-full text-center font-black text-lg bg-transparent border-b-2 border-slate-200 focus:border-indigo-500 outline-none pb-1"
-                    />
-                    <span className="absolute right-2 bottom-1.5 text-gray-300 font-bold">
-                      ₽
-                    </span>
-                  </div>
-                </div>
-                <div className="text-center bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
-                  <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2 block">
-                    Прайс 4 зан.
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      value={plan.price4}
-                      onChange={(e) =>
-                        setPlan({ ...plan, price4: Number(e.target.value) })
-                      }
-                      className="w-full text-center font-black text-lg bg-transparent border-b-2 border-slate-200 focus:border-indigo-500 outline-none pb-1"
-                    />
-                    <span className="absolute right-2 bottom-1.5 text-gray-300 font-bold">
-                      ₽
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-gradient-to-br from-indigo-900 to-slate-900 text-white p-6 rounded-2xl shadow-xl shadow-indigo-900/10">
-                <div className="mb-6">
-                  <span className="block text-xs text-indigo-300 font-bold uppercase tracking-widest mb-1">
-                    Прогноз выручки (Абонементы)
-                  </span>
-                  <span className="text-4xl font-black text-white">
-                    {planRevenue.toLocaleString()} ₽
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-4 border-t border-indigo-800/50 pt-5">
-                  <div>
-                    <span className="flex items-center text-[10px] text-indigo-300 uppercase tracking-wider font-bold mb-1">
-                      План продаж
-                    </span>
-                    <span className="text-2xl font-black">
-                      {planCount}{" "}
-                      <span className="text-sm font-medium text-indigo-400">
-                        шт
-                      </span>
-                    </span>
-                  </div>
-                  <div>
-                    <span className="flex items-center text-[10px] text-indigo-300 uppercase tracking-wider font-bold mb-1">
-                      Средний чек (ARPU)
-                    </span>
-                    <span className="text-2xl font-black">
-                      {Math.round(avgCheck).toLocaleString()}{" "}
-                      <span className="text-sm font-medium text-indigo-400">
-                        ₽
-                      </span>
-                    </span>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         )}
 
-        {activeTab === "accounts" && (
-          <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4">
-            <h2 className="text-lg font-bold mb-6 text-slate-800 border-b pb-4">
-              Внутренние Счета
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {accounts.map(acc => {
-                const accTransactions = finances.filter(f => f.accountId === acc.id);
-                const accIncomes = accTransactions.filter(f => f.type === 'income').reduce((sum, f) => sum + f.amount, 0);
-                const accExpenses = accTransactions.filter(f => f.type === 'expense').reduce((sum, f) => sum + f.amount, 0);
-                const actualBalance = acc.balance + accIncomes - accExpenses;
-                return (
-                  <div key={acc.id} className="bg-slate-50 p-5 rounded-2xl border border-slate-200 flex flex-col justify-between h-40 shadow-sm transition hover:shadow-md hover:border-slate-300">
+        {activeTab === "accounts" && (() => {
+          const processedAccounts = accounts.map(acc => {
+            const accTransactions = finances.filter(f => f.accountId === acc.id);
+            const accIncomes = accTransactions.filter(f => f.type === 'income').reduce((sum, f) => sum + f.amount, 0);
+            const accExpenses = accTransactions.filter(f => f.type === 'expense').reduce((sum, f) => sum + f.amount, 0);
+            const actualBalance = acc.balance + accIncomes - accExpenses;
+            return { ...acc, actualBalance };
+          });
+          const totalBalance = processedAccounts.reduce((sum, acc) => sum + acc.actualBalance, 0);
+
+          return (
+            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-end border-b pb-6 mb-6 gap-4">
+                <div>
+                  <h2 className="text-xl font-black text-slate-800">Внутренние Счета</h2>
+                  <p className="text-sm text-slate-500 font-medium">Мониторинг всех касс, расчетных счетов и эквайринга</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Общий баланс</p>
+                  <p className="text-4xl font-black text-emerald-600 tracking-tight">{totalBalance.toLocaleString("ru-RU")} ₽</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {processedAccounts.map(acc => (
+                  <div key={acc.id} className="bg-slate-50 p-5 rounded-2xl border border-slate-200 flex flex-col justify-between h-40 shadow-sm transition hover:shadow-md hover:border-slate-300 relative group">
+                    <button 
+                      onClick={() => deleteAccount(acc.id)} 
+                      className="absolute top-2 right-2 p-1.5 bg-red-100 text-red-600 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-200"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                     <div className="flex justify-between items-start">
-                      <div className="font-bold text-slate-700">{acc.name}</div>
-                      <div className="text-[10px] text-gray-500 bg-white px-2 py-1 rounded shadow-sm border border-gray-100 uppercase font-bold tracking-wider">
-                        {acc.type === 'cash' ? 'Наличные' : acc.type === 'bank' ? 'Расч. счет' : 'Эквайринг'}
+                      <div className="font-bold text-slate-800 break-words pr-8">{acc.name}</div>
+                      <div className="text-[10px] text-emerald-700 bg-emerald-100 px-2 py-1 rounded shadow-sm border border-emerald-200 uppercase font-extrabold tracking-wider whitespace-nowrap">
+                        {acc.type === 'cash' ? 'Наличные' : acc.type === 'bank' ? 'Расч. счет' : acc.type === 'acquiring' ? 'Эквайринг' : 'Счет'}
                       </div>
                     </div>
                     <div>
-                      <div className="text-3xl font-black text-slate-900">{actualBalance.toLocaleString()} ₽</div>
-                      <div className="text-xs text-gray-500 font-medium mt-1 uppercase tracking-wider">Текущий остаток</div>
+                      <div className="text-3xl font-black text-slate-900 tracking-tight">{acc.actualBalance.toLocaleString("ru-RU")} ₽</div>
+                      <div className="text-xs text-slate-500 font-bold mt-1 uppercase tracking-wider">Текущий остаток</div>
                     </div>
                   </div>
-                );
-              })}
+                ))}
+
+                {/* Create New Account Form */}
+                <div className="p-5 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col justify-center h-40 bg-slate-50/50 hover:bg-slate-50 transition">
+                  <div className="space-y-3">
+                    <input 
+                      type="text" 
+                      placeholder="Название счета" 
+                      value={newAccName}
+                      onChange={e => setNewAccName(e.target.value)}
+                      className="w-full text-xs p-2 rounded-lg border border-slate-200 font-bold outline-none focus:border-emerald-500"
+                    />
+                    <div className="flex gap-2">
+                      <select 
+                        value={newAccType}
+                        onChange={e => setNewAccType(e.target.value as any)}
+                        className="w-1/2 text-xs p-2 rounded-lg border border-slate-200 font-bold outline-none focus:border-emerald-500 bg-white"
+                      >
+                        <option value="cash">Наличные</option>
+                        <option value="bank">Р/С</option>
+                        <option value="acquiring">Эквайринг</option>
+                        <option value="other">Другое</option>
+                      </select>
+                      <button 
+                        onClick={handleAddAccount}
+                        className="w-1/2 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-slate-800 transition active:scale-95 flex items-center justify-center gap-1"
+                      >
+                        <Plus className="w-4 h-4" /> Добавить
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {activeTab === "directories" && (
           <div className="space-y-6">
