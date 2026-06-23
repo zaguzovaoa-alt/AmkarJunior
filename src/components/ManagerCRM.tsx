@@ -32,6 +32,7 @@ import {
   Settings,
   Shield,
   Send,
+  Link,
 } from "lucide-react";
 import { Client, Lead, ClientStatus, CRMTask } from "../types";
 import { calculateAge, isBirthdayToday } from "../utils/dateUtils";
@@ -757,7 +758,20 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center flex-wrap gap-3">
+          {crmConfig?.yandexFormUrl && (
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(crmConfig.yandexFormUrl || "");
+                alert("Ссылка на форму скопирована в буфер обмена!");
+              }}
+              className="px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs transition flex items-center space-x-2 border border-indigo-200"
+            >
+              <Link className="w-4 h-4" />
+              <span>Ссылка на форму</span>
+            </button>
+          )}
+
           <button
             onClick={() => setIsAddLeadOpen(true)}
             className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-xs transition flex items-center space-x-2 shadow-lg shadow-emerald-100"

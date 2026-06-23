@@ -229,6 +229,7 @@ export interface FinanceCategory {
   type: 'income' | 'expense';
   name: string;
   isSystem?: boolean;
+  expenseType?: 'variable' | 'fixed';
 }
 
 export interface Account {
@@ -260,6 +261,7 @@ export interface CRMConfig {
   price1: number;
   referralBonusAmount: number;
   referralBonusType: 'rubles' | 'sessions';
+  yandexFormUrl?: string; // Link to the Yandex Form
   telegramBotToken?: string;
   telegramGroupChatId?: string;
   telegramAlerts?: Record<string, boolean>;

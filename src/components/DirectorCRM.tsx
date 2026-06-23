@@ -194,6 +194,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
     trainingSessions,
     completeTask,
     addTask,
+    deleteTask,
     overwriteClients,
     overwriteLeads,
     overwriteFinances,
@@ -467,10 +468,16 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
 
   const handleAddDirectorTask = () => {
     if (!newDirectorTask.trim()) return;
+    
+    const now = new Date();
+    const d = String(now.getDate()).padStart(2, '0');
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const y = now.getFullYear();
+    
     const newTask = {
       title: newDirectorTask.trim(),
       description: "Добавлено с дашборда",
-      dueDate: new Date().toLocaleDateString("ru-RU"),
+      dueDate: `${d}.${m}.${y}`,
       assignedTo: "director" as const,
     };
     addTask(newTask);
@@ -1602,19 +1609,33 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                         >
                           <Check className="w-3 h-3 text-emerald-600" />
                         </button>
-                        <div className="space-y-0.5">
+                        <div className="space-y-0.5 flex-1">
                           <h4
-                            className={`font-semibold ${tk.status === "completed" ? "line-through text-gray-400" : "text-slate-800"}`}
+                            className={`font-semibold pr-2 ${tk.status === "completed" ? "line-through text-gray-400" : "text-slate-800"}`}
                           >
                             {tk.title}
                           </h4>
                           <p className="text-[10px] text-gray-400">
                             {tk.description}
                           </p>
-                          <div className="text-[9px] font-mono text-amber-600 font-bold">
+                          <div className={`text-[9px] font-mono font-bold ${tk.dueDate === (() => {
+                            const n = new Date();
+                            return `${String(n.getDate()).padStart(2,'0')}.${String(n.getMonth()+1).padStart(2,'0')}.${n.getFullYear()}`;
+                          })() ? "text-amber-600 bg-amber-50 px-1 py-0.5 rounded w-fit" : "text-gray-400"}`}>
                             {tk.dueDate}
                           </div>
                         </div>
+                        <button
+                          onClick={() => {
+                            if (window.confirm("Удалить задачу?")) {
+                              deleteTask(tk.id);
+                            }
+                          }}
+                          className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition ml-auto"
+                          title="Удалить задачу"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     ))
                   )}

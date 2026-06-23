@@ -148,14 +148,15 @@ const INITIAL_LEADS: Lead[] = [];
 
 const INITIAL_FINANCE_CATEGORIES: FinanceCategory[] = [
   { id: 'cat_in_ab', type: 'income', name: 'Абонементы', isSystem: true },
+  { id: 'cat_in_ab12', type: 'income', name: 'Абонементы 12 занятий', isSystem: true },
   { id: 'cat_in_1tr', type: 'income', name: 'Разовые тренировки', isSystem: true },
   { id: 'cat_in_ind', type: 'income', name: 'Индивидуальные тренировки' },
   { id: 'cat_in_eq', type: 'income', name: 'Форма/Экипировка' },
-  { id: 'cat_ex_acq', type: 'expense', name: 'Эквайринг (Комиссия ЮKassa)', isSystem: true },
-  { id: 'cat_ex_rent', type: 'expense', name: 'Аренда' },
-  { id: 'cat_ex_sal', type: 'expense', name: 'Зарплата' },
-  { id: 'cat_ex_mar', type: 'expense', name: 'Маркетинг/Реклама' },
-  { id: 'cat_ex_inv', type: 'expense', name: 'Инвентарь/Оборудование' },
+  { id: 'cat_ex_acq', type: 'expense', name: 'Эквайринг (Комиссия ЮKassa)', isSystem: true, expenseType: 'variable' },
+  { id: 'cat_ex_rent', type: 'expense', name: 'Аренда', expenseType: 'fixed' },
+  { id: 'cat_ex_sal', type: 'expense', name: 'Зарплата', expenseType: 'variable' },
+  { id: 'cat_ex_mar', type: 'expense', name: 'Маркетинг/Реклама', expenseType: 'variable' },
+  { id: 'cat_ex_inv', type: 'expense', name: 'Инвентарь/Оборудование', expenseType: 'variable' },
 ];
 
 const INITIAL_ACCOUNTS: Account[] = [
@@ -256,7 +257,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       price12: 5400,
       price8: 4000,
       price4: 2500,
-      price1: 550
+      price1: 550,
+      referralBonusAmount: 0,
+      referralBonusType: 'rubles',
+      yandexFormUrl: 'https://forms.yandex.ru/u/6a0d853a9029025eff38a4db/'
     };
   });
 
@@ -595,17 +599,43 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const data = await response.json();
           if (data.leads && data.leads.length > 0) {
             data.leads.forEach((payload: any) => {
+              // Robust payload extraction (for Yandex Forms, etc)
+              let parentPhone = 'Не указан';
+              let parentName = 'Родитель (из формы)';
+              let childName = 'Ребенок';
+              let notesList: string[] = [];
+              let formSource = 'Веб-форма';
+
+              const entries = Object.entries(payload);
+              entries.forEach(([key, value]) => {
+                const k = key.toLowerCase();
+                const v = typeof value === 'string' ? value : String(value);
+                
+                if (k.includes('phone') || k.includes('телефон') || k.includes('мобильный') || k.includes('номер')) {
+                  parentPhone = v;
+                } else if (k.includes('parent_name') || k.includes('имя родителя') || k.includes('ваше имя') || (k === 'name' && parentName === 'Родитель (из формы)')) {
+                  parentName = v;
+                } else if (k.includes('child_name') || k.includes('имя ребенка') || k.includes('имя ребёнка')) {
+                  childName = v;
+                } else if (k.includes('source') || k.includes('источник')) {
+                  formSource = v;
+                } else {
+                  // Put other fields in notes to not lose data
+                  notesList.push(`${key}: ${v}`);
+                }
+              });
+
               // Create a lead from webhook payload
               const structuredLead = {
-                parentName: payload.parentName || payload.name || 'Родитель (из формы)',
-                parentPhone: payload.parentPhone || payload.phone || payload.contact || 'Не указан',
+                parentName: payload.parentName || payload.name || parentName,
+                parentPhone: payload.parentPhone || payload.phone || payload.contact || parentPhone,
                 parentEmail: payload.parentEmail || payload.email || undefined,
-                childName: payload.childName || payload.child || 'Ребенок',
+                childName: payload.childName || payload.child || childName,
                 childSurname: payload.childSurname || payload.surname || '',
                 childBirthYear: parseInt(payload.childBirthYear || payload.year || '2015', 10),
                 childAge: payload.childAge || payload.age || 8,
-                source: payload.source || payload.utm_source || 'Веб-форма',
-                notes: payload.notes || payload.message || 'Заявка с сайта или формы',
+                source: payload.utm_source || 'messengers' as any,
+                notes: notesList.join('\n') || 'Заявка из Yandex Формы',
                 timeString: new Date().toTimeString().slice(0, 5)
               };
               

@@ -6,7 +6,7 @@ import {
 import { CRMTask } from "../types";
 
 export const TasksModule: React.FC = () => {
-  const { tasks, addTask, completeTask, currentRole } = useCRM();
+  const { tasks, addTask, completeTask, deleteTask, currentRole } = useCRM();
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('all');
 
@@ -18,10 +18,17 @@ export const TasksModule: React.FC = () => {
       ? (currentRole as 'manager' | 'trainer' | 'director') 
       : 'director';
       
+    // Robust date formatting to avoid unexpected timezone/locale artifacts
+    const now = new Date();
+    const d = String(now.getDate()).padStart(2, '0');
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const y = now.getFullYear();
+    const formattedDate = `${d}.${m}.${y}`;
+
     addTask({
       title: newTaskTitle.trim(),
       description: "Создано из панели задач",
-      dueDate: new Date().toLocaleDateString("ru-RU"),
+      dueDate: formattedDate,
       assignedTo: validRole,
     });
     setNewTaskTitle("");
@@ -126,7 +133,10 @@ export const TasksModule: React.FC = () => {
                         {t.description}
                       </p>
                       <div className="flex gap-2 text-[10px] font-bold font-mono uppercase tracking-wider">
-                        <span className="bg-white border px-2 py-0.5 rounded text-slate-500">
+                        <span className={`border px-2 py-0.5 rounded ${t.dueDate === (() => {
+                          const n = new Date();
+                          return `${String(n.getDate()).padStart(2,'0')}.${String(n.getMonth()+1).padStart(2,'0')}.${n.getFullYear()}`;
+                        })() ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-white text-slate-500'}`}>
                           {t.dueDate}
                         </span>
                         <span className="bg-white border px-2 py-0.5 rounded text-slate-500">
@@ -135,6 +145,17 @@ export const TasksModule: React.FC = () => {
                       </div>
                     </div>
                   </div>
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Удалить задачу?')) {
+                        deleteTask(t.id);
+                      }
+                    }}
+                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition sm:self-center"
+                    title="Удалить задачу"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               ))
             )}

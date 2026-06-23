@@ -122,15 +122,20 @@ export const FinanceModule: React.FC = () => {
   // Directories State
   const [newCatName, setNewCatName] = useState("");
   const [newCatType, setNewCatType] = useState<"income" | "expense">("expense");
+  const [newCatExpenseType, setNewCatExpenseType] = useState<"variable" | "fixed">("fixed");
 
   // Grid/Cashflow state
   const [gridFilterMonth, setGridFilterMonth] = useState(currentMonthStr);
   const [gridFilterType, setGridFilterType] = useState<"all" | "income" | "expense">("all");
   const [gridFilterAccount, setGridFilterAccount] = useState<"all" | string>("all");
 
+  const [pnlExpandedIncomes, setPnlExpandedIncomes] = useState(false);
+  const [pnlExpandedVariable, setPnlExpandedVariable] = useState(false);
+  const [pnlExpandedFixed, setPnlExpandedFixed] = useState(false);
+
   const handleAddCat = () => {
     if (!newCatName) return;
-    addFinanceCategory({ name: newCatName, type: newCatType });
+    addFinanceCategory({ name: newCatName, type: newCatType, expenseType: newCatType === "expense" ? newCatExpenseType : undefined });
     setNewCatName("");
   };
 
@@ -1047,149 +1052,211 @@ export const FinanceModule: React.FC = () => {
           );
         })()}
 
-        {activeTab === "pnl" && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8">
-            <h2 className="text-xl font-black mb-6 text-slate-900 border-b border-gray-100 pb-4">
-              Отчет о прибылях и убытках (P&L)
-              <br />
-              <span className="text-sm font-medium text-gray-400">
-                Учетный месяц: {currentMonthStr}
-              </span>
+        {activeTab === "pnl" && (() => {
+          const currentMonthFinances = finances.filter(
+            (f) => (f.targetMonth || f.date.substring(0, 7)) === gridFilterMonth
+          );
+          
+          const incomeTransactions = currentMonthFinances.filter(f => f.type === "income");
+          const totalIncome = incomeTransactions.reduce((acc, f) => acc + Number(f.amount || 0), 0);
+          const paymentsCount = incomeTransactions.length;
+          
+          // Let's deduce 12-session subscriptions. E.g. base amount might match price12, or just show category breakdowns. 
+          // Since "12 занятий" is often in description or category, we'll try to find it. Or we just show the categories inside Incomes.
+          const incomesByCategory = financeCategories
+            .filter((c) => c.type === "income")
+            .map(cat => ({
+               ...cat, 
+               sum: incomeTransactions.filter(f => f.category === cat.name).reduce((acc, f) => acc + Number(f.amount || 0), 0)
+            }))
+            .filter(c => c.sum > 0);
+
+          const variableCategories = financeCategories
+            .filter((c) => c.type === "expense" && c.expenseType !== "fixed")
+            .map(cat => ({
+               ...cat, 
+               sum: currentMonthFinances.filter(f => f.category === cat.name && f.type === "expense").reduce((acc, f) => acc + Number(f.amount || 0), 0)
+            }))
+            .filter(c => c.sum > 0);
+            
+          const fixedCategories = financeCategories
+            .filter((c) => c.type === "expense" && c.expenseType === "fixed")
+            .map(cat => ({
+               ...cat, 
+               sum: currentMonthFinances.filter(f => f.category === cat.name && f.type === "expense").reduce((acc, f) => acc + Number(f.amount || 0), 0)
+            }))
+            .filter(c => c.sum > 0);
+            
+          const totalVariable = variableCategories.reduce((acc, c) => acc + c.sum, 0);
+          const totalFixed = fixedCategories.reduce((acc, c) => acc + c.sum, 0);
+          
+          const ebitda = totalIncome - totalVariable - totalFixed;
+          
+          // taxes / net profit (placeholder for acquing or other deductions. Just equating EBITDA and Net here if no taxes)
+          const netProfit = ebitda; 
+
+          return (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 md:p-8">
+            <h2 className="text-xl font-black mb-6 text-slate-900 border-b border-gray-100 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <span>Отчет о прибылях и убытках (P&L)</span>
+              <div className="flex items-center space-x-2 text-sm font-medium">
+                <span className="text-gray-500">Учетный месяц:</span>
+                <input 
+                  type="month"
+                  value={gridFilterMonth}
+                  onChange={(e) => setGridFilterMonth(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 text-sm rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-700"
+                />
+              </div>
             </h2>
 
-            <div className="space-y-8 max-w-3xl mx-auto">
+            <div className="space-y-6 max-w-3xl mx-auto">
               {/* ДОХОДЫ */}
-              <div className="bg-emerald-50/30 p-5 rounded-2xl border border-emerald-100/50">
-                <h3 className="font-bold text-emerald-800 border-b border-emerald-200/50 pb-2 mb-4 text-sm tracking-wide uppercase">
-                  Выручка
-                </h3>
-                <div className="space-y-2.5">
-                  {financeCategories
-                    .filter((c) => c.type === "income")
-                    .map((cat) => {
-                      const sum = finances
-                        .filter(
-                          (f) =>
-                            f.type === "income" &&
-                            (f.targetMonth || f.date.substring(0, 7)) ===
-                              currentMonthStr &&
-                            f.category === cat.name,
-                        )
-                        .reduce((a, b) => a + Number(b.amount || 0), 0);
-                      if (sum === 0) return null;
-                      return (
-                        <div
-                          key={cat.id}
-                          className="flex justify-between items-center text-sm"
-                        >
-                          <span className="text-emerald-950 font-medium">
-                            {cat.name}
-                          </span>
-                          <span className="font-mono font-bold text-emerald-800">
-                            {sum.toLocaleString()} ₽
-                          </span>
-                        </div>
-                      );
-                    })}
-                  <div className="flex justify-between items-center text-sm font-black pt-3 border-t border-emerald-200/50 text-emerald-900">
-                    <span>Итого Доходы:</span>
-                    <span className="font-mono text-lg">
-                      {finances
-                        .filter(
-                          (f) =>
-                            f.type === "income" &&
-                            (f.targetMonth || f.date.substring(0, 7)) ===
-                              currentMonthStr,
-                        )
-                        .reduce((a, b) => a + Number(b.amount || 0), 0)
-                        .toLocaleString()}{" "}
-                      ₽
+              <div className="bg-emerald-50/50 p-4 md:p-5 rounded-2xl border border-emerald-100">
+                <div 
+                  className="flex justify-between items-center cursor-pointer group"
+                  onClick={() => setPnlExpandedIncomes(!pnlExpandedIncomes)}
+                >
+                  <h3 className="font-bold text-emerald-800 text-sm tracking-wide uppercase flex items-center space-x-2">
+                    <span>Выручка</span>
+                    <span className="text-emerald-500 bg-emerald-100/50 px-1.5 py-0.5 rounded text-[10px]">
+                      {pnlExpandedIncomes ? "− скрыть" : "+ раскрыть"}
                     </span>
+                  </h3>
+                  <div className="text-right">
+                    <div className="font-mono text-lg font-black text-emerald-700">
+                      {totalIncome.toLocaleString()} ₽
+                    </div>
+                    <div className="text-[10px] text-emerald-600 font-medium">
+                      Кол-во платежей: {paymentsCount} шт.
+                    </div>
                   </div>
                 </div>
+
+                {pnlExpandedIncomes && (
+                  <div className="mt-4 pt-3 border-t border-emerald-100 space-y-2.5">
+                    {incomesByCategory.map((cat) => (
+                      <div key={cat.id} className="flex justify-between items-center text-sm">
+                        <span className="text-emerald-950 font-medium">{cat.name}</span>
+                        <span className="font-mono font-bold text-emerald-800">
+                          {cat.sum.toLocaleString()} ₽
+                        </span>
+                      </div>
+                    ))}
+                    {incomesByCategory.length === 0 && (
+                      <div className="text-xs text-emerald-600/70 italic text-center py-2">
+                        Нет поступлений за период
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {/* РАСХОДЫ */}
-              <div className="bg-orange-50/30 p-5 rounded-2xl border border-orange-100/50">
-                <h3 className="font-bold text-orange-800 border-b border-orange-200/50 pb-2 mb-4 text-sm tracking-wide uppercase">
-                  Операционные расходы
-                </h3>
-                <div className="space-y-2.5">
-                  {financeCategories
-                    .filter((c) => c.type === "expense")
-                    .map((cat) => {
-                      const sum = finances
-                        .filter(
-                          (f) =>
-                            f.type === "expense" &&
-                            (f.targetMonth || f.date.substring(0, 7)) ===
-                              currentMonthStr &&
-                            f.category === cat.name,
-                        )
-                        .reduce((a, b) => a + Number(b.amount || 0), 0);
-                      if (sum === 0) return null;
-                      return (
-                        <div
-                          key={cat.id}
-                          className="flex justify-between items-center text-sm"
-                        >
-                          <span className="text-orange-950 font-medium">
-                            {cat.name}
-                          </span>
-                          <span className="font-mono font-bold text-orange-800">
-                            {sum.toLocaleString()} ₽
-                          </span>
-                        </div>
-                      );
-                    })}
-                  <div className="flex justify-between items-center text-sm font-black pt-3 border-t border-orange-200/50 text-orange-900">
-                    <span>Итого Расходы:</span>
-                    <span className="font-mono text-lg">
-                      {finances
-                        .filter(
-                          (f) =>
-                            f.type === "expense" &&
-                            (f.targetMonth || f.date.substring(0, 7)) ===
-                              currentMonthStr,
-                        )
-                        .reduce((a, b) => a + Number(b.amount || 0), 0)
-                        .toLocaleString()}{" "}
-                      ₽
+              {/* ПЕРЕМЕННЫЕ РАСХОДЫ */}
+              <div className="bg-orange-50/50 p-4 md:p-5 rounded-2xl border border-orange-100">
+                <div 
+                  className="flex justify-between items-center cursor-pointer group"
+                  onClick={() => setPnlExpandedVariable(!pnlExpandedVariable)}
+                >
+                  <h3 className="font-bold text-orange-800 text-sm tracking-wide uppercase flex items-center space-x-2">
+                    <span>Переменные расходы</span>
+                    <span className="text-orange-500 bg-orange-100/50 px-1.5 py-0.5 rounded text-[10px]">
+                      {pnlExpandedVariable ? "− скрыть" : "+ раскрыть"}
                     </span>
+                  </h3>
+                  <div className="font-mono text-lg font-black text-orange-700">
+                    {totalVariable.toLocaleString()} ₽
                   </div>
                 </div>
+
+                {pnlExpandedVariable && (
+                  <div className="mt-4 pt-3 border-t border-orange-100 space-y-2.5">
+                    {variableCategories.map((cat) => (
+                      <div key={cat.id} className="flex justify-between items-center text-sm">
+                        <span className="text-orange-950 font-medium">{cat.name}</span>
+                        <span className="font-mono font-bold text-orange-800">
+                          {cat.sum.toLocaleString()} ₽
+                        </span>
+                      </div>
+                    ))}
+                    {variableCategories.length === 0 && (
+                      <div className="text-xs text-orange-600/70 italic text-center py-2">
+                        Нет переменных расходов за период
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {/* РЕЗУЛЬТАТ */}
-              <div className="p-4 md:p-6 bg-slate-900 shadow-xl shadow-slate-900/20 text-white rounded-2xl flex justify-between items-center">
-                <span className="font-bold tracking-wider text-sm text-slate-300 uppercase">
-                  Чистая прибыль (EBITDA)
-                </span>
-                <span className="text-3xl font-black font-mono tracking-tight text-emerald-400 drop-shadow-md">
-                  {(
-                    finances
-                      .filter(
-                        (f) =>
-                          f.type === "income" &&
-                          (f.targetMonth || f.date.substring(0, 7)) ===
-                            currentMonthStr,
-                      )
-                      .reduce((a, b) => a + Number(b.amount || 0), 0) -
-                    finances
-                      .filter(
-                        (f) =>
-                          f.type === "expense" &&
-                          (f.targetMonth || f.date.substring(0, 7)) ===
-                            currentMonthStr,
-                      )
-                      .reduce((a, b) => a + Number(b.amount || 0), 0)
-                  ).toLocaleString()}{" "}
-                  ₽
+              {/* ПОСТОЯННЫЕ РАСХОДЫ */}
+              <div className="bg-rose-50/50 p-4 md:p-5 rounded-2xl border border-rose-100">
+                <div 
+                  className="flex justify-between items-center cursor-pointer group"
+                  onClick={() => setPnlExpandedFixed(!pnlExpandedFixed)}
+                >
+                  <h3 className="font-bold text-rose-800 text-sm tracking-wide uppercase flex items-center space-x-2">
+                    <span>Постоянные расходы</span>
+                    <span className="text-rose-500 bg-rose-100/50 px-1.5 py-0.5 rounded text-[10px]">
+                      {pnlExpandedFixed ? "− скрыть" : "+ раскрыть"}
+                    </span>
+                  </h3>
+                  <div className="font-mono text-lg font-black text-rose-700">
+                    {totalFixed.toLocaleString()} ₽
+                  </div>
+                </div>
+
+                {pnlExpandedFixed && (
+                  <div className="mt-4 pt-3 border-t border-rose-100 space-y-2.5">
+                    {fixedCategories.map((cat) => (
+                      <div key={cat.id} className="flex justify-between items-center text-sm">
+                        <span className="text-rose-950 font-medium">{cat.name}</span>
+                        <span className="font-mono font-bold text-rose-800">
+                          {cat.sum.toLocaleString()} ₽
+                        </span>
+                      </div>
+                    ))}
+                    {fixedCategories.length === 0 && (
+                      <div className="text-xs text-rose-600/70 italic text-center py-2">
+                        Нет постоянных расходов за период
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* РЕЗУЛЬТАТ EBITDA */}
+              <div className="p-4 md:p-6 bg-slate-800 shadow-xl shadow-slate-900/10 text-white rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center">
+                <div>
+                  <span className="font-bold tracking-wider text-sm text-slate-300 uppercase block mb-1">
+                    EBITDA
+                  </span>
+                  <p className="text-[10px] text-slate-400">Прибыль до налогов и амортизации</p>
+                </div>
+                <span className={`text-2xl mt-2 md:mt-0 font-black font-mono tracking-tight drop-shadow-md ${ebitda >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                  {ebitda > 0 ? "+" : ""}{ebitda.toLocaleString()} ₽
                 </span>
               </div>
+
+              {/* ЧИСТАЯ ПРИБЫЛЬ */}
+              <div className="p-4 md:p-6 bg-slate-950 shadow-xl shadow-slate-900/20 text-white rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center border-t-4 border-emerald-500 relative overflow-hidden">
+                <div className="relative z-10">
+                  <span className="font-black tracking-widest text-sm text-slate-200 uppercase block mb-1">
+                    Чистая прибыль
+                  </span>
+                  <p className="text-[10px] text-slate-500">Итоговый финансовый результат</p>
+                </div>
+                <span className={`text-3xl mt-2 md:mt-0 font-black font-mono tracking-tight drop-shadow-lg relative z-10 ${netProfit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                  {netProfit > 0 ? "+" : ""}{netProfit.toLocaleString()} ₽
+                </span>
+                
+                {/* Decorative background glow */}
+                <div className={`absolute -right-10 -top-10 w-40 h-40 rounded-full blur-3xl opacity-20 ${netProfit >= 0 ? "bg-emerald-500" : "bg-red-500"}`}></div>
+              </div>
+
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {activeTab === "plan" && (
           <div className="space-y-6 border-none">
@@ -1763,6 +1830,16 @@ export const FinanceModule: React.FC = () => {
                   <option value="income">Статья Поступлений</option>
                   <option value="expense">Статья Списаний</option>
                 </select>
+                {newCatType === "expense" && (
+                  <select
+                    value={newCatExpenseType}
+                    onChange={(e) => setNewCatExpenseType(e.target.value as "variable" | "fixed")}
+                    className="p-3 border border-gray-200 rounded-xl outline-none text-sm font-bold text-slate-700 bg-white min-w-[150px]"
+                  >
+                    <option value="fixed">Постоянный</option>
+                    <option value="variable">Переменный</option>
+                  </select>
+                )}
                 <button
                   id="addCatBtn"
                   onClick={() => {

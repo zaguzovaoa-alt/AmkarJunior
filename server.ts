@@ -9,6 +9,7 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
 
   const SMS_RU_API_ID = '9FB08C14-577B-E243-D5D1-E97A00106226';
 

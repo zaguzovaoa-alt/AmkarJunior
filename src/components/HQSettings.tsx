@@ -101,6 +101,7 @@ export const HQSettings: React.FC = () => {
   const [taxRate, setTaxRate] = useState("0");
   const [whatsappNotifications, setWhatsappNotifications] = useState(true);
   const [autoOverdueTasks, setAutoOverdueTasks] = useState(true);
+  const [yandexFormUrl, setYandexFormUrl] = useState(crmConfig?.yandexFormUrl || "");
 
   // Synchronize local state with loaded context settings
   React.useEffect(() => {
@@ -109,10 +110,14 @@ export const HQSettings: React.FC = () => {
       setWhatsappNotifications(whatsappNotificationsContext);
     if (autoOverdueTasksContext !== undefined)
       setAutoOverdueTasks(autoOverdueTasksContext);
+    if (crmConfig?.yandexFormUrl) {
+      setYandexFormUrl(crmConfig.yandexFormUrl);
+    }
   }, [
     schoolNameContext,
     whatsappNotificationsContext,
     autoOverdueTasksContext,
+    crmConfig,
   ]);
 
   const handleSaveSettings = async () => {
@@ -122,6 +127,7 @@ export const HQSettings: React.FC = () => {
       await updateSchoolName(schoolName);
       await updateWhatsappNotifications(whatsappNotifications);
       await updateAutoOverdueTasks(autoOverdueTasks);
+      updateCRMConfig({ yandexFormUrl });
       setSuccessMsg(
         "Настройки бизнес-логики и брендинг школы успешно обновлены!",
       );
@@ -485,6 +491,22 @@ export const HQSettings: React.FC = () => {
                       </p>
                     </div>
                   </label>
+
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                      URL формы привлечения (Yandex Forms и др.)
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs text-slate-800 font-medium focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none"
+                      value={yandexFormUrl}
+                      onChange={(e) => setYandexFormUrl(e.target.value)}
+                      placeholder="https://forms.yandex.ru/u/..."
+                    />
+                    <p className="text-gray-400 text-[10.5px] mt-1.5">
+                      Ссылка на форму записи на бесплатную тренировку. Данная ссылка будет использоваться в модуле Менеджера и на посадочных страницах. Настройте отправку Webhook в Yandex Forms на адрес: <strong>https://[ваш_домен]/api/webhooks/forms</strong>
+                    </p>
+                  </div>
                 </div>
               </div>
 
