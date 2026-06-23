@@ -782,6 +782,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!lead) return;
 
     const group = groups.find(g => g.name === groupName);
+    const coach = coaches.find(c => c.id === coachId);
 
     const updatedLead: Lead = {
       ...lead,
@@ -801,7 +802,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       assignedTo: 'trainer',
       status: 'pending',
       dueDate: `${date} в ${time}`,
-      description: `Проверить навыки ребенка (возраст: ${lead.childAge} лет). Оставить отзыв после тренировки.`,
+      description: `Назначен тренер: ${coach?.name || 'Не указан'}. Проверить навыки ребенка (возраст: ${lead.childAge} лет). Оставить отзыв после тренировки.`,
       relatedClientId: lead.id
     };
 

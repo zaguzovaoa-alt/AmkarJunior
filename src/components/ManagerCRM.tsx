@@ -65,6 +65,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
     updateClient,
     schoolName,
     groups,
+    coaches,
     assignClientToGroup,
     crmConfig,
     messages,
@@ -154,6 +155,14 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
   const [selectedClientIds, setSelectedClientIds] = useState<Set<string>>(
     new Set(),
   );
+  
+  // Trial booking modal state
+  const [bookingTrialLead, setBookingTrialLead] = useState<Lead | null>(null);
+  const [trialCoachId, setTrialCoachId] = useState("");
+  const [trialGroupId, setTrialGroupId] = useState("");
+  const [trialDate, setTrialDate] = useState("");
+  const [trialTime, setTrialTime] = useState("");
+
   const [isAddLeadOpen, setIsAddLeadOpen] = useState(false);
   const [isAddDirectClientOpen, setIsAddDirectClientOpen] = useState(false);
   const [newParentName, setNewParentName] = useState("");
@@ -669,13 +678,28 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
     }
   };
 
-  const handleBookTrialFromLead = (lead: Lead) => {
-    const defaultCoach = "c1"; // Andrey Petrov
-    const defaultGroup = availableGroups[0] || "Без группы";
-    bookTrial(lead.id, defaultCoach, defaultGroup, "Сегодня", "17:00");
+  const handleOpenBookTrial = (lead: Lead) => {
+    setBookingTrialLead(lead);
+    setTrialDate(new Date().toISOString().substring(0, 10));
+    setTrialTime("17:00");
+    setTrialCoachId("");
+    setTrialGroupId("");
+  };
+
+  const handleBookTrialSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bookingTrialLead || !trialCoachId || !trialGroupId || !trialDate || !trialTime) {
+      alert("Пожалуйста, заполните все поля.");
+      return;
+    }
+    
+    const groupName = groups.find(g => g.id === trialGroupId)?.name || "Без группы";
+    const coach = coaches.find(c => c.id === trialCoachId);
+    bookTrial(bookingTrialLead.id, trialCoachId, groupName, trialDate, trialTime);
     alert(
-      `Заявка переведена в статус "Забронирована пробная"!\nРебенок добавлен в "Пробный период" клиентов.\nТренеру "Петров Андрей" отправлено автоматическое задание на пробное занятие.`,
+      `Заявка переведена в статус "Забронирована пробная"!\nРебенок добавлен в "Пробный период" клиентов.\nТренеру ${coach ? `"${coach.name}" ` : ""}отправлено автоматическое задание на пробное занятие.`,
     );
+    setBookingTrialLead(null);
   };
 
   const handleSendBilling = (
@@ -923,7 +947,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                           {lead.status === "new" ||
                           lead.status === "contacted" ? (
                             <button
-                              onClick={() => handleBookTrialFromLead(lead)}
+                              onClick={() => handleOpenBookTrial(lead)}
                               className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded font-bold text-[10px] transition"
                             >
                               Пригласить на пробную
@@ -3167,6 +3191,112 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
           </div>
         )}
       </div>
+
+      {/* Book Trial Modal */}
+      {bookingTrialLead && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 z-50">
+          <div className="bg-white rounded-3xl w-full max-w-md max-h-full flex flex-col overflow-hidden border shadow-xl">
+            <div className="p-5 bg-slate-900 text-white flex justify-between items-center text-left shrink-0">
+              <div>
+                <h3 className="font-extrabold text-white text-sm">
+                  Запись на пробную тренировку
+                </h3>
+                <p className="text-[10px] text-gray-400 mt-0.5">
+                  Ученик: {bookingTrialLead.childName} {bookingTrialLead.childSurname}
+                </p>
+              </div>
+              <button
+                onClick={() => setBookingTrialLead(null)}
+                className="text-white hover:text-slate-300 font-bold p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto w-full text-left bg-slate-50 flex-1">
+              <form onSubmit={handleBookTrialSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1">
+                    Группа / Площадка
+                  </label>
+                  <select
+                    value={trialGroupId}
+                    onChange={(e) => setTrialGroupId(e.target.value)}
+                    required
+                    className="w-full border-gray-200 rounded-xl px-4 py-3 bg-white text-sm focus:border-emerald-500 focus:ring-emerald-500 font-medium"
+                  >
+                    <option value="" disabled>Выберите группу...</option>
+                    {groups.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name} ({g.venue || "Без площадки"})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1">
+                    Тренер
+                  </label>
+                  <select
+                    value={trialCoachId}
+                    onChange={(e) => setTrialCoachId(e.target.value)}
+                    required
+                    className="w-full border-gray-200 rounded-xl px-4 py-3 bg-white text-sm focus:border-emerald-500 focus:ring-emerald-500 font-medium"
+                  >
+                    <option value="" disabled>Выберите тренера...</option>
+                    {coaches.filter(c => c.status === "active").map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">
+                      Дата тренировки
+                    </label>
+                    <input
+                      type="date"
+                      value={trialDate}
+                      onChange={(e) => setTrialDate(e.target.value)}
+                      required
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2 bg-white text-sm focus:border-emerald-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">
+                      Время тренировки
+                    </label>
+                    <input
+                      type="time"
+                      value={trialTime}
+                      onChange={(e) => setTrialTime(e.target.value)}
+                      required
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2 bg-white text-sm focus:border-emerald-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t mt-4 flex justify-end space-x-3 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setBookingTrialLead(null)}
+                    className="px-4 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 font-bold rounded-xl text-xs transition"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition"
+                  >
+                    Подтвердить запись
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Lead modal drawer dialog */}
       {isAddLeadOpen && (

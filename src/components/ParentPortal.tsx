@@ -54,6 +54,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
     userProfile,
     tasks,
     viewingClientId,
+    setViewingClientId,
     products,
     storeOrders,
     homeworks,
@@ -126,18 +127,21 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
   const medicalInputRef = useRef<HTMLInputElement>(null);
   const insuranceInputRef = useRef<HTMLInputElement>(null);
 
-  // Find the child associated with the currently logged-in parent
+  // Find ALL children associated with the currently logged-in parent
+  const myChildren = clients.filter(
+    (c) =>
+      (userProfile?.phone && c.parentPhone === userProfile.phone) ||
+      (userProfile?.email &&
+        c.parentEmail?.toLowerCase() === userProfile.email.toLowerCase()) ||
+      (userProfile?.name && c.parentName === userProfile.name)
+  );
+
+  // Determine the active child to display
   const myClientRaw = viewingClientId
     ? clients.find((c) => c.id === viewingClientId)
-    : clients.find(
-        (c) =>
-          (userProfile?.phone && c.parentPhone === userProfile.phone) ||
-          (userProfile?.email &&
-            c.parentEmail?.toLowerCase() === userProfile.email.toLowerCase()) ||
-          (userProfile?.name && c.parentName === userProfile.name),
-      ) ||
-      clients.find((c) => c.id === "cl2") ||
-      clients[0];
+    : myChildren.length > 0
+      ? myChildren[0]
+      : clients.find((c) => c.id === "cl2") || clients[0];
 
   const myClient = Object.assign({}, myClientRaw || {});
   const [selectedArticle, setSelectedArticle] = useState<any | null>(null);
@@ -442,18 +446,37 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
         </div>
 
         {/* Top Profile Pickers exactly like picture */}
-        <div className="flex items-center space-x-4">
+        <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
           <div className="flex flex-col gap-2">
-            <div className="flex items-center space-x-2.5 bg-slate-100 px-3.5 py-1.5 rounded-xl border border-gray-200 w-full">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <div className="text-xs text-left">
-                <div className="font-semibold text-gray-800">
-                  {myClient.childSurname} {myClient.childName}
+            <div className="flex items-center space-x-2.5 bg-slate-100 px-3.5 py-1.5 rounded-xl border border-gray-200 w-full relative">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+              {myChildren.length > 1 ? (
+                <select
+                  value={myClient.id}
+                  onChange={(e) => setViewingClientId(e.target.value)}
+                  className="bg-transparent border-none appearance-none focus:outline-none text-xs font-semibold text-gray-800 p-0 block w-full cursor-pointer pr-4"
+                >
+                  {myChildren.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.childSurname} {c.childName} • {c.groupName || "Без группы"}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="text-xs text-left">
+                  <div className="font-semibold text-gray-800">
+                    {myClient.childSurname} {myClient.childName}
+                  </div>
+                  <div className="text-gray-500 font-mono text-[10px]">
+                    {myClient.groupName || "Группа не назначена"}
+                  </div>
                 </div>
-                <div className="text-gray-500 font-mono text-[10px]">
-                  {myClient.groupName || "Группа не назначена"}
+              )}
+              {myChildren.length > 1 && (
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+                  <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
                 </div>
-              </div>
+              )}
             </div>
             {mySelectTeams.map((st) => (
               <div

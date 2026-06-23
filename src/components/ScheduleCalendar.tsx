@@ -350,17 +350,29 @@ export const ScheduleCalendar: React.FC<{
     filteredCoachId,
   ]);
 
-  // Month navigation handlers
-  const handlePrevMonth = () => {
-    setCurrentDate(
-      new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1),
-    );
+  // Navigation handlers
+  const handlePrev = () => {
+    if (view === "month" || view === "list") {
+      setCurrentDate(
+        new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1),
+      );
+    } else if (view === "week") {
+      const d = new Date(currentDate);
+      d.setDate(d.getDate() - 7);
+      setCurrentDate(d);
+    }
   };
 
-  const handleNextMonth = () => {
-    setCurrentDate(
-      new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1),
-    );
+  const handleNext = () => {
+    if (view === "month" || view === "list") {
+      setCurrentDate(
+        new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1),
+      );
+    } else if (view === "week") {
+      const d = new Date(currentDate);
+      d.setDate(d.getDate() + 7);
+      setCurrentDate(d);
+    }
   };
 
   const handleToday = () => {
@@ -866,13 +878,13 @@ export const ScheduleCalendar: React.FC<{
           </div>
         </div>
 
-        {/* Filters and Month Navigator */}
+        {/* Filters and Month/Week Navigator */}
         <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4 bg-white p-4 rounded-2xl border border-slate-100 shadow-xs">
           {/* Navigator */}
           <div className="flex items-center justify-between lg:justify-start gap-4 select-none">
             <div className="flex items-center space-x-1 border p-1 rounded-xl bg-slate-50">
               <button
-                onClick={handlePrevMonth}
+                onClick={handlePrev}
                 className="p-1.5 hover:bg-white rounded-lg hover:shadow-xs transition text-slate-700 cursor-pointer"
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -886,7 +898,7 @@ export const ScheduleCalendar: React.FC<{
               </button>
 
               <button
-                onClick={handleNextMonth}
+                onClick={handleNext}
                 className="p-1.5 hover:bg-white rounded-lg hover:shadow-xs transition text-slate-700 cursor-pointer"
               >
                 <ChevronRight className="w-4 h-4" />
@@ -894,7 +906,15 @@ export const ScheduleCalendar: React.FC<{
             </div>
 
             <h2 className="text-base font-extrabold text-slate-900 tracking-tight font-sans">
-              {RU_MONTHS[currentDate.getMonth()]} {currentDate.getFullYear()} г.
+              {view === "week" && weekDays.length > 0 ? (
+                <>
+                  {weekDays[0].dayNum} {RU_MONTHS[(new Date(weekDays[0].dateStr)).getMonth()].slice(0, 3)} - {weekDays[6].dayNum} {RU_MONTHS[(new Date(weekDays[6].dateStr)).getMonth()].slice(0, 3)} {currentDate.getFullYear()} г.
+                </>
+              ) : (
+                <>
+                  {RU_MONTHS[currentDate.getMonth()]} {currentDate.getFullYear()} г.
+                </>
+              )}
             </h2>
           </div>
 
