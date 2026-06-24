@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useCRM } from "../context/CRMContext";
 import {
   Users,
@@ -204,7 +204,33 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
     appendFinances,
     appendCoaches,
     currentRole,
+    accounts,
   } = useCRM();
+
+  const totalBalance = useMemo(() => {
+    const calculatedAccountsMap = new Map<
+      string,
+      (typeof accounts)[0] & { actualBalance: number }
+    >();
+    accounts.forEach((acc) =>
+      calculatedAccountsMap.set(acc.id, {
+        ...acc,
+        actualBalance: acc.balance || 0,
+      }),
+    );
+
+    finances.forEach((f) => {
+      if (f.accountId && calculatedAccountsMap.has(f.accountId)) {
+        const acc = calculatedAccountsMap.get(f.accountId)!;
+        if (f.type === "income") acc.actualBalance += Number(f.amount || 0);
+        else if (f.type === "expense")
+          acc.actualBalance -= Number(f.amount || 0);
+      }
+    });
+
+    const calculatedAccounts = Array.from(calculatedAccountsMap.values());
+    return calculatedAccounts.reduce((sum, acc) => sum + acc.actualBalance, 0);
+  }, [accounts, finances]);
 
   const activeClients = clients.filter((c) => c.status === "active");
   const trialClients = clients.filter((c) => c.status === "trial");
@@ -468,12 +494,12 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
 
   const handleAddDirectorTask = () => {
     if (!newDirectorTask.trim()) return;
-    
+
     const now = new Date();
-    const d = String(now.getDate()).padStart(2, '0');
-    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, "0");
+    const m = String(now.getMonth() + 1).padStart(2, "0");
     const y = now.getFullYear();
-    
+
     const newTask = {
       title: newDirectorTask.trim(),
       description: "Добавлено с дашборда",
@@ -1331,7 +1357,22 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
           <BirthdaysBanner clients={clients} />
 
           {/* Top summary cards exactly like Image 7 header stats row */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden">
+              <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
+                Деньги на счетах
+              </span>
+              <div className="text-3xl font-black text-slate-900 mt-1 font-display tracking-tight whitespace-nowrap">
+                {totalBalance.toLocaleString("ru-RU")} ₽
+              </div>
+              <div className="text-[10px] text-gray-400 font-semibold mt-1">
+                Обновлено сегодня,{" "}
+                {new Date().toLocaleTimeString("ru-RU", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </div>
+            </div>
             <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden">
               <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
                 Клиенты
@@ -1618,10 +1659,17 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                           <p className="text-[10px] text-gray-400">
                             {tk.description}
                           </p>
-                          <div className={`text-[9px] font-mono font-bold ${tk.dueDate === (() => {
-                            const n = new Date();
-                            return `${String(n.getDate()).padStart(2,'0')}.${String(n.getMonth()+1).padStart(2,'0')}.${n.getFullYear()}`;
-                          })() ? "text-amber-600 bg-amber-50 px-1 py-0.5 rounded w-fit" : "text-gray-400"}`}>
+                          <div
+                            className={`text-[9px] font-mono font-bold ${
+                              tk.dueDate ===
+                              (() => {
+                                const n = new Date();
+                                return `${String(n.getDate()).padStart(2, "0")}.${String(n.getMonth() + 1).padStart(2, "0")}.${n.getFullYear()}`;
+                              })()
+                                ? "text-amber-600 bg-amber-50 px-1 py-0.5 rounded w-fit"
+                                : "text-gray-400"
+                            }`}
+                          >
                             {tk.dueDate}
                           </div>
                         </div>
@@ -2105,12 +2153,12 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                                 </span>
                               ) : rec.status === "absent_sick" ? (
                                 <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold text-[9px] uppercase tracking-wide">
-                                  Уважительная {rec.reason ? `(${rec.reason})` : ""}
+                                  Уважительная{" "}
+                                  {rec.reason ? `(${rec.reason})` : ""}
                                 </span>
                               ) : (
                                 <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold text-[9px] uppercase tracking-wide">
-                                  Прогул{" "}
-                                  {rec.reason ? `(${rec.reason})` : ""}
+                                  Прогул {rec.reason ? `(${rec.reason})` : ""}
                                 </span>
                               )}
                             </div>

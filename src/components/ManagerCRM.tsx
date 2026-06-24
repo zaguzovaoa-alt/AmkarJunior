@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useCRM } from "../context/CRMContext";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -33,6 +33,7 @@ import {
   Shield,
   Send,
   Link,
+  X,
 } from "lucide-react";
 import { Client, Lead, ClientStatus, CRMTask } from "../types";
 import { calculateAge, isBirthdayToday } from "../utils/dateUtils";
@@ -77,7 +78,33 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
     currentRole,
     addFinanceRecord,
     accounts,
+    finances,
   } = useCRM();
+
+  const totalBalance = useMemo(() => {
+    const calculatedAccountsMap = new Map<
+      string,
+      (typeof accounts)[0] & { actualBalance: number }
+    >();
+    accounts.forEach((acc) =>
+      calculatedAccountsMap.set(acc.id, {
+        ...acc,
+        actualBalance: acc.balance || 0,
+      }),
+    );
+
+    finances.forEach((f) => {
+      if (f.accountId && calculatedAccountsMap.has(f.accountId)) {
+        const acc = calculatedAccountsMap.get(f.accountId)!;
+        if (f.type === "income") acc.actualBalance += Number(f.amount || 0);
+        else if (f.type === "expense")
+          acc.actualBalance -= Number(f.amount || 0);
+      }
+    });
+
+    const calculatedAccounts = Array.from(calculatedAccountsMap.values());
+    return calculatedAccounts.reduce((sum, acc) => sum + acc.actualBalance, 0);
+  }, [accounts, finances]);
 
   const [deleteLeadModal, setDeleteLeadModal] = useState<{
     isOpen: boolean;
@@ -108,18 +135,23 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
   const [clientNotes, setClientNotes] = useState<{ [key: string]: string }>({});
 
   // Manual payment entry state variables
-  const [manualPaymentDate, setManualPaymentDate] = useState<string>(
-    () => new Date().toISOString().substring(0, 10)
+  const [manualPaymentDate, setManualPaymentDate] = useState<string>(() =>
+    new Date().toISOString().substring(0, 10),
   );
   const [manualPaymentType, setManualPaymentType] = useState<
     "12_sessions" | "8_sessions" | "4_sessions" | "1_session"
   >("12_sessions");
   const [manualPaymentAmount, setManualPaymentAmount] = useState<number>(0);
   const [manualPaymentExpires, setManualPaymentExpires] = useState<string>("");
-  const [manualPaymentAccountId, setManualPaymentAccountId] = useState<string>("");
+  const [manualPaymentAccountId, setManualPaymentAccountId] =
+    useState<string>("");
   const [manualPaymentLoading, setManualPaymentLoading] = useState(false);
-  const [manualPaymentError, setManualPaymentError] = useState<string | null>(null);
-  const [manualPaymentSuccess, setManualPaymentSuccess] = useState<string | null>(null);
+  const [manualPaymentError, setManualPaymentError] = useState<string | null>(
+    null,
+  );
+  const [manualPaymentSuccess, setManualPaymentSuccess] = useState<
+    string | null
+  >(null);
 
   // Auto-calculate payment amount when subscription type changes
   React.useEffect(() => {
@@ -155,7 +187,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
   const [selectedClientIds, setSelectedClientIds] = useState<Set<string>>(
     new Set(),
   );
-  
+
   // Trial booking modal state
   const [bookingTrialLead, setBookingTrialLead] = useState<Lead | null>(null);
   const [trialCoachId, setTrialCoachId] = useState("");
@@ -291,10 +323,16 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
       const appUrl = `max://chat?phone=${encodeURIComponent(cleanPhone)}`;
       window.location.href = appUrl;
       setTimeout(() => {
-        window.open(`https://web.max.ru/?phone=${encodeURIComponent(cleanPhone)}`, "_blank");
+        window.open(
+          `https://web.max.ru/?phone=${encodeURIComponent(cleanPhone)}`,
+          "_blank",
+        );
       }, 1500);
     } else {
-      window.open(`https://web.max.ru/?phone=${encodeURIComponent(cleanPhone)}`, "_blank");
+      window.open(
+        `https://web.max.ru/?phone=${encodeURIComponent(cleanPhone)}`,
+        "_blank",
+      );
     }
   };
 
@@ -468,11 +506,13 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
       const sessions = sessionsMap[type];
 
       // Calculate total sessions left
-      const updatedSessionsLeft = (selectedClient.abonementSessionsLeft || 0) + sessions;
+      const updatedSessionsLeft =
+        (selectedClient.abonementSessionsLeft || 0) + sessions;
 
-      const itemLabel = type === "1_session"
-        ? `Разовая тренировка (Вручную)`
-        : `Абонемент на ${sessions} занятий (Вручную)`;
+      const itemLabel =
+        type === "1_session"
+          ? `Разовая тренировка (Вручную)`
+          : `Абонемент на ${sessions} занятий (Вручную)`;
 
       const newPayment = {
         id: `p_manual_${Date.now()}`,
@@ -497,7 +537,8 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
       await updateClient(selectedClient.id, clientUpdates);
 
       // Save finance record automatically in backend/firestore
-      const categoryName = type === "1_session" ? "Разовые тренировки" : "Абонементы";
+      const categoryName =
+        type === "1_session" ? "Разовые тренировки" : "Абонементы";
       await addFinanceRecord({
         type: "income",
         category: categoryName,
@@ -519,10 +560,13 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
 
   const handleDeletePayment = async (paymentId: string) => {
     if (!selectedClient) return;
-    if (!window.confirm("Удалить этот платёж? Действие нельзя отменить.")) return;
+    if (!window.confirm("Удалить этот платёж? Действие нельзя отменить."))
+      return;
 
     try {
-      const updatedPayments = (selectedClient.payments || []).filter((p) => p.id !== paymentId);
+      const updatedPayments = (selectedClient.payments || []).filter(
+        (p) => p.id !== paymentId,
+      );
       await updateClient(selectedClient.id, { payments: updatedPayments });
     } catch (err) {
       console.error("Ошибка при удалении платежа:", err);
@@ -532,15 +576,20 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
 
   const handleClearSubscription = async () => {
     if (!selectedClient) return;
-    if (!window.confirm("Вы уверены, что хотите обнулить абонемент у клиента? Остаток занятий сбросится на 0.")) return;
+    if (
+      !window.confirm(
+        "Вы уверены, что хотите обнулить абонемент у клиента? Остаток занятий сбросится на 0.",
+      )
+    )
+      return;
 
     try {
       await updateClient(selectedClient.id, {
-        abonement: 'none',
-        abonementStatus: 'Нет абонемента',
+        abonement: "none",
+        abonementStatus: "Нет абонемента",
         abonementSessionsLeft: 0,
         abonementTotalSessions: 0,
-        abonementExpirationDate: '',
+        abonementExpirationDate: "",
       });
     } catch (err) {
       console.error("Ошибка при удалении абонемента:", err);
@@ -567,9 +616,12 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
     e.preventDefault();
     setAddLeadError(null);
     try {
-      if (!newParentName) throw new Error("Пожалуйста, заполните поле 'ФИО Родителя'.");
-      if (!newChildName) throw new Error("Пожалуйста, заполните поле 'Имя ученика'.");
-      if (!newPhone || newPhone.replace(/\D/g, "").length < 11) throw new Error("Пожалуйста, корректно заполните поле 'Телефон'.");
+      if (!newParentName)
+        throw new Error("Пожалуйста, заполните поле 'ФИО Родителя'.");
+      if (!newChildName)
+        throw new Error("Пожалуйста, заполните поле 'Имя ученика'.");
+      if (!newPhone || newPhone.replace(/\D/g, "").length < 11)
+        throw new Error("Пожалуйста, корректно заполните поле 'Телефон'.");
 
       await addLead({
         parentName: newParentName,
@@ -594,7 +646,9 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
       setNewChildSurname("");
       setNewPhone("+7 ");
     } catch (err: any) {
-      setAddLeadError("Ошибка при регистрации лида: " + (err.message || String(err)));
+      setAddLeadError(
+        "Ошибка при регистрации лида: " + (err.message || String(err)),
+      );
     }
   };
 
@@ -616,11 +670,16 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
     e.preventDefault();
     setAddClientError(null);
     try {
-      if (!newDirectParentName) throw new Error("Пожалуйста, заполните поле 'ФИО Родителя'");
-      if (!newDirectChildName) throw new Error("Пожалуйста, заполните поле 'Имя ученика'");
-      if (!newDirectChildSurname) throw new Error("Пожалуйста, заполните поле 'Фамилия ученика'");
-      if (!newDirectChildBirthDate) throw new Error("Пожалуйста, заполните поле 'Дата рождения'");
-      if (!newDirectPhone || newDirectPhone.replace(/\D/g, "").length < 11) throw new Error("Пожалуйста, корректно заполните поле 'Телефон'");
+      if (!newDirectParentName)
+        throw new Error("Пожалуйста, заполните поле 'ФИО Родителя'");
+      if (!newDirectChildName)
+        throw new Error("Пожалуйста, заполните поле 'Имя ученика'");
+      if (!newDirectChildSurname)
+        throw new Error("Пожалуйста, заполните поле 'Фамилия ученика'");
+      if (!newDirectChildBirthDate)
+        throw new Error("Пожалуйста, заполните поле 'Дата рождения'");
+      if (!newDirectPhone || newDirectPhone.replace(/\D/g, "").length < 11)
+        throw new Error("Пожалуйста, корректно заполните поле 'Телефон'");
 
       await addClient({
         parentName: newDirectParentName,
@@ -674,7 +733,9 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
       setNewDirectEmail("");
       setNewDirectGroup("");
     } catch (err: any) {
-      setAddClientError("Ошибка при добавлении ученика: " + (err.message || String(err)));
+      setAddClientError(
+        "Ошибка при добавлении ученика: " + (err.message || String(err)),
+      );
     }
   };
 
@@ -688,14 +749,27 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
 
   const handleBookTrialSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!bookingTrialLead || !trialCoachId || !trialGroupId || !trialDate || !trialTime) {
+    if (
+      !bookingTrialLead ||
+      !trialCoachId ||
+      !trialGroupId ||
+      !trialDate ||
+      !trialTime
+    ) {
       alert("Пожалуйста, заполните все поля.");
       return;
     }
-    
-    const groupName = groups.find(g => g.id === trialGroupId)?.name || "Без группы";
-    const coach = coaches.find(c => c.id === trialCoachId);
-    bookTrial(bookingTrialLead.id, trialCoachId, groupName, trialDate, trialTime);
+
+    const groupName =
+      groups.find((g) => g.id === trialGroupId)?.name || "Без группы";
+    const coach = coaches.find((c) => c.id === trialCoachId);
+    bookTrial(
+      bookingTrialLead.id,
+      trialCoachId,
+      groupName,
+      trialDate,
+      trialTime,
+    );
     alert(
       `Заявка переведена в статус "Забронирована пробная"!\nРебенок добавлен в "Пробный период" клиентов.\nТренеру ${coach ? `"${coach.name}" ` : ""}отправлено автоматическое задание на пробное занятие.`,
     );
@@ -933,15 +1007,27 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                             className="p-1.5 text-[#7551FF] hover:bg-[#7551FF]/10 rounded-lg transition hover:scale-105 border border-transparent hover:border-[#7551FF]/20"
                             title="Чат MAX с родителем"
                           >
-                            <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current drop-shadow-sm">
+                            <svg
+                              viewBox="0 0 24 24"
+                              className="w-4 h-4 fill-current drop-shadow-sm"
+                            >
                               <defs>
-                                <linearGradient id="maxGradLead" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <linearGradient
+                                  id="maxGradLead"
+                                  x1="0%"
+                                  y1="0%"
+                                  x2="100%"
+                                  y2="100%"
+                                >
                                   <stop offset="0%" stopColor="#2BC1FF" />
                                   <stop offset="50%" stopColor="#7551FF" />
                                   <stop offset="100%" stopColor="#9D38FF" />
                                 </linearGradient>
                               </defs>
-                              <path fill="url(#maxGradLead)" d="M12 2C6.477 2 2 6.477 2 12c0 1.905.534 3.684 1.464 5.203.208.337.262.748.118 1.112l-1.246 3.165a.6.6 0 00.776.776l3.164-1.246a1.18 1.18 0 011.112.118C8.91 21.936 10.418 22.5 12 22.5c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 15.5c-3.037 0-5.5-2.463-5.5-5.5S8.963 6.5 12 6.5s5.5 2.463 5.5 5.5-2.463 5.5-5.5 5.5z" />
+                              <path
+                                fill="url(#maxGradLead)"
+                                d="M12 2C6.477 2 2 6.477 2 12c0 1.905.534 3.684 1.464 5.203.208.337.262.748.118 1.112l-1.246 3.165a.6.6 0 00.776.776l3.164-1.246a1.18 1.18 0 011.112.118C8.91 21.936 10.418 22.5 12 22.5c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 15.5c-3.037 0-5.5-2.463-5.5-5.5S8.963 6.5 12 6.5s5.5 2.463 5.5 5.5-2.463 5.5-5.5 5.5z"
+                              />
                             </svg>
                           </button>
                           {lead.status === "new" ||
@@ -2685,15 +2771,22 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                               )}
 
                               {/* Manual subscription reset for Administrator, Director and Manager */}
-                              {(currentRole === "admin" || currentRole === "director" || currentRole === "manager") && selectedClient.abonement !== "none" && (
-                                <button
-                                  onClick={handleClearSubscription}
-                                  className="w-full py-2 bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs rounded-xl border border-red-100 transition flex justify-center items-center mt-2 group"
-                                >
-                                  <span className="group-hover:hidden">Обнулить абонемент</span>
-                                  <span className="hidden group-hover:inline">Подтвердить обнуление (x)</span>
-                                </button>
-                              )}
+                              {(currentRole === "admin" ||
+                                currentRole === "director" ||
+                                currentRole === "manager") &&
+                                selectedClient.abonement !== "none" && (
+                                  <button
+                                    onClick={handleClearSubscription}
+                                    className="w-full py-2 bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs rounded-xl border border-red-100 transition flex justify-center items-center mt-2 group"
+                                  >
+                                    <span className="group-hover:hidden">
+                                      Обнулить абонемент
+                                    </span>
+                                    <span className="hidden group-hover:inline">
+                                      Подтвердить обнуление (x)
+                                    </span>
+                                  </button>
+                                )}
                             </div>
                           )}
 
@@ -2733,8 +2826,11 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                           {clientDetailTab === "payments" && (
                             <div className="space-y-4">
                               <div>
-                                <strong className="text-xs text-slate-700 block mb-2">Детали платежных поручений:</strong>
-                                {selectedClient.payments && selectedClient.payments.length > 0 ? (
+                                <strong className="text-xs text-slate-700 block mb-2">
+                                  Детали платежных поручений:
+                                </strong>
+                                {selectedClient.payments &&
+                                selectedClient.payments.length > 0 ? (
                                   <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
                                     {selectedClient.payments.map((p, i) => (
                                       <div
@@ -2742,8 +2838,12 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                         className="flex justify-between items-center p-2 bg-slate-50 border border-slate-100 rounded-lg text-[11px] hover:bg-slate-100 transition"
                                       >
                                         <div className="flex flex-col flex-1">
-                                          <span className="font-semibold text-slate-800">{p.item}</span>
-                                          <span className="text-[9px] text-slate-400">{p.date}</span>
+                                          <span className="font-semibold text-slate-800">
+                                            {p.item}
+                                          </span>
+                                          <span className="text-[9px] text-slate-400">
+                                            {p.date}
+                                          </span>
                                         </div>
                                         <div className="text-right flex items-center space-x-3">
                                           <div>
@@ -2754,15 +2854,20 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                               {p.status || "Оплачено"}
                                             </span>
                                           </div>
-                                          {(currentRole === "admin" || currentRole === "director" || currentRole === "manager") && p.id && (
-                                            <button
-                                              onClick={() => handleDeletePayment(p.id!)}
-                                              className="p-1.5 text-red-400 hover:bg-red-100 hover:text-red-600 rounded transition"
-                                              title="Удалить платёж"
-                                            >
-                                              <Trash2 className="w-3.5 h-3.5" />
-                                            </button>
-                                          )}
+                                          {(currentRole === "admin" ||
+                                            currentRole === "director" ||
+                                            currentRole === "manager") &&
+                                            p.id && (
+                                              <button
+                                                onClick={() =>
+                                                  handleDeletePayment(p.id!)
+                                                }
+                                                className="p-1.5 text-red-400 hover:bg-red-100 hover:text-red-600 rounded transition"
+                                                title="Удалить платёж"
+                                              >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                              </button>
+                                            )}
                                         </div>
                                       </div>
                                     ))}
@@ -2775,16 +2880,24 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                               </div>
 
                               {/* Manual payment addition for Administrator, Director and Manager */}
-                              {(currentRole === "admin" || currentRole === "director" || currentRole === "manager") && (
+                              {(currentRole === "admin" ||
+                                currentRole === "director" ||
+                                currentRole === "manager") && (
                                 <div className="border-t pt-3 mt-2 space-y-3">
                                   <div className="flex items-center space-x-1.5">
                                     <span className="text-lg">✍️</span>
                                     <h4 className="text-xs font-black uppercase text-slate-700 tracking-wider">
-                                      Внести платёж вручную <span className="text-[10px] text-red-600 lowercase font-medium">({currentRole})</span>
+                                      Внести платёж вручную{" "}
+                                      <span className="text-[10px] text-red-600 lowercase font-medium">
+                                        ({currentRole})
+                                      </span>
                                     </h4>
                                   </div>
 
-                                  <form onSubmit={handleSaveManualPayment} className="space-y-3 p-3 bg-slate-50 border border-slate-150 rounded-xl">
+                                  <form
+                                    onSubmit={handleSaveManualPayment}
+                                    className="space-y-3 p-3 bg-slate-50 border border-slate-150 rounded-xl"
+                                  >
                                     {manualPaymentSuccess && (
                                       <div className="p-2 text-[10px] bg-emerald-50 border border-emerald-100 text-emerald-800 rounded-lg font-medium">
                                         ✅ {manualPaymentSuccess}
@@ -2804,13 +2917,25 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                         </label>
                                         <select
                                           value={manualPaymentType}
-                                          onChange={(e) => setManualPaymentType(e.target.value as any)}
+                                          onChange={(e) =>
+                                            setManualPaymentType(
+                                              e.target.value as any,
+                                            )
+                                          }
                                           className="w-full text-[11px] p-2 bg-white border border-slate-200 rounded-lg outline-none focus:border-red-500 transition font-medium"
                                         >
-                                          <option value="12_sessions">Абонемент на 12 занятий</option>
-                                          <option value="8_sessions">Абонемент на 8 занятий</option>
-                                          <option value="4_sessions">Абонемент на 4 занятия</option>
-                                          <option value="1_session">Разовое занятие / Тренировка</option>
+                                          <option value="12_sessions">
+                                            Абонемент на 12 занятий
+                                          </option>
+                                          <option value="8_sessions">
+                                            Абонемент на 8 занятий
+                                          </option>
+                                          <option value="4_sessions">
+                                            Абонемент на 4 занятия
+                                          </option>
+                                          <option value="1_session">
+                                            Разовое занятие / Тренировка
+                                          </option>
                                         </select>
                                       </div>
 
@@ -2822,7 +2947,9 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                         <input
                                           type="date"
                                           value={manualPaymentDate}
-                                          onChange={(e) => setManualPaymentDate(e.target.value)}
+                                          onChange={(e) =>
+                                            setManualPaymentDate(e.target.value)
+                                          }
                                           className="w-full text-[11px] p-2 bg-white border border-slate-200 rounded-lg outline-none focus:border-red-500 transition font-mono"
                                           required
                                         />
@@ -2836,7 +2963,11 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                         <input
                                           type="date"
                                           value={manualPaymentExpires}
-                                          onChange={(e) => setManualPaymentExpires(e.target.value)}
+                                          onChange={(e) =>
+                                            setManualPaymentExpires(
+                                              e.target.value,
+                                            )
+                                          }
                                           className="w-full text-[11px] p-2 bg-white border border-slate-200 rounded-lg outline-none focus:border-red-500 transition font-mono"
                                         />
                                       </div>
@@ -2849,7 +2980,11 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                         <input
                                           type="number"
                                           value={manualPaymentAmount}
-                                          onChange={(e) => setManualPaymentAmount(Number(e.target.value))}
+                                          onChange={(e) =>
+                                            setManualPaymentAmount(
+                                              Number(e.target.value),
+                                            )
+                                          }
                                           className="w-full text-[11px] p-2 bg-white border border-slate-200 rounded-lg outline-none focus:border-red-500 transition font-mono font-bold"
                                           placeholder="Напр. 4500"
                                           min="0"
@@ -2863,13 +2998,25 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                         </label>
                                         <select
                                           value={manualPaymentAccountId}
-                                          onChange={(e) => setManualPaymentAccountId(e.target.value)}
+                                          onChange={(e) =>
+                                            setManualPaymentAccountId(
+                                              e.target.value,
+                                            )
+                                          }
                                           className="w-full text-[11px] p-2 bg-white border border-slate-200 rounded-lg outline-none focus:border-red-500 transition font-bold text-slate-700"
                                           required
                                         >
-                                          <option value="" disabled>-- Выберите счет --</option>
-                                          {accounts.map(acc => (
-                                            <option key={acc.id} value={acc.id}>{acc.name} (текущий баланс: {acc.balance.toLocaleString('ru-RU')} ₽)</option>
+                                          <option value="" disabled>
+                                            -- Выберите счет --
+                                          </option>
+                                          {accounts.map((acc) => (
+                                            <option key={acc.id} value={acc.id}>
+                                              {acc.name} (текущий баланс:{" "}
+                                              {acc.balance.toLocaleString(
+                                                "ru-RU",
+                                              )}{" "}
+                                              ₽)
+                                            </option>
                                           ))}
                                         </select>
                                       </div>
@@ -2959,8 +3106,11 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                             }}
                             className="flex-1 py-1.5 bg-[#2AABEE] hover:bg-[#229ED9] text-white text-center rounded-lg font-bold text-[11px] flex items-center justify-center space-x-1 transition"
                           >
-                            <svg viewBox="0 0 24 24" className="w-4 h-4 fill-white flex-shrink-0">
-                               <path d="M12 0C5.372 0 0 5.373 0 12s5.372 12 12 12 12-5.373 12-12S18.628 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.223-.548.223l.188-2.85 5.18-4.686c.223-.195-.054-.304-.346-.11l-6.4 4.024-2.76-.86c-.6-.185-.61-.595.125-.89l10.82-4.172c.504-.197.942.115.807.94z"/>
+                            <svg
+                              viewBox="0 0 24 24"
+                              className="w-4 h-4 fill-white flex-shrink-0"
+                            >
+                              <path d="M12 0C5.372 0 0 5.373 0 12s5.372 12 12 12 12-5.373 12-12S18.628 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.223-.548.223l.188-2.85 5.18-4.686c.223-.195-.054-.304-.346-.11l-6.4 4.024-2.76-.86c-.6-.185-.61-.595.125-.89l10.82-4.172c.504-.197.942.115.807.94z" />
                             </svg>
                             <span>Telegram</span>
                           </button>
@@ -2971,11 +3121,22 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                             className="flex-1 py-1.5 bg-gradient-to-r from-[#2BC1FF] via-[#7551FF] to-[#9D38FF] hover:from-[#21A8E3] hover:via-[#613CDC] hover:to-[#8B23E9] text-white text-center rounded-lg font-bold text-[11px] flex items-center justify-center space-x-1.5 transition shadow-sm overflow-hidden relative group"
                           >
                             <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                            <svg viewBox="0 0 24 24" className="w-4 h-4 text-white flex-shrink-0 fill-current drop-shadow-sm relative z-10">
+                            <svg
+                              viewBox="0 0 24 24"
+                              className="w-4 h-4 text-white flex-shrink-0 fill-current drop-shadow-sm relative z-10"
+                            >
                               <path d="M12 2C6.477 2 2 6.477 2 12c0 1.905.534 3.684 1.464 5.203.208.337.262.748.118 1.112l-1.246 3.165a.6.6 0 00.776.776l3.164-1.246a1.18 1.18 0 011.112.118C8.91 21.936 10.418 22.5 12 22.5c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 15.5c-3.037 0-5.5-2.463-5.5-5.5S8.963 6.5 12 6.5s5.5 2.463 5.5 5.5-2.463 5.5-5.5 5.5z" />
-                                <circle cx="12" cy="12" r="6" fill="currentColor" fillOpacity="0.2" />
+                              <circle
+                                cx="12"
+                                cy="12"
+                                r="6"
+                                fill="currentColor"
+                                fillOpacity="0.2"
+                              />
                             </svg>
-                            <span className="relative z-10 tracking-wide">Чат MAX</span>
+                            <span className="relative z-10 tracking-wide">
+                              Чат MAX
+                            </span>
                           </button>
                         </div>
 
@@ -3202,7 +3363,8 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                   Запись на пробную тренировку
                 </h3>
                 <p className="text-[10px] text-gray-400 mt-0.5">
-                  Ученик: {bookingTrialLead.childName} {bookingTrialLead.childSurname}
+                  Ученик: {bookingTrialLead.childName}{" "}
+                  {bookingTrialLead.childSurname}
                 </p>
               </div>
               <button
@@ -3224,7 +3386,9 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                     required
                     className="w-full border-gray-200 rounded-xl px-4 py-3 bg-white text-sm focus:border-emerald-500 focus:ring-emerald-500 font-medium"
                   >
-                    <option value="" disabled>Выберите группу...</option>
+                    <option value="" disabled>
+                      Выберите группу...
+                    </option>
                     {groups.map((g) => (
                       <option key={g.id} value={g.id}>
                         {g.name} ({g.venue || "Без площадки"})
@@ -3242,12 +3406,16 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                     required
                     className="w-full border-gray-200 rounded-xl px-4 py-3 bg-white text-sm focus:border-emerald-500 focus:ring-emerald-500 font-medium"
                   >
-                    <option value="" disabled>Выберите тренера...</option>
-                    {coaches.filter(c => c.status === "active").map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
+                    <option value="" disabled>
+                      Выберите тренера...
+                    </option>
+                    {coaches
+                      .filter((c) => c.status === "active")
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
                   </select>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -4409,8 +4577,6 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
         message={`⚠️ ВНИМАНИЕ: Вы действительно хотите окончательно УДАЛИТЬ ученика "${deleteClientModal?.clientName || ""}" из базы данных школы? Это действие необратимо и удалит всю связанную историю, абонементы и платежи.`}
         confirmText="Удалить ученика"
       />
-
-
     </div>
   );
 };
