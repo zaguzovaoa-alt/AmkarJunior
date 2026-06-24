@@ -347,6 +347,8 @@ service cloud.firestore {
   );
 }
 
+import { TelegramReportScheduler } from './components/TelegramReportScheduler';
+
 function AuthGateway() {
   const { user, appUser, loading, logout } = useAuth();
   const { currentRole, setCurrentRole } = useCRM();
@@ -371,6 +373,7 @@ function AuthGateway() {
     <>
       <DashboardContainer />
       <NotificationListener />
+      <TelegramReportScheduler />
       {/* Global Logout Button */}
       <div className="fixed bottom-4 right-4 z-50 flex items-center gap-2">
         <button 

@@ -253,6 +253,14 @@ export interface FinancialPlan {
   categoryTargets?: Record<string, number>;
 }
 
+export interface ReportConfig {
+  enabled: boolean;
+  dayOfWeek: number; // 1-7 (1=Monday, 7=Sunday)
+  time: string; // "HH:MM"
+  targetChatId: string;
+  lastSent?: string; // Date string to track when it was last sent
+}
+
 export interface CRMConfig {
   acquiringFeePct: number;
   price12: number;
@@ -265,6 +273,11 @@ export interface CRMConfig {
   telegramBotToken?: string;
   telegramGroupChatId?: string;
   telegramAlerts?: Record<string, boolean>;
+  reports?: {
+    weekly: ReportConfig;
+    manager: ReportConfig;
+    salary: ReportConfig;
+  };
 }
 
 export interface ChatMessage {

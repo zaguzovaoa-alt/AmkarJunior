@@ -67,6 +67,13 @@ export const HQSettings: React.FC = () => {
     churnRisk: true,
     scheduleConflict: true
   });
+  
+  const defaultReportConfig = { enabled: false, dayOfWeek: 1, time: "10:00", targetChatId: "" };
+  const [telegramReports, setTelegramReports] = useState(crmConfig?.reports || {
+    weekly: { ...defaultReportConfig },
+    manager: { ...defaultReportConfig },
+    salary: { ...defaultReportConfig }
+  });
 
   React.useEffect(() => {
     if (crmConfig) {
@@ -75,14 +82,17 @@ export const HQSettings: React.FC = () => {
       if (crmConfig.telegramAlerts) {
         setTelegramAlerts(crmConfig.telegramAlerts);
       }
+      if (crmConfig.reports) {
+        setTelegramReports(crmConfig.reports);
+      }
       setReferralBonusAmount(crmConfig.referralBonusAmount || 500);
       setReferralBonusType(crmConfig.referralBonusType || 'rubles');
     }
   }, [crmConfig]);
 
   const handleSaveTelegram = () => {
-    updateCRMConfig({ telegramBotToken, telegramGroupChatId, telegramAlerts });
-    setSuccessMsg("Настройки Telegram алертов сохранены");
+    updateCRMConfig({ telegramBotToken, telegramGroupChatId, telegramAlerts, reports: telegramReports });
+    setSuccessMsg("Настройки Telegram сохранены");
     setTimeout(() => setSuccessMsg(null), 3000);
   };
 
@@ -585,6 +595,80 @@ export const HQSettings: React.FC = () => {
                       />
                     </label>
                   ))}
+                </div>
+
+                <div className="pt-4 border-t space-y-4">
+                  <h4 className="text-xs font-bold text-slate-800">Автоматические еженедельные отчеты</h4>
+                  {[
+                    { id: 'weekly', label: 'Недельный отчет (менеджер, тренеры, группы)' },
+                    { id: 'manager', label: 'Отчет менеджера (конверсия задач)' },
+                    { id: 'salary', label: 'Зарплаты тренеров и ассистентов' }
+                  ].map(report => {
+                    const rId = report.id as keyof typeof telegramReports;
+                    const rConfig = telegramReports[rId];
+                    return (
+                      <div key={rId} className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
+                        <label className="flex items-center space-x-3 cursor-pointer group">
+                          <div className={`w-5 h-5 rounded flex items-center justify-center border transition-colors ${
+                            rConfig.enabled ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white border-slate-300 group-hover:border-emerald-400'
+                          }`}>
+                            {rConfig.enabled && <Check className="w-3.5 h-3.5" />}
+                          </div>
+                          <span className="text-sm font-bold text-slate-700">{report.label}</span>
+                          <input 
+                            type="checkbox"
+                            className="hidden"
+                            checked={rConfig.enabled}
+                            onChange={(e) => {
+                              setTelegramReports(prev => ({ 
+                                ...prev, 
+                                [rId]: { ...prev[rId], enabled: e.target.checked }
+                              }));
+                            }}
+                          />
+                        </label>
+                        {rConfig.enabled && (
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 mb-1">День недели</label>
+                              <select 
+                                value={rConfig.dayOfWeek}
+                                onChange={(e) => setTelegramReports(prev => ({ ...prev, [rId]: { ...prev[rId], dayOfWeek: Number(e.target.value) } }))}
+                                className="w-full text-xs p-2 border rounded-xl outline-none"
+                              >
+                                <option value={1}>Понедельник</option>
+                                <option value={2}>Вторник</option>
+                                <option value={3}>Среда</option>
+                                <option value={4}>Четверг</option>
+                                <option value={5}>Пятница</option>
+                                <option value={6}>Суббота</option>
+                                <option value={7}>Воскресенье</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 mb-1">Время</label>
+                              <input 
+                                type="time"
+                                value={rConfig.time}
+                                onChange={(e) => setTelegramReports(prev => ({ ...prev, [rId]: { ...prev[rId], time: e.target.value } }))}
+                                className="w-full text-xs p-2 border rounded-xl outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 mb-1">ID чата (опционально)</label>
+                              <input 
+                                type="text"
+                                placeholder="Оставить пустым = общая группа"
+                                value={rConfig.targetChatId || ''}
+                                onChange={(e) => setTelegramReports(prev => ({ ...prev, [rId]: { ...prev[rId], targetChatId: e.target.value } }))}
+                                className="w-full text-xs p-2 border rounded-xl outline-none"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <div className="pt-2 border-t text-right">
