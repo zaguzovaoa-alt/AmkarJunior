@@ -1000,6 +1000,36 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                 ? "Пробная забронирована"
                                 : "Отработано"}
                           </span>
+                          {(lead.status === "trial_booked" ||
+                            lead.status === "trial_completed") &&
+                            lead.trialDate && (
+                              <div className="mt-1 text-[10px] text-slate-600 bg-slate-100 p-1 rounded-md">
+                                <span className="font-semibold block">
+                                  {lead.trialDate} в {lead.trialTime}
+                                </span>
+                                <span
+                                  className="block truncate max-w-[150px]"
+                                  title={
+                                    coaches.find(
+                                      (c) => c.id === lead.trialCoachId,
+                                    )?.name
+                                  }
+                                >
+                                  Тренер:{" "}
+                                  {coaches.find(
+                                    (c) => c.id === lead.trialCoachId,
+                                  )?.name || "Не указан"}
+                                </span>
+                                {lead.trainerFeedback && (
+                                  <span
+                                    className="block text-emerald-700 italic truncate max-w-[150px]"
+                                    title={lead.trainerFeedback}
+                                  >
+                                    Итог: {lead.trainerFeedback}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                         </td>
                         <td className="p-3 text-right flex items-center justify-end space-x-2">
                           <button
@@ -1748,9 +1778,15 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                 <div className="font-bold text-gray-900 text-[11px] truncate max-w-[100px]">
                                   {client.abonement === "none"
                                     ? "-"
-                                    : client.abonement === "basic"
-                                      ? "Базовый"
-                                      : "Стандарт"}
+                                    : client.abonement === "12_sessions"
+                                      ? "12 занятий"
+                                      : client.abonement === "8_sessions"
+                                        ? "8 занятий"
+                                        : client.abonement === "4_sessions"
+                                          ? "4 занятия"
+                                          : client.abonement === "1_session"
+                                            ? "Разовое"
+                                            : client.abonement}
                                 </div>
                                 {client.status === "paused" ? (
                                   <div className="text-[10px] text-amber-500 font-medium">
