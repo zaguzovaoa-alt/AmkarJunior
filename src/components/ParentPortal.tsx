@@ -131,6 +131,13 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
   const [uploadSuccessMessage, setUploadSuccessMessage] = useState<
     string | null
   >(null);
+  const [viewingDocData, setViewingDocData] = useState<{
+    name: string;
+    data: string;
+  } | null>(null);
+  const [docToDelete, setDocToDelete] = useState<
+    "medical" | "insurance" | null
+  >(null);
 
   const medicalInputRef = useRef<HTMLInputElement>(null);
   const insuranceInputRef = useRef<HTMLInputElement>(null);
@@ -393,19 +400,17 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
       alert("Невозможно открыть документ. Данные отсутствуют.");
       return;
     }
-    const newWindow = window.open();
-    if (newWindow) {
-      newWindow.document.write(
-        `<iframe src="${docInfo.data}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`,
-      );
-    } else {
-      alert("Разрешите всплывающие окна для просмотра документа.");
-    }
+    setViewingDocData(docInfo);
   };
 
   const handleDeleteDoc = (type: "medical" | "insurance") => {
-    if (window.confirm("Вы уверены, что хотите удалить этот документ?")) {
-      deleteDocument(myClient.id, type);
+    setDocToDelete(type);
+  };
+
+  const confirmDeleteDoc = () => {
+    if (docToDelete && myClient) {
+      deleteDocument(myClient.id, docToDelete);
+      setDocToDelete(null);
     }
   };
 
@@ -2353,6 +2358,103 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
           onClose={() => setIsPaymentModalOpen(false)}
           clientId={myClient.id}
         />
+      )}
+
+      {viewingDocData && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-4xl h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-4 border-b flex justify-between items-center bg-slate-50">
+              <h3 className="font-bold text-lg text-slate-800">
+                Просмотр документа: {viewingDocData.name}
+              </h3>
+              <button
+                onClick={() => setViewingDocData(null)}
+                className="p-2 hover:bg-slate-200 rounded-full transition text-slate-500 hover:text-slate-700 cursor-pointer"
+              >
+                <span className="sr-only">Закрыть</span>
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-4 bg-slate-100 flex items-center justify-center relative">
+              {viewingDocData.data.startsWith("data:image/") ? (
+                <img
+                  src={viewingDocData.data}
+                  alt={viewingDocData.name}
+                  className="max-w-full max-h-full object-contain shadow-sm rounded"
+                />
+              ) : viewingDocData.data.startsWith("data:application/pdf") ? (
+                <iframe
+                  src={viewingDocData.data}
+                  title={viewingDocData.name}
+                  className="w-full h-full bg-white rounded shadow-sm border-0"
+                />
+              ) : (
+                <div className="text-center">
+                  <div className="inline-block p-4 bg-white rounded-xl shadow mb-4">
+                    <FileText className="w-16 h-16 text-slate-400 mx-auto mb-2" />
+                    <div className="text-sm font-semibold text-slate-700">
+                      Невозможно отобразить предпросмотр
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      Документ загружен, но его формат не поддерживается для
+                      предпросмотра браузером.
+                    </div>
+                  </div>
+                  <br />
+                  <a
+                    href={viewingDocData.data}
+                    download={viewingDocData.name}
+                    className="inline-flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-lg transition shadow"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Скачать документ</span>
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {docToDelete && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center space-x-3 mb-4 text-red-600">
+              <AlertCircle className="w-8 h-8 flex-shrink-0" />
+              <h3 className="font-bold text-lg">Удаление документа</h3>
+            </div>
+            <p className="text-sm text-slate-600 mb-6 font-medium">
+              Вы уверены, что хотите удалить этот документ? Отменить это
+              действие будет невозможно.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setDocToDelete(null)}
+                className="px-4 py-2.5 font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={confirmDeleteDoc}
+                className="px-4 py-2.5 font-bold text-white bg-red-500 hover:bg-red-600 shadow rounded-xl transition cursor-pointer"
+              >
+                Удалить
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
