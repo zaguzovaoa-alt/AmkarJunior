@@ -124,6 +124,7 @@ interface CRMContextType {
     type: "medical" | "insurance",
     fileName: string,
   ) => void;
+  deleteDocument: (clientId: string, type: "medical" | "insurance") => void;
   markAttendance: (
     groupId: string,
     date: string,
@@ -1222,6 +1223,32 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     // Background sync
     updateDoc(doc(db, "clients", clientId), updateFields).catch((err) => {
       console.warn(`Failed to upload document for client ${clientId}:`, err);
+    });
+  };
+
+  const deleteDocument = async (
+    clientId: string,
+    type: "medical" | "insurance",
+  ) => {
+    const client = clients.find((c) => c.id === clientId);
+    if (!client) return;
+
+    const notesUpdate = `${client.notes}\n[Документы]: Удален файл (${type === "medical" ? "Справка" : "Страховка"}).`;
+    const updateFields: any = {
+      notes: notesUpdate,
+    };
+    if (type === "medical") {
+      updateFields.medicalCertificateUrl = null;
+    } else {
+      updateFields.insuranceUrl = null;
+    }
+
+    setClients((prev) =>
+      prev.map((c) => (c.id === clientId ? { ...c, ...updateFields } : c)),
+    );
+
+    updateDoc(doc(db, "clients", clientId), updateFields).catch((err) => {
+      console.warn(`Failed to delete document for client ${clientId}:`, err);
     });
   };
 
@@ -2504,6 +2531,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         bookTrial,
         completeTrialAndMarkAttendance,
         uploadDocument,
+        deleteDocument,
         markAttendance,
         ratePlayer,
         completeTask,

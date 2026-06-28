@@ -26,7 +26,7 @@ import {
   ShoppingBag,
   Tag,
   FileText,
-  FileCheck
+  FileCheck,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import amkarUniform from "../assets/images/amkar_uniform.jpg";
@@ -50,6 +50,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
     updateChatMessage,
     deleteChatMessage,
     uploadDocument,
+    deleteDocument,
     groups,
     userProfile,
     tasks,
@@ -63,45 +64,52 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
     submitHomework,
     crmConfig,
   } = useCRM();
-  
-  const [cart, setCart] = useState<{product: Product, quantity: number}[]>([]);
+
+  const [cart, setCart] = useState<{ product: Product; quantity: number }[]>(
+    [],
+  );
   const [storeStatus, setStoreStatus] = useState<string | null>(null);
 
   const handleAddToCart = (product: Product) => {
-    setCart(prev => {
-      const existing = prev.find(i => i.product.id === product.id);
+    setCart((prev) => {
+      const existing = prev.find((i) => i.product.id === product.id);
       if (existing) {
-        return prev.map(i => i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i);
+        return prev.map((i) =>
+          i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i,
+        );
       }
       return [...prev, { product, quantity: 1 }];
     });
   };
 
   const handleRemoveFromCart = (productId: string) => {
-    setCart(prev => prev.filter(i => i.product.id !== productId));
+    setCart((prev) => prev.filter((i) => i.product.id !== productId));
   };
 
   const handleCheckout = () => {
     if (cart.length === 0 || !myClient) return;
-    const items = cart.map(item => ({
+    const items = cart.map((item) => ({
       productId: item.product.id,
       name: item.product.name,
       quantity: item.quantity,
-      price: item.product.price
+      price: item.product.price,
     }));
-    const totalAmount = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+    const totalAmount = cart.reduce(
+      (sum, item) => sum + item.product.price * item.quantity,
+      0,
+    );
     createOrder({
       clientId: myClient.id,
       clientName: `${myClient.childSurname} ${myClient.childName}`,
       items,
       totalAmount,
-      status: 'new'
+      status: "new",
     });
     setCart([]);
     setStoreStatus("Заказ успешно оформлен! Ожидайте уведомления.");
     setTimeout(() => setStoreStatus(null), 3000);
   };
-  
+
   const handleCopyReferral = () => {
     if (myClient) {
       const code = myClient.referralCode || myClient.id;
@@ -133,7 +141,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
       (userProfile?.phone && c.parentPhone === userProfile.phone) ||
       (userProfile?.email &&
         c.parentEmail?.toLowerCase() === userProfile.email.toLowerCase()) ||
-      (userProfile?.name && c.parentName === userProfile.name)
+      (userProfile?.name && c.parentName === userProfile.name),
   );
 
   // Determine the active child to display
@@ -347,17 +355,58 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
     if (!file) return;
 
     setUploadingDoc(type);
-    setTimeout(() => {
-      uploadDocument(myClient.id, type, file.name);
-      setUploadingDoc(null);
-      setUploadSuccessMessage(
-        type === "medical"
-          ? `Медицинская справка "${file.name}" успешно загружена!`
-          : `Страховой полис "${file.name}" успешно загружен!`,
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64Data = event.target?.result as string;
+      const filePayload = JSON.stringify({ name: file.name, data: base64Data });
+
+      setTimeout(() => {
+        uploadDocument(myClient.id, type, filePayload);
+        setUploadingDoc(null);
+        setUploadSuccessMessage(
+          type === "medical"
+            ? `Медицинская справка "${file.name}" успешно загружена!`
+            : `Страховой полис "${file.name}" успешно загружен!`,
+        );
+        setTimeout(() => setUploadSuccessMessage(null), 4500);
+        e.target.value = ""; // Reset input to allow re-upload of same file
+      }, 1200);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const getDocInfo = (payload: string | null) => {
+    if (!payload) return null;
+    try {
+      const parsed = JSON.parse(payload);
+      if (parsed.name) return parsed;
+    } catch {
+      return { name: payload, data: null };
+    }
+    return { name: payload, data: null };
+  };
+
+  const handleViewDoc = (payload: string | null) => {
+    const docInfo = getDocInfo(payload);
+    if (!docInfo || !docInfo.data) {
+      alert("Невозможно открыть документ. Данные отсутствуют.");
+      return;
+    }
+    const newWindow = window.open();
+    if (newWindow) {
+      newWindow.document.write(
+        `<iframe src="${docInfo.data}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`,
       );
-      setTimeout(() => setUploadSuccessMessage(null), 4500);
-      e.target.value = ""; // Reset input to allow re-upload of same file
-    }, 1200);
+    } else {
+      alert("Разрешите всплывающие окна для просмотра документа.");
+    }
+  };
+
+  const handleDeleteDoc = (type: "medical" | "insurance") => {
+    if (window.confirm("Вы уверены, что хотите удалить этот документ?")) {
+      deleteDocument(myClient.id, type);
+    }
   };
 
   // Knowledge base mock articles matching Image 1
@@ -458,7 +507,8 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                 >
                   {myChildren.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.childSurname} {c.childName} • {c.groupName || "Без группы"}
+                      {c.childSurname} {c.childName} •{" "}
+                      {c.groupName || "Без группы"}
                     </option>
                   ))}
                 </select>
@@ -474,7 +524,13 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
               )}
               {myChildren.length > 1 && (
                 <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
-                  <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                  <svg
+                    className="fill-current h-4 w-4"
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 20 20"
+                  >
+                    <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+                  </svg>
                 </div>
               )}
             </div>
@@ -873,29 +929,60 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                         </div>
 
                         <div className="flex items-center justify-between pt-1.5 border-t border-gray-200">
-                          <span className="text-[10px] text-gray-500 font-medium truncate max-w-[120px]">
+                          <span
+                            className="text-[10px] text-gray-500 font-medium truncate max-w-[120px]"
+                            title={
+                              getDocInfo(myClient.medicalCertificateUrl)
+                                ?.name || "Не загружен"
+                            }
+                          >
                             {uploadingDoc === "medical"
                               ? "Загрузка..."
-                              : myClient.medicalCertificateUrl || "Не загружен"}
+                              : getDocInfo(myClient.medicalCertificateUrl)
+                                  ?.name || "Не загружен"}
                           </span>
-                          <button
-                            onClick={() => medicalInputRef.current?.click()}
-                            disabled={uploadingDoc === "medical"}
-                            className="p-1.5 bg-emerald-500 hover:bg-emerald-650 text-white rounded text-[10px] font-bold transition flex items-center space-x-1 disabled:opacity-50 cursor-pointer"
-                          >
-                            {uploadingDoc === "medical" ? (
-                              <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                            ) : (
-                              <Upload className="w-3 h-3" />
+                          <div className="flex space-x-1.5">
+                            {myClient.medicalCertificateUrl && (
+                              <>
+                                <button
+                                  onClick={() =>
+                                    handleViewDoc(
+                                      myClient.medicalCertificateUrl,
+                                    )
+                                  }
+                                  className="p-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-[10px] font-bold transition flex items-center space-x-1 cursor-pointer"
+                                  title="Просмотреть"
+                                >
+                                  <Eye className="w-3 h-3" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteDoc("medical")}
+                                  className="p-1.5 bg-red-100 hover:bg-red-200 text-red-600 rounded text-[10px] font-bold transition flex items-center space-x-1 cursor-pointer"
+                                  title="Удалить"
+                                >
+                                  <Trash className="w-3 h-3" />
+                                </button>
+                              </>
                             )}
-                            <span>
-                              {uploadingDoc === "medical"
-                                ? "Загрузка..."
-                                : myClient.medicalCertificateUrl
-                                  ? "Заменить"
-                                  : "Загрузить"}
-                            </span>
-                          </button>
+                            <button
+                              onClick={() => medicalInputRef.current?.click()}
+                              disabled={uploadingDoc === "medical"}
+                              className="p-1.5 bg-emerald-500 hover:bg-emerald-650 text-white rounded text-[10px] font-bold transition flex items-center space-x-1 disabled:opacity-50 cursor-pointer"
+                            >
+                              {uploadingDoc === "medical" ? (
+                                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                              ) : (
+                                <Upload className="w-3 h-3" />
+                              )}
+                              <span>
+                                {uploadingDoc === "medical"
+                                  ? "Загрузка..."
+                                  : myClient.medicalCertificateUrl
+                                    ? "Заменить"
+                                    : "Загрузить"}
+                              </span>
+                            </button>
+                          </div>
                         </div>
                       </div>
 
@@ -928,29 +1015,58 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                         </div>
 
                         <div className="flex items-center justify-between pt-1.5 border-t border-gray-200">
-                          <span className="text-[10px] text-gray-500 font-medium truncate max-w-[120px]">
+                          <span
+                            className="text-[10px] text-gray-500 font-medium truncate max-w-[120px]"
+                            title={
+                              getDocInfo(myClient.insuranceUrl)?.name ||
+                              "Не загружен"
+                            }
+                          >
                             {uploadingDoc === "insurance"
                               ? "Загрузка..."
-                              : myClient.insuranceUrl || "Не загружен"}
+                              : getDocInfo(myClient.insuranceUrl)?.name ||
+                                "Не загружен"}
                           </span>
-                          <button
-                            onClick={() => insuranceInputRef.current?.click()}
-                            disabled={uploadingDoc === "insurance"}
-                            className="p-1.5 bg-emerald-500 hover:bg-emerald-650 text-white rounded text-[10px] font-bold transition flex items-center space-x-1 disabled:opacity-50 cursor-pointer"
-                          >
-                            {uploadingDoc === "insurance" ? (
-                              <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                            ) : (
-                              <Upload className="w-3 h-3" />
+                          <div className="flex space-x-1.5">
+                            {myClient.insuranceUrl && (
+                              <>
+                                <button
+                                  onClick={() =>
+                                    handleViewDoc(myClient.insuranceUrl)
+                                  }
+                                  className="p-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-[10px] font-bold transition flex items-center space-x-1 cursor-pointer"
+                                  title="Просмотреть"
+                                >
+                                  <Eye className="w-3 h-3" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteDoc("insurance")}
+                                  className="p-1.5 bg-red-100 hover:bg-red-200 text-red-600 rounded text-[10px] font-bold transition flex items-center space-x-1 cursor-pointer"
+                                  title="Удалить"
+                                >
+                                  <Trash className="w-3 h-3" />
+                                </button>
+                              </>
                             )}
-                            <span>
-                              {uploadingDoc === "insurance"
-                                ? "Загрузка..."
-                                : myClient.insuranceUrl
-                                  ? "Заменить"
-                                  : "Загрузить"}
-                            </span>
-                          </button>
+                            <button
+                              onClick={() => insuranceInputRef.current?.click()}
+                              disabled={uploadingDoc === "insurance"}
+                              className="p-1.5 bg-emerald-500 hover:bg-emerald-650 text-white rounded text-[10px] font-bold transition flex items-center space-x-1 disabled:opacity-50 cursor-pointer"
+                            >
+                              {uploadingDoc === "insurance" ? (
+                                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                              ) : (
+                                <Upload className="w-3 h-3" />
+                              )}
+                              <span>
+                                {uploadingDoc === "insurance"
+                                  ? "Загрузка..."
+                                  : myClient.insuranceUrl
+                                    ? "Заменить"
+                                    : "Загрузить"}
+                              </span>
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1178,17 +1294,29 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                     </div>
                     <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
                       <div className="flex justify-between items-center mb-2">
-                         <span className="text-xs font-bold text-orange-800 uppercase tracking-wider">Ваши бонусы</span>
-                         <span className="text-xl font-black text-orange-600">{myClient.bonusBalance || 0} ₽</span>
+                        <span className="text-xs font-bold text-orange-800 uppercase tracking-wider">
+                          Ваши бонусы
+                        </span>
+                        <span className="text-xl font-black text-orange-600">
+                          {myClient.bonusBalance || 0} ₽
+                        </span>
                       </div>
                       <p className="text-[11px] text-orange-700 leading-relaxed mb-3">
-                        Отправьте ссылку другу. Если он запишется и купит абонемент, вы получите <strong className="font-bold">{crmConfig?.referralBonusAmount || 500} {crmConfig?.referralBonusType === 'rubles' ? 'рублей' : 'баллов'}</strong> на баланс!
+                        Отправьте ссылку другу. Если он запишется и купит
+                        абонемент, вы получите{" "}
+                        <strong className="font-bold">
+                          {crmConfig?.referralBonusAmount || 500}{" "}
+                          {crmConfig?.referralBonusType === "rubles"
+                            ? "рублей"
+                            : "баллов"}
+                        </strong>{" "}
+                        на баланс!
                       </p>
-                      <button 
+                      <button
                         onClick={handleCopyReferral}
                         className="w-full py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold uppercase transition"
                       >
-                         Копировать ссылку
+                        Копировать ссылку
                       </button>
                     </div>
                   </div>
@@ -1938,10 +2066,15 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                 <div className="mt-4 sm:mt-0 flex items-center space-x-3">
                   <div className="bg-slate-100 px-4 py-2 rounded-xl flex items-center font-bold text-xs text-slate-700">
                     <ShoppingCart className="w-4 h-4 mr-2" />
-                    {cart.reduce((s, i) => s + i.quantity, 0)} шт / {cart.reduce((s, i) => s + (i.product.price * i.quantity), 0)} ₽
+                    {cart.reduce((s, i) => s + i.quantity, 0)} шт /{" "}
+                    {cart.reduce((s, i) => s + i.product.price * i.quantity, 0)}{" "}
+                    ₽
                   </div>
                   {cart.length > 0 && (
-                    <button onClick={handleCheckout} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-wider transition shadow-sm">
+                    <button
+                      onClick={handleCheckout}
+                      className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-wider transition shadow-sm"
+                    >
                       Оформить
                     </button>
                   )}
@@ -1956,37 +2089,66 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {products.length === 0 ? (
-                   <div className="col-span-full py-12 text-center text-gray-400 bg-white rounded-2xl border border-gray-100 shadow-sm">
-                     Каталог товаров пока пуст. Администрация скоро добавит новые позиции!
-                   </div>
+                  <div className="col-span-full py-12 text-center text-gray-400 bg-white rounded-2xl border border-gray-100 shadow-sm">
+                    Каталог товаров пока пуст. Администрация скоро добавит новые
+                    позиции!
+                  </div>
                 ) : (
-                  products.map(p => {
-                    const inCart = cart.find(i => i.product.id === p.id);
+                  products.map((p) => {
+                    const inCart = cart.find((i) => i.product.id === p.id);
                     return (
-                      <div key={p.id} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex flex-col justify-between hover:shadow-md transition">
-                         {p.photoUrl ? (
-                           <img src={p.photoUrl} alt={p.name} className="w-full h-40 object-cover rounded-xl mb-3" />
-                         ) : (
-                           <div className="w-full h-40 bg-slate-100 rounded-xl mb-3 flex items-center justify-center">
-                             <Tag className="w-8 h-8 text-gray-300" />
-                           </div>
-                         )}
-                         <div>
-                            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">{p.category}</div>
-                            <h3 className="font-bold text-slate-800 text-sm leading-tight mb-2">{p.name}</h3>
-                            <div className="text-lg font-black text-slate-900 mb-3">{p.price.toLocaleString()} ₽</div>
-                         </div>
-                         {inCart ? (
-                            <div className="flex items-center justify-between bg-slate-50 border p-1 rounded-xl">
-                              <button onClick={() => handleRemoveFromCart(p.id)} className="w-8 h-8 bg-white border rounded shadow-sm text-red-500 font-bold hover:bg-red-50">-</button>
-                              <span className="font-bold text-sm px-2 text-slate-800">{inCart.quantity} шт</span>
-                              <button onClick={() => handleAddToCart(p)} className="w-8 h-8 bg-white border rounded shadow-sm text-emerald-500 font-bold hover:bg-emerald-50">+</button>
-                            </div>
-                         ) : (
-                            <button onClick={() => handleAddToCart(p)} className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold uppercase transition">
-                              В корзину
+                      <div
+                        key={p.id}
+                        className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex flex-col justify-between hover:shadow-md transition"
+                      >
+                        {p.photoUrl ? (
+                          <img
+                            src={p.photoUrl}
+                            alt={p.name}
+                            className="w-full h-40 object-cover rounded-xl mb-3"
+                          />
+                        ) : (
+                          <div className="w-full h-40 bg-slate-100 rounded-xl mb-3 flex items-center justify-center">
+                            <Tag className="w-8 h-8 text-gray-300" />
+                          </div>
+                        )}
+                        <div>
+                          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
+                            {p.category}
+                          </div>
+                          <h3 className="font-bold text-slate-800 text-sm leading-tight mb-2">
+                            {p.name}
+                          </h3>
+                          <div className="text-lg font-black text-slate-900 mb-3">
+                            {p.price.toLocaleString()} ₽
+                          </div>
+                        </div>
+                        {inCart ? (
+                          <div className="flex items-center justify-between bg-slate-50 border p-1 rounded-xl">
+                            <button
+                              onClick={() => handleRemoveFromCart(p.id)}
+                              className="w-8 h-8 bg-white border rounded shadow-sm text-red-500 font-bold hover:bg-red-50"
+                            >
+                              -
                             </button>
-                         )}
+                            <span className="font-bold text-sm px-2 text-slate-800">
+                              {inCart.quantity} шт
+                            </span>
+                            <button
+                              onClick={() => handleAddToCart(p)}
+                              className="w-8 h-8 bg-white border rounded shadow-sm text-emerald-500 font-bold hover:bg-emerald-50"
+                            >
+                              +
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleAddToCart(p)}
+                            className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold uppercase transition"
+                          >
+                            В корзину
+                          </button>
+                        )}
                       </div>
                     );
                   })
@@ -2009,22 +2171,42 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                   Мои домашние задания
                 </h2>
                 <p className="text-xs text-gray-500">
-                  Выполняйте задания тренера дома для улучшения индивидуальных навыков
+                  Выполняйте задания тренера дома для улучшения индивидуальных
+                  навыков
                 </p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 {homeworks.filter(hw => hw.groupId === myClient.groupName || !myClient.groupName).length === 0 ? (
-                   <div className="col-span-full py-12 text-center text-gray-400 bg-white rounded-2xl border border-gray-100 shadow-sm">
-                     У вашего ребенка пока нет активных домашних заданий. Тренер добавит их по мере необходимости.
-                   </div>
-                 ) : (
-                   homeworks.filter(hw => hw.groupId === myClient.groupName || hw.groupName === myClient.groupName || !hw.groupId).map(hw => {
-                     const isDone = homeworkSubmissions.some(s => s.homeworkId === hw.id && s.clientId === myClient.id);
-                     return (
-                       <div key={hw.id} className={`p-5 rounded-2xl border transition shadow-sm ${isDone ? 'bg-emerald-50 border-emerald-100' : 'bg-white border-gray-200'}`}>
-                         <div className="flex justify-between items-start mb-3">
-                            <h3 className="font-bold text-slate-800 text-sm whitespace-pre-wrap">{hw.title}</h3>
+                {homeworks.filter(
+                  (hw) =>
+                    hw.groupId === myClient.groupName || !myClient.groupName,
+                ).length === 0 ? (
+                  <div className="col-span-full py-12 text-center text-gray-400 bg-white rounded-2xl border border-gray-100 shadow-sm">
+                    У вашего ребенка пока нет активных домашних заданий. Тренер
+                    добавит их по мере необходимости.
+                  </div>
+                ) : (
+                  homeworks
+                    .filter(
+                      (hw) =>
+                        hw.groupId === myClient.groupName ||
+                        hw.groupName === myClient.groupName ||
+                        !hw.groupId,
+                    )
+                    .map((hw) => {
+                      const isDone = homeworkSubmissions.some(
+                        (s) =>
+                          s.homeworkId === hw.id && s.clientId === myClient.id,
+                      );
+                      return (
+                        <div
+                          key={hw.id}
+                          className={`p-5 rounded-2xl border transition shadow-sm ${isDone ? "bg-emerald-50 border-emerald-100" : "bg-white border-gray-200"}`}
+                        >
+                          <div className="flex justify-between items-start mb-3">
+                            <h3 className="font-bold text-slate-800 text-sm whitespace-pre-wrap">
+                              {hw.title}
+                            </h3>
                             {isDone ? (
                               <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-[10px] font-bold uppercase tracking-wider flex items-center shrink-0 ml-2">
                                 <Check className="w-3 h-3 mr-1" /> Выполнено
@@ -2034,31 +2216,49 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                                 Ожидает
                               </span>
                             )}
-                         </div>
-                         <p className="text-xs text-gray-600 mb-4 whitespace-pre-wrap leading-relaxed">{hw.description}</p>
-                         
-                         {hw.videoUrl && (
-                           <div className="mb-4">
-                             <a href={hw.videoUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center">
-                               Смотреть обучающее видео <ArrowRight className="w-3 h-3 ml-1" />
-                             </a>
-                           </div>
-                         )}
-                         <div className="flex justify-between items-end border-t border-slate-100 pt-4 mt-2">
+                          </div>
+                          <p className="text-xs text-gray-600 mb-4 whitespace-pre-wrap leading-relaxed">
+                            {hw.description}
+                          </p>
+
+                          {hw.videoUrl && (
+                            <div className="mb-4">
+                              <a
+                                href={hw.videoUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center"
+                              >
+                                Смотреть обучающее видео{" "}
+                                <ArrowRight className="w-3 h-3 ml-1" />
+                              </a>
+                            </div>
+                          )}
+                          <div className="flex justify-between items-end border-t border-slate-100 pt-4 mt-2">
                             <div className="text-[10px] text-gray-400 font-medium">
-                              Срок сдачи: {hw.dueDate ? new Date(hw.dueDate).toLocaleDateString('ru-RU') : 'Не указан'}
+                              Срок сдачи:{" "}
+                              {hw.dueDate
+                                ? new Date(hw.dueDate).toLocaleDateString(
+                                    "ru-RU",
+                                  )
+                                : "Не указан"}
                             </div>
                             {!isDone && (
-                              <button onClick={() => submitHomework(hw.id, myClient.id)} className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center transition shadow-sm">
+                              <button
+                                onClick={() =>
+                                  submitHomework(hw.id, myClient.id)
+                                }
+                                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center transition shadow-sm"
+                              >
                                 <FileCheck className="w-4 h-4 mr-2" />
                                 Отметить выполненным
                               </button>
                             )}
-                         </div>
-                       </div>
-                     );
-                   })
-                 )}
+                          </div>
+                        </div>
+                      );
+                    })
+                )}
               </div>
             </motion.div>
           )}
@@ -2127,8 +2327,11 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                     className="py-1.5 px-3 bg-[#2AABEE] hover:bg-[#229ED9] text-white font-bold rounded-lg text-xs transition flex items-center justify-center space-x-2"
                   >
                     {!copiedLink && (
-                      <svg viewBox="0 0 24 24" className="w-4 h-4 fill-white flex-shrink-0">
-                         <path d="M12 0C5.372 0 0 5.373 0 12s5.372 12 12 12 12-5.373 12-12S18.628 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.223-.548.223l.188-2.85 5.18-4.686c.223-.195-.054-.304-.346-.11l-6.4 4.024-2.76-.86c-.6-.185-.61-.595.125-.89l10.82-4.172c.504-.197.942.115.807.94z"/>
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="w-4 h-4 fill-white flex-shrink-0"
+                      >
+                        <path d="M12 0C5.372 0 0 5.373 0 12s5.372 12 12 12 12-5.373 12-12S18.628 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.223-.548.223l.188-2.85 5.18-4.686c.223-.195-.054-.304-.346-.11l-6.4 4.024-2.76-.86c-.6-.185-.61-.595.125-.89l10.82-4.172c.504-.197.942.115.807.94z" />
                       </svg>
                     )}
                     <span>
