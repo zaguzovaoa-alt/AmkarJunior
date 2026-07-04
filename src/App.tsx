@@ -479,8 +479,8 @@ service cloud.firestore {
         </div>
 
         {/* CRM Role-Specific Content Area */}
-        <div className="flex-1 overflow-y-auto flex flex-col">
-          <div className="flex-1">{renderRoleComponent()}</div>
+        <div className="flex-1 flex flex-col min-h-0 overflow-y-auto relative">
+          <div className="flex-1 flex flex-col min-h-0">{renderRoleComponent()}</div>
 
           {/* Global Footer */}
           <footer className="mt-auto py-6 border-t border-gray-200 bg-white">

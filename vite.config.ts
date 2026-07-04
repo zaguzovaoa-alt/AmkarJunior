@@ -14,7 +14,8 @@ export default defineConfig(() => {
         includeAssets: ['favicon.ico', 'favicon.svg', 'apple-touch-icon.png'],
         manifest: false, // Using the manual manifest in public folder
         workbox: {
-          globPatterns: ['**/*.{js,css,html,ico,png,svg}']
+          globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+          maximumFileSizeToCacheInBytes: 5000000
         }
       })
     ],

@@ -437,7 +437,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
   });
 
   return (
-    <div className="flex-1 overflow-y-auto bg-slate-50 text-gray-800 min-h-screen">
+    <div className="flex-1 overflow-y-auto bg-slate-50 text-gray-800 ">
       {/* Header element */}
       <div className="p-6 bg-white border-b border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

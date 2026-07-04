@@ -1294,7 +1294,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-slate-50 text-gray-800 min-h-screen">
+    <div className="flex-1 overflow-y-auto bg-slate-50 text-gray-800 ">
       {/* Tab Header Navigation Panel */}
       <div className="bg-white border-b border-gray-150 px-4 md:px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 sticky top-0 z-10 shadow-sm w-full">
         <div className="flex items-center space-x-3 text-left">

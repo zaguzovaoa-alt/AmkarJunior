@@ -467,7 +467,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-slate-50 text-gray-800 min-h-screen relative">
+    <div className="flex-1 overflow-y-auto bg-slate-50 text-gray-800  relative">
       <AnimatePresence>
         {uploadSuccessMessage && (
           <motion.div

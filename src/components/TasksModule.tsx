@@ -59,7 +59,7 @@ export const TasksModule: React.FC = () => {
   };
 
   return (
-    <div className="flex bg-slate-50 min-h-screen text-slate-800 relative overflow-hidden h-[100vh]">
+    <div className="flex flex-col flex-1 bg-slate-50 text-slate-800 relative overflow-hidden min-h-[calc(100vh-160px)] h-full">
       {/* Main Board Content */}
       <div className={`flex-1 flex flex-col h-full transition-all duration-300 ${selectedTask ? 'mr-0 lg:mr-96' : ''}`}>
         
@@ -101,10 +101,10 @@ export const TasksModule: React.FC = () => {
             </button>
             <button 
               onClick={() => setIsAddingTask(true)}
-              className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition shrink-0"
+              className="bg-slate-900 hover:bg-slate-800 text-white px-3 sm:px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition shrink-0"
             >
-              <Plus className="w-4 h-4" />
-              Новая задача
+              <Plus className="w-4 h-4 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Новая задача</span>
             </button>
           </div>
         </div>
@@ -115,7 +115,7 @@ export const TasksModule: React.FC = () => {
             {columns.map(col => {
               const colTasks = filteredTasks.filter(t => t.status === col.id);
               return (
-                <div key={col.id} className="w-72 flex flex-col h-full bg-slate-100/50 rounded-2xl border border-slate-100/80">
+                <div key={col.id} className="w-72 sm:w-80 flex flex-col h-full bg-slate-100/50 rounded-2xl border border-slate-100/80 shrink-0">
                   <div className="p-4 flex items-center justify-between shrink-0">
                     <div className="flex items-center gap-2">
                       <h3 className="font-bold text-sm text-slate-700">{col.title}</h3>

@@ -89,6 +89,7 @@ export const FinanceModule: React.FC = () => {
     | "salaries"
     | "debts"
     | "counterparties"
+    | "client_income"
   >("dashboard");
 
   const [salaryTab, setSalaryTab] = useState<"staff" | "transactions">("staff");
@@ -506,7 +507,7 @@ export const FinanceModule: React.FC = () => {
   }, [finances, dashStartDate, dashEndDate, accounts]);
 
   return (
-    <div className="flex-1 overflow-y-auto bg-slate-50 text-gray-800 min-h-screen relative">
+    <div className="flex-1 overflow-y-auto bg-slate-50 text-gray-800  relative">
       {notification && (
         <div className="fixed bottom-4 right-4 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-5 z-50">
           <CheckSquare className="w-5 h-5 text-emerald-400" />
@@ -583,6 +584,12 @@ export const FinanceModule: React.FC = () => {
               className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${activeTab === "debts" ? "bg-white shadow-sm text-emerald-600" : "text-gray-500 hover:text-gray-700"}`}
             >
               Долги
+            </button>
+            <button
+              onClick={() => setActiveTab("client_income")}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${activeTab === "client_income" ? "bg-white shadow-sm text-emerald-600" : "text-gray-500 hover:text-gray-700"}`}
+            >
+              Доходы от клиентов
             </button>
           </div>
         </div>
@@ -3679,6 +3686,53 @@ export const FinanceModule: React.FC = () => {
             </div>
           </div>
         )}
+        {activeTab === "client_income" && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 max-w-4xl mx-auto space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            <h2 className="text-lg font-bold mb-6 border-b pb-4 text-slate-800">
+              Доходы от клиентов
+            </h2>
+            <div className="space-y-4">
+              {clients.map((client) => {
+                const paidPayments = client.payments?.filter(p => p.status === "Оплачено") || [];
+                if (paidPayments.length === 0) return null;
+
+                const totalIncome = paidPayments.reduce((sum, p) => sum + p.amount, 0);
+
+                return (
+                  <div key={client.id} className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-sm">
+                    <div className="flex justify-between items-center mb-3">
+                      <h3 className="font-bold text-slate-800">{client.name}</h3>
+                      <div className="font-black text-emerald-600 bg-emerald-100 px-3 py-1 rounded-full text-sm">
+                        +{totalIncome.toLocaleString()} ₽
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-12 gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 border-b border-slate-200 pb-2">
+                        <div className="col-span-3">Дата</div>
+                        <div className="col-span-6">Основание</div>
+                        <div className="col-span-3 text-right">Сумма</div>
+                      </div>
+                      {paidPayments.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((payment) => (
+                        <div key={payment.id} className="grid grid-cols-12 gap-2 text-sm text-slate-700 items-center py-1">
+                          <div className="col-span-3 font-mono text-xs">{new Date(payment.date).toLocaleDateString("ru-RU")}</div>
+                          <div className="col-span-6 truncate">{payment.description}</div>
+                          <div className="col-span-3 text-right font-medium text-emerald-600">+{payment.amount.toLocaleString()} ₽</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+              {clients.every(c => (c.payments?.filter(p => p.status === "Оплачено") || []).length === 0) && (
+                <div className="text-center py-10 text-slate-500 text-sm">
+                  Нет данных об оплатах от клиентов.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
       </div>
 
       {/* Edit Account Modal */}

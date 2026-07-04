@@ -841,7 +841,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
   ).length;
 
   return (
-    <div className="flex-1 overflow-y-auto bg-slate-50 text-gray-800 min-h-screen">
+    <div className="flex-1 overflow-y-auto bg-slate-50 text-gray-800 ">
       {/* Dynamic Header bar */}
       <div className="p-6 bg-white border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
