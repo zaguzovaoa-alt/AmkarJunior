@@ -33,6 +33,7 @@ import {
   StoreOrder,
   Homework,
   HomeworkSubmission,
+  Counterparty,
 } from "../types";
 
 // Types for User Profile
@@ -55,6 +56,10 @@ interface CRMContextType {
   finances: FinanceRecord[];
   financeCategories: FinanceCategory[];
   financialPlans: FinancialPlan[];
+  counterparties: Counterparty[];
+  addCounterparty: (cp: Omit<Counterparty, "id">) => Promise<void>;
+  updateCounterparty: (id: string, updates: Partial<Counterparty>) => Promise<void>;
+  deleteCounterparty: (id: string) => Promise<void>;
   accounts: Account[];
   addAccount: (acc: Omit<Account, "id">) => Promise<void>;
   updateAccount: (
@@ -227,6 +232,8 @@ interface CRMContextType {
     telegram?: string,
     avatarUrl?: string,
     initialFeedback?: Coach["feedback"],
+    paymentType?: "fixed" | "per_session",
+    rate?: number
   ) => Promise<void>;
   deleteCoach: (id: string) => Promise<void>;
   assignCoachToGroup: (
@@ -361,6 +368,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     const cached = localStorage.getItem("amkar_homework_submissions");
     return cached ? JSON.parse(cached) : [];
   });
+  const [counterparties, setCounterparties] = useState<Counterparty[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [firebaseReady, setFirebaseReady] = useState(false);
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
@@ -816,6 +824,19 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       (err) => handleSnapshotErr(err, "accounts"),
     );
 
+    const unsubCounterparties = onSnapshot(
+      collection(db, "counterparties"),
+      (snapshot) => {
+        const list: Counterparty[] = [];
+        snapshot.forEach((doc) => {
+          list.push(doc.data() as Counterparty);
+        });
+        list.sort((a, b) => a.name.localeCompare(b.name));
+        setCounterparties(list);
+      },
+      (err) => handleSnapshotErr(err, "counterparties"),
+    );
+
     return () => {
       unsubLeads();
       unsubClients();
@@ -827,6 +848,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       unsubMessages();
       unsubNotifications();
       unsubAccounts();
+      unsubCounterparties();
     };
   }, [firebaseReady]);
 
@@ -2348,6 +2370,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     telegram?: string,
     avatarUrl?: string,
     initialFeedback?: Coach["feedback"],
+    paymentType?: "fixed" | "per_session",
+    rate?: number
   ) => {
     const newCoach: Coach = {
       id: `c_${Date.now()}`,
@@ -2361,6 +2385,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       phone: phone || "",
       telegram: telegram || "",
       avatarUrl: avatarUrl || "",
+      paymentType,
+      rate,
       rating: initialFeedback
         ? Number(
             (
@@ -2499,6 +2525,29 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  const addCounterparty = async (cp: Omit<Counterparty, "id">) => {
+    const id = `cp_${Date.now()}`;
+    const newCp = { ...cp, id };
+    setCounterparties((prev) => [...prev, newCp]);
+    setDoc(doc(db, "counterparties", id), newCp).catch((err) => {
+      console.warn("Failed to add counterparty:", err);
+    });
+  };
+
+  const updateCounterparty = async (id: string, updates: Partial<Counterparty>) => {
+    setCounterparties((prev) => prev.map((cp) => (cp.id === id ? { ...cp, ...updates } : cp)));
+    updateDoc(doc(db, "counterparties", id), updates).catch((err) => {
+      console.warn("Failed to update counterparty:", err);
+    });
+  };
+
+  const deleteCounterparty = async (id: string) => {
+    setCounterparties((prev) => prev.filter((cp) => cp.id !== id));
+    deleteDoc(doc(db, "counterparties", id)).catch((err) => {
+      console.warn("Failed to delete counterparty:", err);
+    });
+  };
+
   return (
     <CRMContext.Provider
       value={{
@@ -2512,6 +2561,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         finances,
         financeCategories,
         financialPlans,
+        counterparties,
+        addCounterparty,
+        updateCounterparty,
+        deleteCounterparty,
         trainingSessions,
         messages,
         calendarSyncEnabled,

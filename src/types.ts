@@ -211,6 +211,13 @@ export interface TrainingSessionProtocol {
   }[];
 }
 
+export interface Counterparty {
+  id: string;
+  name: string;
+  type: 'school_rent' | 'hall_rent' | 'coach' | 'other';
+  description?: string;
+}
+
 export interface FinanceRecord {
   id: string;
   type: 'income' | 'expense';
@@ -222,6 +229,7 @@ export interface FinanceRecord {
   targetMonth?: string; // YYYY-MM
   accountId?: string; // Links to internal accounts
   isFixed?: boolean; // Indicates if this is a recurring/fixed expense or income
+  counterpartyId?: string; // New: link to counterparty
 }
 
 export interface FinanceCategory {

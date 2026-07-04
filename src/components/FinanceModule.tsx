@@ -72,6 +72,10 @@ export const FinanceModule: React.FC = () => {
     trainingSessions,
     crmConfig,
     updateCRMConfig,
+    counterparties,
+    addCounterparty,
+    updateCounterparty,
+    deleteCounterparty,
   } = useCRM();
 
   const [activeTab, setActiveTab] = useState<
@@ -84,6 +88,7 @@ export const FinanceModule: React.FC = () => {
     | "accounts"
     | "salaries"
     | "debts"
+    | "counterparties"
   >("dashboard");
 
   const [salaryTab, setSalaryTab] = useState<"staff" | "transactions">("staff");
@@ -140,6 +145,7 @@ export const FinanceModule: React.FC = () => {
   const [fIsFixed, setFIsFixed] = useState(false);
   const [fTargetMonth, setFTargetMonth] = useState(currentMonthStr);
   const [fDesc, setFDesc] = useState("");
+  const [fCounterparty, setFCounterparty] = useState("");
 
   const [addSuccessMsg, setAddSuccessMsg] = useState("");
 
@@ -171,9 +177,11 @@ export const FinanceModule: React.FC = () => {
       targetMonth: fTargetMonth,
       accountId: fAccount,
       isFixed: fIsFixed,
+      counterpartyId: fCounterparty || undefined,
     });
     setFAmount("");
     setFDesc("");
+    setFCounterparty("");
     setAddSuccessMsg("Запись добавлена!");
     setTimeout(() => setAddSuccessMsg(""), 3000);
   };
@@ -214,6 +222,21 @@ export const FinanceModule: React.FC = () => {
     "cash" | "bank" | "acquiring" | "other"
   >("cash");
   const [newAccBalance, setNewAccBalance] = useState<number>(0);
+
+  const [newCpName, setNewCpName] = useState("");
+  const [newCpType, setNewCpType] = useState<"school_rent" | "hall_rent" | "coach" | "other">("school_rent");
+  const [newCpDesc, setNewCpDesc] = useState("");
+
+  const handleAddCounterparty = () => {
+    if (!newCpName.trim()) return;
+    addCounterparty({
+      name: newCpName.trim(),
+      type: newCpType,
+      description: newCpDesc.trim()
+    });
+    setNewCpName("");
+    setNewCpDesc("");
+  };
 
   const handleAddAccount = () => {
     if (!newAccName.trim()) return;
@@ -550,10 +573,16 @@ export const FinanceModule: React.FC = () => {
               Зарплаты
             </button>
             <button
+              onClick={() => setActiveTab("counterparties")}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${activeTab === "counterparties" ? "bg-white shadow-sm text-emerald-600" : "text-gray-500 hover:text-gray-700"}`}
+            >
+              Контрагенты
+            </button>
+            <button
               onClick={() => setActiveTab("debts")}
               className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${activeTab === "debts" ? "bg-white shadow-sm text-emerald-600" : "text-gray-500 hover:text-gray-700"}`}
             >
-              Долги клиентов
+              Долги
             </button>
           </div>
         </div>
@@ -1137,6 +1166,25 @@ export const FinanceModule: React.FC = () => {
                     ))}
                 </select>
               </div>
+              {fType === "expense" && (
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                    Контрагент (кому платим)
+                  </label>
+                  <select
+                    value={fCounterparty}
+                    onChange={(e) => setFCounterparty(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-gray-200 outline-none rounded-xl text-sm font-medium text-slate-800"
+                  >
+                    <option value="">Без контрагента</option>
+                    {counterparties.map((cp) => (
+                      <option key={cp.id} value={cp.id}>
+                        {cp.name} ({cp.type === 'school_rent' ? 'Аренда школы' : cp.type === 'hall_rent' ? 'Аренда зала' : cp.type === 'coach' ? 'Тренер' : 'Другое'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
                   Основание / Примечание
@@ -2503,7 +2551,8 @@ export const FinanceModule: React.FC = () => {
             // Coach stats
             const coachStats = coaches.map((coach) => {
               // 1. Оклад (Base salary) - Use baseSalary if exists, or calculate some default or use 0
-              const baseSalary = coach.baseSalary || 0;
+              const rate = coach.rate || 0;
+              const baseSalary = coach.paymentType === "fixed" ? rate : 0;
 
               // 2. Проведено тренировок
               const sessionsAsMain = trainingSessions.filter(
@@ -2519,8 +2568,7 @@ export const FinanceModule: React.FC = () => {
               const totalSessions = sessionsAsMain + sessionsAsAssistant;
 
               // 3. Доплаты (Surcharges) - calculated from sessions (e.g., rate * sessions)
-              // If coach has rate and paymentType === 'per_session', use it. Otherwise some default.
-              const rate = coach.rate || 1000;
+              // If coach has rate and paymentType === 'per_session', use it.
               const surcharges =
                 coach.paymentType === "per_session" ? totalSessions * rate : 0;
 
@@ -3552,6 +3600,82 @@ export const FinanceModule: React.FC = () => {
                   </ul>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+        {activeTab === "counterparties" && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 max-w-4xl mx-auto">
+            <h2 className="text-lg font-bold mb-6 border-b pb-4 text-slate-800">
+              Справочник: Контрагенты
+            </h2>
+
+            <div className="flex flex-col sm:flex-row gap-3 mb-8 bg-slate-50 p-4 rounded-xl border border-gray-100">
+              <input
+                type="text"
+                value={newCpName}
+                onChange={(e) => setNewCpName(e.target.value)}
+                placeholder="Имя / Название..."
+                className="flex-1 p-3 border border-gray-200 outline-none rounded-xl text-sm font-medium focus:ring-1 focus:ring-slate-900"
+              />
+              <select
+                value={newCpType}
+                onChange={(e) => setNewCpType(e.target.value as any)}
+                className="p-3 border border-gray-200 rounded-xl outline-none text-sm font-bold text-slate-700 bg-white min-w-[200px]"
+              >
+                <option value="school_rent">Аренда школы</option>
+                <option value="hall_rent">Аренда зала</option>
+                <option value="coach">Тренер / Ассистент</option>
+                <option value="other">Другое</option>
+              </select>
+              <input
+                type="text"
+                value={newCpDesc}
+                onChange={(e) => setNewCpDesc(e.target.value)}
+                placeholder="Описание (опционально)..."
+                className="flex-1 p-3 border border-gray-200 outline-none rounded-xl text-sm font-medium focus:ring-1 focus:ring-slate-900"
+              />
+              <button
+                onClick={handleAddCounterparty}
+                className="px-6 py-3 bg-slate-900 text-white font-bold rounded-xl text-sm hover:bg-slate-800 transition tracking-wide"
+              >
+                + Создать
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="font-black text-slate-800 mb-4 uppercase tracking-wider text-xs">
+                Список контрагентов ({counterparties.length})
+              </h3>
+              {counterparties.length === 0 ? (
+                <div className="text-sm text-gray-500 py-4 text-center">
+                  Контрагенты не добавлены.
+                </div>
+              ) : (
+                <ul className="space-y-2.5">
+                  {counterparties.map((cp) => (
+                    <li
+                      key={cp.id}
+                      className="flex justify-between items-center px-4 py-3 bg-white border border-gray-100 shadow-sm rounded-xl text-sm group hover:border-slate-300 transition"
+                    >
+                      <div className="flex flex-col">
+                        <span className="font-bold text-slate-700">
+                          {cp.name}
+                        </span>
+                        <span className="text-[10px] text-gray-500 mt-1">
+                          {cp.type === 'school_rent' ? 'Аренда школы' : cp.type === 'hall_rent' ? 'Аренда зала' : cp.type === 'coach' ? 'Тренер' : 'Другое'}
+                          {cp.description ? ` • ${cp.description}` : ''}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => deleteCounterparty(cp.id)}
+                        className="text-red-500 opacity-0 group-hover:opacity-100 transition p-1 hover:bg-red-50 rounded"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
         )}

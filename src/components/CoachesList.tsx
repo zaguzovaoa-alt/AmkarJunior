@@ -62,6 +62,8 @@ export const CoachesList: React.FC = () => {
   const [newCoachPhone, setNewCoachPhone] = useState("");
   const [newCoachTelegram, setNewCoachTelegram] = useState("");
   const [newCoachAvatarUrl, setNewCoachAvatarUrl] = useState("");
+  const [newCoachPaymentType, setNewCoachPaymentType] = useState<"fixed" | "per_session">("per_session");
+  const [newCoachRate, setNewCoachRate] = useState<number>(1000);
 
   // 1b. Inline Edit Coach Contact States
   const [editingCoachId, setEditingCoachId] = useState<string | null>(null);
@@ -82,6 +84,8 @@ export const CoachesList: React.FC = () => {
   const [editCoachPhone, setEditCoachPhone] = useState("");
   const [editCoachTelegram, setEditCoachTelegram] = useState("");
   const [editCoachAvatarUrl, setEditCoachAvatarUrl] = useState("");
+  const [editCoachPaymentType, setEditCoachPaymentType] = useState<"fixed" | "per_session">("per_session");
+  const [editCoachRate, setEditCoachRate] = useState<number>(1000);
   const [editDisc, setEditDisc] = useState(5);
   const [editComm, setEditComm] = useState(5);
   const [editProf, setEditProf] = useState(5);
@@ -210,6 +214,8 @@ export const CoachesList: React.FC = () => {
           professionalism: profGrade,
           results: resGrade,
         },
+        newCoachPaymentType,
+        newCoachRate
       );
 
       // Reset info
@@ -281,6 +287,8 @@ export const CoachesList: React.FC = () => {
     setEditCoachPhone(coach.phone || "");
     setEditCoachTelegram(coach.telegram || "");
     setEditCoachAvatarUrl(coach.avatarUrl || "");
+    setEditCoachPaymentType(coach.paymentType || "per_session");
+    setEditCoachRate(coach.rate || 1000);
     setEditDisc(coach.feedback?.discipline ?? 5);
     setEditComm(coach.feedback?.communication ?? 5);
     setEditProf(coach.feedback?.professionalism ?? 5);
@@ -301,6 +309,8 @@ export const CoachesList: React.FC = () => {
         phone: editCoachPhone,
         telegram: editCoachTelegram,
         avatarUrl: editCoachAvatarUrl,
+        paymentType: editCoachPaymentType,
+        rate: editCoachRate,
         feedback: {
           discipline: editDisc,
           communication: editComm,
@@ -1086,6 +1096,33 @@ export const CoachesList: React.FC = () => {
                 </select>
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-black text-slate-900 uppercase font-mono tracking-wider">
+                    Тип оплаты
+                  </label>
+                  <select
+                    value={newCoachPaymentType}
+                    onChange={(e) => setNewCoachPaymentType(e.target.value as "fixed" | "per_session")}
+                    className="w-full px-2.5 py-2 border rounded-xl text-xs font-semibold bg-white focus:outline-none"
+                  >
+                    <option value="per_session">За тренировку / час</option>
+                    <option value="fixed">Фиксированный оклад</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-black text-slate-900 uppercase font-mono tracking-wider">
+                    Ставка (₽)
+                  </label>
+                  <input
+                    type="number"
+                    value={newCoachRate}
+                    onChange={(e) => setNewCoachRate(Number(e.target.value))}
+                    className="w-full px-3 py-2 border rounded-xl text-xs font-semibold focus:outline-none focus:border-red-600"
+                  />
+                </div>
+              </div>
+
               <div className="pt-2 border-t space-y-3">
                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">
                   Начальные оценки отзывов (1-5)
@@ -1399,6 +1436,33 @@ export const CoachesList: React.FC = () => {
                   </option>
                   <option value="Неактивен">Неактивен</option>
                 </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-black text-slate-900 uppercase font-mono tracking-wider">
+                    Тип оплаты
+                  </label>
+                  <select
+                    value={editCoachPaymentType}
+                    onChange={(e) => setEditCoachPaymentType(e.target.value as "fixed" | "per_session")}
+                    className="w-full px-2.5 py-2 border rounded-xl text-xs font-semibold bg-white focus:outline-none"
+                  >
+                    <option value="per_session">За тренировку / час</option>
+                    <option value="fixed">Фиксированный оклад</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-black text-slate-900 uppercase font-mono tracking-wider">
+                    Ставка (₽)
+                  </label>
+                  <input
+                    type="number"
+                    value={editCoachRate}
+                    onChange={(e) => setEditCoachRate(Number(e.target.value))}
+                    className="w-full px-3 py-2 border rounded-xl text-xs font-semibold focus:outline-none focus:border-red-600"
+                  />
+                </div>
               </div>
 
               <div className="pt-2 border-t space-y-3">
