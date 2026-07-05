@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { HeaderDescription } from "./HeaderDescription";
 import { useCRM } from "../context/CRMContext";
 import {
   Users,
@@ -257,13 +258,10 @@ export const GroupsModule: React.FC = () => {
       {/* HEADER SECTION */}
       <div className="p-4 md:p-6 bg-white border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-950 font-sans tracking-tight">
+          <div className="flex items-center"><h1 className="text-2xl font-bold text-slate-950 font-sans tracking-tight">
             Группы и составы
-          </h1>
-          <p className="text-gray-500 text-sm">
-            Создание и расформирование групп, распределение учеников,
-            планирование расписаний.
-          </p>
+          </h1><HeaderDescription text={<>Создание и расформирование групп, распределение учеников,
+            планирование расписаний.</>} /></div>
         </div>
 
         <button

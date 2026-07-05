@@ -1,4 +1,5 @@
 import React, { useState, useRef } from "react";
+import { HeaderDescription } from "./HeaderDescription";
 import { useCRM } from "../context/CRMContext";
 import { ScheduleCalendar } from "./ScheduleCalendar";
 import { parseScheduleString, RU_WEEKDAYS_MAP } from "../utils/scheduleParser";
@@ -487,16 +488,13 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
       {/* Header bar matching exact screenshots */}
       <div className="p-6 bg-white border-b border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-950 font-sans tracking-tight">
+          <div className="flex items-center"><h1 className="text-2xl font-bold text-slate-950 font-sans tracking-tight">
             {activeTab === "parent_knowledge"
               ? "База знаний"
               : `Добрый день, ${myClient.parentName ? myClient.parentName.split(" ")[1] || myClient.parentName.split(" ")[0] || "Родитель" : "Родитель"}!`}
-          </h1>
-          <p className="text-gray-500 text-sm">
-            {activeTab === "parent_knowledge"
+          </h1><HeaderDescription text={<>{activeTab === "parent_knowledge"
               ? "Полезные статьи, инструкции и ответы на частые вопросы для заботливых родителей."
-              : "Вы находитесь в удобном интерактивном кабинете родителя школы АМКАР ЮНИОР."}
-          </p>
+              : "Вы находитесь в удобном интерактивном кабинете родителя школы АМКАР ЮНИОР."}</>} /></div>
         </div>
 
         {/* Top Profile Pickers exactly like picture */}

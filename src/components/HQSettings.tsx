@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { HeaderDescription } from "./HeaderDescription";
 import { useCRM } from "../context/CRMContext";
 import {
   Settings,
@@ -199,13 +200,10 @@ export const HQSettings: React.FC = () => {
       {/* Header */}
       <div className="p-4 md:p-6 bg-white border-b border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="text-left">
-          <h1 className="text-2xl font-bold text-slate-950 font-sans tracking-tight">
+          <div className="flex items-center"><h1 className="text-2xl font-bold text-slate-950 font-sans tracking-tight">
             Настройки системы & БД
-          </h1>
-          <p className="text-gray-500 text-sm">
-            Управление рабочим пространством, синхронизациями и базами данных
-            футбольной школы.
-          </p>
+          </h1><HeaderDescription text={<>Управление рабочим пространством, синхронизациями и базами данных
+            футбольной школы.</>} /></div>
         </div>
 
         <div className="flex items-center space-x-2.5 bg-red-50 border border-red-100 px-4 py-2 rounded-xl">

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { HeaderDescription } from "./HeaderDescription";
 import { useCRM } from '../context/CRMContext';
 import { ShoppingBag, Tag, Plus, Edit2, Trash2 } from 'lucide-react';
 import { Product } from '../types';
@@ -22,8 +23,7 @@ export const AdminStore: React.FC = () => {
     <div className="p-4 md:p-6 w-full max-w-7xl mx-auto text-left">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
         <div>
-          <h1 className="text-2xl font-black text-slate-800">Магазин (Админ)</h1>
-          <p className="text-sm text-gray-500">Управление экипировкой и заказами</p>
+          <div className="flex items-center"><h1 className="text-2xl font-black text-slate-800">Магазин (Админ)</h1><HeaderDescription text={<>Управление экипировкой и заказами</>} /></div>
         </div>
         <div className="mt-4 sm:mt-0 flex space-x-2 bg-slate-100 p-1 rounded-xl">
           <button onClick={() => setActiveTab('catalog')} className={`px-4 py-2 text-sm font-bold rounded-lg transition ${activeTab === 'catalog' ? 'bg-white shadow-sm text-emerald-600' : 'text-gray-500'}`}>Каталог</button>

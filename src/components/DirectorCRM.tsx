@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { HeaderDescription } from "./HeaderDescription";
 import { useCRM } from "../context/CRMContext";
 import {
   Users,
@@ -1302,12 +1303,9 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
             <Activity className="w-5 h-5 text-red-650 animate-pulse" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-sm md:text-base font-black text-slate-905 tracking-tight uppercase truncate">
+            <div className="flex items-center"><h1 className="text-sm md:text-base font-black text-slate-905 tracking-tight uppercase truncate">
               Аналитический Кабинет
-            </h1>
-            <p className="text-[10px] text-gray-400 font-medium font-sans mt-0.5 truncate">
-              Сводная аналитика и импорт данных
-            </p>
+            </h1><HeaderDescription text={<>Сводная аналитика и импорт данных</>} /></div>
           </div>
         </div>
 

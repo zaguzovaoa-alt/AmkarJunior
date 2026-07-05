@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { HeaderDescription } from "./HeaderDescription";
 import { useCRM } from "../context/CRMContext";
 import { useAuth } from "../context/AuthContext";
 import { ScheduleCalendar } from "./ScheduleCalendar";
@@ -441,7 +442,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
       {/* Header element */}
       <div className="p-6 bg-white border-b border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-950 font-sans tracking-tight">
+          <div className="flex items-center"><h1 className="text-2xl font-bold text-slate-950 font-sans tracking-tight">
             Добрый день,{" "}
             {(() => {
               const parts = myCoach.name.trim().split(/\s+/);
@@ -457,11 +458,8 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
               return myCoach.name;
             })()}
             !
-          </h1>
-          <p className="text-gray-500 text-sm">
-            Панель управления тренера. Координируйте нагрузку и оценивайте
-            результаты учеников.
-          </p>
+          </h1><HeaderDescription text={<>Панель управления тренера. Координируйте нагрузку и оценивайте
+            результаты учеников.</>} /></div>
         </div>
 
         <div className="flex items-center space-x-3 bg-emerald-50 border border-emerald-155 px-4 py-2 rounded-xl">

@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { HeaderDescription } from "./HeaderDescription";
 import { useCRM } from "../context/CRMContext";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -845,15 +846,12 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
       {/* Dynamic Header bar */}
       <div className="p-6 bg-white border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-950 font-sans tracking-tight">
+          <div className="flex items-center"><h1 className="text-2xl font-bold text-slate-950 font-sans tracking-tight">
             {activeTab === "hq_leads"
               ? "Входящие Лиды и Заявки"
               : "База Клиентов школы"}
-          </h1>
-          <p className="text-gray-500 text-sm">
-            Управление цепочкой лидов, распределение по возрастным группам и
-            контроль абонементов.
-          </p>
+          </h1><HeaderDescription text={<>Управление цепочкой лидов, распределение по возрастным группам и
+            контроль абонементов.</>} /></div>
         </div>
 
         <div className="flex items-center flex-wrap gap-3">

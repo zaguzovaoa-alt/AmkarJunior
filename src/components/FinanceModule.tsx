@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { HeaderDescription } from "./HeaderDescription";
 import { db } from "../firebase";
 import { setDoc, doc, updateDoc } from "firebase/firestore";
 import { useCRM } from "../context/CRMContext";
@@ -315,7 +316,7 @@ export const FinanceModule: React.FC = () => {
   const activePlan = financialPlans.find(
     (p) => p.month === currentMonthStr,
   ) || {
-    month: currentMonthStr,
+    month: gridFilterMonth,
     renew12Count: 0,
     renew8Count: 0,
     renew4Count: 0,
@@ -330,7 +331,7 @@ export const FinanceModule: React.FC = () => {
   const [plan, setPlan] = useState<typeof activePlan>(activePlan);
 
   React.useEffect(() => {
-    const current = financialPlans.find((p) => p.month === currentMonthStr);
+    const current = financialPlans.find((p) => p.month === gridFilterMonth);
     if (current) {
       setPlan({ ...current, categoryTargets: current.categoryTargets || {} });
     } else {
@@ -348,7 +349,7 @@ export const FinanceModule: React.FC = () => {
         categoryTargets: {},
       });
     }
-  }, [financialPlans, currentMonthStr]);
+  }, [financialPlans, gridFilterMonth]);
 
   const savePlan = () => {
     updateFinancialPlan(plan);
@@ -517,12 +518,9 @@ export const FinanceModule: React.FC = () => {
       <div className="p-4 md:p-6 bg-white border-b border-gray-200">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-950 font-sans tracking-tight">
+            <div className="flex items-center"><h1 className="text-2xl font-bold text-slate-950 font-sans tracking-tight">
               Управленческий учет и финансы
-            </h1>
-            <p className="text-gray-500 text-sm">
-              Ввод операций, P&L, финансовое планирование абонементов.
-            </p>
+            </h1><HeaderDescription text={<>Ввод операций, P&L, финансовое планирование абонементов.</>} /></div>
           </div>
           <div className="flex bg-slate-100 p-1.5 rounded-xl flex-wrap">
             <button
@@ -2102,14 +2100,237 @@ export const FinanceModule: React.FC = () => {
 
         {activeTab === "plan" && (
           <div className="space-y-6 border-none">
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* ДИНАМИКА И ВЫПОЛНЕНИЕ ПЛАНА (ТРАТЫ И ДОХОДЫ) */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 max-w-5xl">
+              <h2 className="text-xl font-bold text-slate-900 border-b border-gray-100 pb-3 mb-6">
+                Выполнение финансового плана (по категориям)
+                <br />
+                <div className="mt-2 flex items-center gap-3">
+    <div className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold text-slate-700 flex items-center gap-2 shadow-sm w-max">
+      <input
+        type="month"
+        value={gridFilterMonth}
+        onChange={(e) => setGridFilterMonth(e.target.value)}
+        className="outline-none bg-transparent"
+      />
+      <Calendar className="w-4 h-4 text-slate-400" />
+    </div>
+  </div>
+              </h2>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Расходы блок */}
+                <div>
+                  <h3 className="text-sm font-bold text-red-600 mb-4 flex items-center gap-2 uppercase tracking-wide">
+                    План по расходам
+                  </h3>
+                  <div className="space-y-4">
+                    {financeCategories
+                      .filter((c) => c.type === "expense")
+                      .map((cat) => {
+                        const target = plan.categoryTargets?.[cat.id] || 0;
+
+                        const actual = finances
+                          .filter(
+                            (f) =>
+                              f.type === "expense" &&
+                              f.category === cat.name &&
+                              (f.targetMonth || f.date.substring(0, 7)) ===
+                                plan.month,
+                          )
+                          .reduce((a, b) => a + Number(b.amount || 0), 0);
+
+                        const percent =
+                          target > 0
+                            ? Math.min(Math.round((actual / target) * 100), 999)
+                            : actual > 0
+                              ? 100
+                              : 0;
+                        const isOverspent = actual > target && target > 0;
+
+                        return (
+                          <div
+                            key={cat.id}
+                            className="bg-slate-50 p-4 rounded-xl border border-gray-100"
+                          >
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="font-bold text-slate-800 text-sm truncate">
+                                {cat.name}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-400">
+                                  План:
+                                </span>
+                                <input
+                                  type="number"
+                                  value={target}
+                                  onChange={(e) => {
+                                    setPlan({
+                                      ...plan,
+                                      categoryTargets: {
+                                        ...(plan.categoryTargets || {}),
+                                        [cat.id]: Number(e.target.value),
+                                      },
+                                    });
+                                  }}
+                                  onBlur={savePlan}
+                                  className="w-20 bg-white border border-gray-200 outline-none font-bold text-right py-1 px-2 rounded-lg text-sm focus:border-red-500"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Progress Bar */}
+                            <div className="relative pt-1">
+                              <div className="flex mb-2 items-center justify-between">
+                                <div>
+                                  <span className="text-xs font-semibold inline-block text-slate-500">
+                                    Факт: {actual.toLocaleString()} ₽
+                                  </span>
+                                </div>
+                                <div className="text-right">
+                                  <span
+                                    className={`text-xs font-black inline-block ${isOverspent ? "text-red-600" : "text-slate-700"}`}
+                                  >
+                                    {percent}%
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="overflow-hidden h-2.5 mb-2 text-xs flex rounded-full bg-slate-200">
+                                <div
+                                  style={{
+                                    width: `${Math.min(percent, 100)}%`,
+                                  }}
+                                  className={`shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center transition-all duration-500 ${isOverspent ? "bg-red-500" : "bg-slate-600"}`}
+                                ></div>
+                              </div>
+                              {isOverspent && (
+                                <p className="text-[10px] text-red-500 font-bold mt-1">
+                                  Перерасход:{" "}
+                                  {(actual - target).toLocaleString()} ₽
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+
+                {/* Доходы блок */}
+                <div>
+                  <h3 className="text-sm font-bold text-emerald-600 mb-4 flex items-center gap-2 uppercase tracking-wide">
+                    План по доходам
+                  </h3>
+                  <div className="space-y-4">
+                    {financeCategories
+                      .filter((c) => c.type === "income")
+                      .map((cat) => {
+                        const target = plan.categoryTargets?.[cat.id] || 0;
+
+                        const actual = finances
+                          .filter(
+                            (f) =>
+                              f.type === "income" &&
+                              f.category === cat.name &&
+                              (f.targetMonth || f.date.substring(0, 7)) ===
+                                plan.month,
+                          )
+                          .reduce((a, b) => a + Number(b.amount || 0), 0);
+
+                        const percent =
+                          target > 0
+                            ? Math.min(Math.round((actual / target) * 100), 999)
+                            : actual > 0
+                              ? 100
+                              : 0;
+                        const isAchieved = target > 0 && actual >= target;
+
+                        return (
+                          <div
+                            key={cat.id}
+                            className="bg-emerald-50/30 p-4 rounded-xl border border-emerald-100"
+                          >
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="font-bold text-slate-800 text-sm truncate">
+                                {cat.name}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-400">
+                                  План:
+                                </span>
+                                <input
+                                  type="number"
+                                  value={target}
+                                  onChange={(e) => {
+                                    setPlan({
+                                      ...plan,
+                                      categoryTargets: {
+                                        ...(plan.categoryTargets || {}),
+                                        [cat.id]: Number(e.target.value),
+                                      },
+                                    });
+                                  }}
+                                  onBlur={savePlan}
+                                  className="w-20 bg-white border border-gray-200 outline-none font-bold text-right py-1 px-2 rounded-lg text-sm focus:border-emerald-500"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Progress Bar */}
+                            <div className="relative pt-1">
+                              <div className="flex mb-2 items-center justify-between">
+                                <div>
+                                  <span className="text-xs font-semibold inline-block text-slate-500">
+                                    Факт: {actual.toLocaleString()} ₽
+                                  </span>
+                                </div>
+                                <div className="text-right">
+                                  <span
+                                    className={`text-xs font-black inline-block ${isAchieved ? "text-emerald-600" : "text-slate-700"}`}
+                                  >
+                                    {percent}%
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="overflow-hidden h-2.5 mb-2 text-xs flex rounded-full bg-slate-200">
+                                <div
+                                  style={{
+                                    width: `${Math.min(percent, 100)}%`,
+                                  }}
+                                  className={`shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center transition-all duration-500 ${isAchieved ? "bg-emerald-500" : "bg-emerald-400"}`}
+                                ></div>
+                              </div>
+                              {isAchieved && (
+                                <p className="text-[10px] text-emerald-600 font-bold mt-1">
+                                  Перевыполнение:{" "}
+                                  {(actual - target).toLocaleString()} ₽
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+<div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
               <div className="space-y-6">
                 <h2 className="text-xl font-bold text-slate-900 border-b border-gray-100 pb-3">
                   Финмодель и план продаж
                   <br />
-                  <span className="text-sm font-medium text-gray-500">
-                    Месяц: {plan.month}
-                  </span>
+                  <div className="mt-2 flex items-center gap-3">
+    <div className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold text-slate-700 flex items-center gap-2 shadow-sm w-max">
+      <input
+        type="month"
+        value={gridFilterMonth}
+        onChange={(e) => setGridFilterMonth(e.target.value)}
+        className="outline-none bg-transparent"
+      />
+      <Calendar className="w-4 h-4 text-slate-400" />
+    </div>
+  </div>
                 </h2>
 
                 <div>
@@ -2326,213 +2547,6 @@ export const FinanceModule: React.FC = () => {
                         </span>
                       </span>
                     </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* ДИНАМИКА И ВЫПОЛНЕНИЕ ПЛАНА (ТРАТЫ И ДОХОДЫ) */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 max-w-5xl">
-              <h2 className="text-xl font-bold text-slate-900 border-b border-gray-100 pb-3 mb-6">
-                Выполнение финансового плана (по категориям)
-                <br />
-                <span className="text-sm font-medium text-gray-500">
-                  Месяц: {plan.month}
-                </span>
-              </h2>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Расходы блок */}
-                <div>
-                  <h3 className="text-sm font-bold text-red-600 mb-4 flex items-center gap-2 uppercase tracking-wide">
-                    План по расходам
-                  </h3>
-                  <div className="space-y-4">
-                    {financeCategories
-                      .filter((c) => c.type === "expense")
-                      .map((cat) => {
-                        const target = plan.categoryTargets?.[cat.id] || 0;
-
-                        const actual = finances
-                          .filter(
-                            (f) =>
-                              f.type === "expense" &&
-                              f.category === cat.name &&
-                              (f.targetMonth || f.date.substring(0, 7)) ===
-                                plan.month,
-                          )
-                          .reduce((a, b) => a + Number(b.amount || 0), 0);
-
-                        const percent =
-                          target > 0
-                            ? Math.min(Math.round((actual / target) * 100), 999)
-                            : actual > 0
-                              ? 100
-                              : 0;
-                        const isOverspent = actual > target && target > 0;
-
-                        return (
-                          <div
-                            key={cat.id}
-                            className="bg-slate-50 p-4 rounded-xl border border-gray-100"
-                          >
-                            <div className="flex justify-between items-center mb-2">
-                              <span className="font-bold text-slate-800 text-sm truncate">
-                                {cat.name}
-                              </span>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-400">
-                                  План:
-                                </span>
-                                <input
-                                  type="number"
-                                  value={target}
-                                  onChange={(e) => {
-                                    setPlan({
-                                      ...plan,
-                                      categoryTargets: {
-                                        ...(plan.categoryTargets || {}),
-                                        [cat.id]: Number(e.target.value),
-                                      },
-                                    });
-                                  }}
-                                  onBlur={savePlan}
-                                  className="w-20 bg-white border border-gray-200 outline-none font-bold text-right py-1 px-2 rounded-lg text-sm focus:border-red-500"
-                                />
-                              </div>
-                            </div>
-
-                            {/* Progress Bar */}
-                            <div className="relative pt-1">
-                              <div className="flex mb-2 items-center justify-between">
-                                <div>
-                                  <span className="text-xs font-semibold inline-block text-slate-500">
-                                    Факт: {actual.toLocaleString()} ₽
-                                  </span>
-                                </div>
-                                <div className="text-right">
-                                  <span
-                                    className={`text-xs font-black inline-block ${isOverspent ? "text-red-600" : "text-slate-700"}`}
-                                  >
-                                    {percent}%
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="overflow-hidden h-2.5 mb-2 text-xs flex rounded-full bg-slate-200">
-                                <div
-                                  style={{
-                                    width: `${Math.min(percent, 100)}%`,
-                                  }}
-                                  className={`shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center transition-all duration-500 ${isOverspent ? "bg-red-500" : "bg-slate-600"}`}
-                                ></div>
-                              </div>
-                              {isOverspent && (
-                                <p className="text-[10px] text-red-500 font-bold mt-1">
-                                  Перерасход:{" "}
-                                  {(actual - target).toLocaleString()} ₽
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                  </div>
-                </div>
-
-                {/* Доходы блок */}
-                <div>
-                  <h3 className="text-sm font-bold text-emerald-600 mb-4 flex items-center gap-2 uppercase tracking-wide">
-                    План по доходам
-                  </h3>
-                  <div className="space-y-4">
-                    {financeCategories
-                      .filter((c) => c.type === "income")
-                      .map((cat) => {
-                        const target = plan.categoryTargets?.[cat.id] || 0;
-
-                        const actual = finances
-                          .filter(
-                            (f) =>
-                              f.type === "income" &&
-                              f.category === cat.name &&
-                              (f.targetMonth || f.date.substring(0, 7)) ===
-                                plan.month,
-                          )
-                          .reduce((a, b) => a + Number(b.amount || 0), 0);
-
-                        const percent =
-                          target > 0
-                            ? Math.min(Math.round((actual / target) * 100), 999)
-                            : actual > 0
-                              ? 100
-                              : 0;
-                        const isAchieved = target > 0 && actual >= target;
-
-                        return (
-                          <div
-                            key={cat.id}
-                            className="bg-emerald-50/30 p-4 rounded-xl border border-emerald-100"
-                          >
-                            <div className="flex justify-between items-center mb-2">
-                              <span className="font-bold text-slate-800 text-sm truncate">
-                                {cat.name}
-                              </span>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-400">
-                                  План:
-                                </span>
-                                <input
-                                  type="number"
-                                  value={target}
-                                  onChange={(e) => {
-                                    setPlan({
-                                      ...plan,
-                                      categoryTargets: {
-                                        ...(plan.categoryTargets || {}),
-                                        [cat.id]: Number(e.target.value),
-                                      },
-                                    });
-                                  }}
-                                  onBlur={savePlan}
-                                  className="w-20 bg-white border border-gray-200 outline-none font-bold text-right py-1 px-2 rounded-lg text-sm focus:border-emerald-500"
-                                />
-                              </div>
-                            </div>
-
-                            {/* Progress Bar */}
-                            <div className="relative pt-1">
-                              <div className="flex mb-2 items-center justify-between">
-                                <div>
-                                  <span className="text-xs font-semibold inline-block text-slate-500">
-                                    Факт: {actual.toLocaleString()} ₽
-                                  </span>
-                                </div>
-                                <div className="text-right">
-                                  <span
-                                    className={`text-xs font-black inline-block ${isAchieved ? "text-emerald-600" : "text-slate-700"}`}
-                                  >
-                                    {percent}%
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="overflow-hidden h-2.5 mb-2 text-xs flex rounded-full bg-slate-200">
-                                <div
-                                  style={{
-                                    width: `${Math.min(percent, 100)}%`,
-                                  }}
-                                  className={`shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center transition-all duration-500 ${isAchieved ? "bg-emerald-500" : "bg-emerald-400"}`}
-                                ></div>
-                              </div>
-                              {isAchieved && (
-                                <p className="text-[10px] text-emerald-600 font-bold mt-1">
-                                  Перевыполнение:{" "}
-                                  {(actual - target).toLocaleString()} ₽
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
                   </div>
                 </div>
               </div>

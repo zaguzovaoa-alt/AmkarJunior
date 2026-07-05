@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { HeaderDescription } from "./HeaderDescription";
 import { useCRM } from "../context/CRMContext";
 import { parseScheduleString, RU_WEEKDAYS_MAP } from "../utils/scheduleParser";
 import {
@@ -702,13 +703,10 @@ export const ScheduleCalendar: React.FC<{
             <span className="w-1 h-1 rounded-full bg-red-650"></span>
             <span>Google Sync Live</span>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-950 font-sans">
+          <div className="flex items-center"><h1 className="text-2xl font-bold tracking-tight text-slate-950 font-sans">
             Интерактивное расписание академии
-          </h1>
-          <p className="text-gray-500 text-sm">
-            Удобное составление, перенос и отмена тренировок футбольных групп с
-            синхронной автовыгрузкой в Google-календари.
-          </p>
+          </h1><HeaderDescription text={<>Удобное составление, перенос и отмена тренировок футбольных групп с
+            синхронной автовыгрузкой в Google-календари.</>} /></div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
