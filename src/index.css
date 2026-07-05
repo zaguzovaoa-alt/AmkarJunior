@@ -1,7 +1,18 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100;200;300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap');
 @import "tailwindcss";
 
 @theme {
+
+  --font-weight-thin: 100;
+  --font-weight-extralight: 200;
+  --font-weight-light: 300;
+  --font-weight-normal: 300;
+  --font-weight-medium: 400;
+  --font-weight-semibold: 400;
+  --font-weight-bold: 500;
+  --font-weight-extrabold: 600;
+  --font-weight-black: 700;
+
   --font-sans: "Outfit", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
   --font-display: "Space Grotesk", "Outfit", ui-sans-serif, system-ui, sans-serif;
@@ -47,6 +58,8 @@
 
 /* Custom visual refinements to make the panels look premium and stylish */
 body {
+  font-weight: 300;
+
   background-color: #f7f7f9;
   color: #171717;
   -webkit-font-smoothing: antialiased;
