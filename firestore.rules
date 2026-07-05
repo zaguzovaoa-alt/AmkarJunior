@@ -20,6 +20,10 @@ service cloud.firestore {
       return resource.data; 
     }
 
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
     // Schema Validation Helpers
     function isValidLead(data) {
       return data.id is string
@@ -93,77 +97,77 @@ service cloud.firestore {
 
     // Collections
     match /leads/{leadId} {
-      allow read: if true;
-      allow create, update: if isValidId(leadId) && isValidLead(incoming());
-      allow delete: if true;
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(leadId) && isValidLead(incoming());
+      allow delete: if isSignedIn();
     }
 
     match /clients/{clientId} {
-      allow read: if true;
-      allow create, update: if isValidId(clientId) && isValidClient(incoming());
-      allow delete: if true;
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(clientId) && isValidClient(incoming());
+      allow delete: if isSignedIn();
     }
 
     match /tasks/{taskId} {
-      allow read: if true;
-      allow create, update: if isValidId(taskId) && isValidTask(incoming());
-      allow delete: if true;
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(taskId) && isValidTask(incoming());
+      allow delete: if isSignedIn();
     }
 
     match /groups/{groupId} {
-      allow read: if true;
-      allow create, update: if isValidId(groupId) && isValidGroup(incoming());
-      allow delete: if true;
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(groupId) && isValidGroup(incoming());
+      allow delete: if isSignedIn();
     }
 
     match /coaches/{coachId} {
-      allow read: if true;
-      allow create, update: if isValidId(coachId) && isValidCoach(incoming());
-      allow delete: if true;
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(coachId) && isValidCoach(incoming());
+      allow delete: if isSignedIn();
     }
 
     match /finances/{recordId} {
-      allow read: if true;
-      allow create, update: if isValidId(recordId) && isValidFinance(incoming());
-      allow delete: if true;
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(recordId) && isValidFinance(incoming());
+      allow delete: if isSignedIn();
     }
 
     match /messages/{messageId} {
-      allow read: if true;
-      allow create, update: if isValidId(messageId) && isValidMessage(incoming());
-      allow delete: if true;
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(messageId) && isValidMessage(incoming());
+      allow delete: if isSignedIn();
     }
 
     match /training_sessions/{sessionId} {
-      allow read: if true;
-      allow create, update: if isValidId(sessionId) && isValidTrainingSession(incoming());
-      allow delete: if true;
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(sessionId) && isValidTrainingSession(incoming());
+      allow delete: if isSignedIn();
     }
 
     match /accounts/{accountId} {
-      allow read: if true;
-      allow create, update: if isValidId(accountId) && isValidAccount(incoming());
-      allow delete: if true;
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(accountId) && isValidAccount(incoming());
+      allow delete: if isSignedIn();
     }
 
     match /notifications/{notificationId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     match /systemUsers/{userId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     match /_config/{configId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     match /counterparties/{counterpartyId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     match /test/{testId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
   }
 }

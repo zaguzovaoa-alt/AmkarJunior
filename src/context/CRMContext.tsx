@@ -7,6 +7,7 @@ import {
   onSnapshot,
   updateDoc,
   deleteDoc,
+  writeBatch,
   getDocFromServer,
   query,
   getDocs,
@@ -1007,13 +1008,13 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     setTasks((prev) => [managerTask, directorTask, ...prev]);
 
     // Safe background sync without blocking UI execution
-    setDoc(doc(db, "leads", leadId), newLead).catch((err) => {
+    setDoc(doc(db, "leads", leadId), newLead).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn("Failed to sync new lead to Firestore:", err);
     });
-    setDoc(doc(db, "tasks", managerTaskId), managerTask).catch((err) => {
+    setDoc(doc(db, "tasks", managerTaskId), managerTask).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn("Failed to sync manager task to Firestore:", err);
     });
-    setDoc(doc(db, "tasks", directorTaskId), directorTask).catch((err) => {
+    setDoc(doc(db, "tasks", directorTaskId), directorTask).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn("Failed to sync director task to Firestore:", err);
     });
 
@@ -1084,10 +1085,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
     setTasks((prev) => [managerTask, ...prev]);
 
-    setDoc(doc(db, "clients", clientId), newClient).catch((err) => {
+    setDoc(doc(db, "clients", clientId), newClient).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn("Failed to sync new client to Firestore:", err);
     });
-    setDoc(doc(db, "tasks", managerTaskId), managerTask).catch((err) => {
+    setDoc(doc(db, "tasks", managerTaskId), managerTask).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn("Failed to sync task to Firestore:", err);
     });
 
@@ -1100,7 +1101,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const updateLeadStatus = async (id: string, status: Lead["status"]) => {
     setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, status } : l)));
-    updateDoc(doc(db, "leads", id), { status }).catch((err) => {
+    updateDoc(doc(db, "leads", id), { status }).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(
         `Failed to update status for lead ${id} in Firestore, kept locally:`,
         err,
@@ -1145,10 +1146,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
     setTasks((prev) => [trainerTask, ...prev]);
 
-    updateDoc(doc(db, "leads", leadId), updatedLead as any).catch((err) => {
+    updateDoc(doc(db, "leads", leadId), updatedLead as any).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn("Failed to update lead status in Firestore:", err);
     });
-    setDoc(doc(db, "tasks", trainerTaskId), trainerTask).catch((err) => {
+    setDoc(doc(db, "tasks", trainerTaskId), trainerTask).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn("Failed to sync trainer task in Firestore:", err);
     });
 
@@ -1208,13 +1209,13 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     setTasks((prev) => [managerTask, directorTask, ...prev]);
 
     // Safe background sync without blocking UI execution
-    updateDoc(doc(db, "leads", leadId), updatedLead as any).catch((err) => {
+    updateDoc(doc(db, "leads", leadId), updatedLead as any).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn("Failed to sync attendance in Firestore:", err);
     });
-    setDoc(doc(db, "tasks", managerTaskId), managerTask).catch((err) => {
+    setDoc(doc(db, "tasks", managerTaskId), managerTask).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn("Failed to sync manager task in Firestore:", err);
     });
-    setDoc(doc(db, "tasks", directorTaskId), directorTask).catch((err) => {
+    setDoc(doc(db, "tasks", directorTaskId), directorTask).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn("Failed to sync director task in Firestore:", err);
     });
   };
@@ -1243,7 +1244,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     );
 
     // Background sync
-    updateDoc(doc(db, "clients", clientId), updateFields).catch((err) => {
+    updateDoc(doc(db, "clients", clientId), updateFields).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(`Failed to upload document for client ${clientId}:`, err);
     });
   };
@@ -1269,7 +1270,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       prev.map((c) => (c.id === clientId ? { ...c, ...updateFields } : c)),
     );
 
-    updateDoc(doc(db, "clients", clientId), updateFields).catch((err) => {
+    updateDoc(doc(db, "clients", clientId), updateFields).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(`Failed to delete document for client ${clientId}:`, err);
     });
   };
@@ -1385,16 +1386,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     }
 
-    // Background sync of the session
-    try {
-      await setDoc(
-        doc(db, "training_sessions", newProtocol.id),
-        newProtocol as any,
-      );
-    } catch (err) {
-      console.warn("Could not save training session to firestore", err);
-    }
-
     // Instantly update local clients state so views update immediately
     setClients((prev) =>
       prev.map((c) => {
@@ -1433,51 +1424,56 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
     setTasks((prev) => [directorTask, ...prev]);
 
-    // Background sync without blocking UI execution
-    records.forEach((record) => {
-      const c = clients.find((cl) => cl.id === record.clientId);
-      if (c) {
-        const wasPresent = record.status === "present";
-        const isSessionDeducted = wasPresent && c.abonementSessionsLeft > 0;
+    // Background sync with Batch for Efficiency and Correctness
+    try {
+      const batch = writeBatch(db);
+      
+      batch.set(doc(db, "training_sessions", newProtocol.id), newProtocol as any);
+      batch.set(doc(db, "tasks", directorTaskId), directorTask as any);
 
-        // TELEGRAM ALERT: check if 2+ absences in a row
-        if (
-          !wasPresent &&
-          record.status !== "trial_free" &&
-          crmConfig.telegramAlerts?.churnRisk !== false
-        ) {
-          const pastAbsences = c.attendance
-            .slice(0, 1)
-            .every((a) => a.status === "absent" || a.status === "absent_sick");
-          if (pastAbsences) {
-            sendTelegramAlert(
-              crmConfig.telegramBotToken,
-              crmConfig.telegramGroupChatId,
-              `⚠️ <b>РИСК ОТТОКА</b>\n<b>Ученик:</b> ${c.childSurname} ${c.childName}\n<b>Группа:</b> ${c.groupName}\nПропущено 2 и более тренировок подряд.\nТребуется помощь менеджера!`,
-            );
+      records.forEach((record) => {
+        const c = clients.find((cl) => cl.id === record.clientId);
+        if (c) {
+          const wasPresent = record.status === "present";
+          const isSessionDeducted = wasPresent && c.abonementSessionsLeft > 0;
+
+          // TELEGRAM ALERT: check if 2+ absences in a row
+          if (
+            !wasPresent &&
+            record.status !== "trial_free" &&
+            crmConfig.telegramAlerts?.churnRisk !== false
+          ) {
+            const pastAbsences = c.attendance
+              .slice(0, 1)
+              .every((a) => a.status === "absent" || a.status === "absent_sick");
+            if (pastAbsences) {
+              sendTelegramAlert(
+                crmConfig.telegramBotToken,
+                crmConfig.telegramGroupChatId,
+                `⚠️ <b>РИСК ОТТОКА</b>\n<b>Ученик:</b> ${c.childSurname} ${c.childName}\n<b>Группа:</b> ${c.groupName}\nПропущено 2 и более тренировок подряд.\nТребуется помощь менеджера!`,
+              );
+            }
           }
+
+          batch.update(doc(db, "clients", c.id), {
+            abonementSessionsLeft: isSessionDeducted
+              ? c.abonementSessionsLeft - 1
+              : c.abonementSessionsLeft,
+            notes: mediaFile
+              ? `${c.notes}\n[Посещаемость ${date}]: Тренер прикрепил фото ${mediaFile}.`
+              : c.notes,
+            attendance: [
+              { date, status: record.status, reason: record.reason },
+              ...c.attendance,
+            ],
+          });
         }
+      });
 
-        updateDoc(doc(db, "clients", c.id), {
-          abonementSessionsLeft: isSessionDeducted
-            ? c.abonementSessionsLeft - 1
-            : c.abonementSessionsLeft,
-          notes: mediaFile
-            ? `${c.notes}\n[Посещаемость ${date}]: Тренер прикрепил фото ${mediaFile}.`
-            : c.notes,
-          attendance: [
-            { date, status: record.status, reason: record.reason },
-            ...c.attendance,
-          ],
-        }).catch((err) => {
-          console.warn(`Failed to sync attendance for ${c.id}:`, err);
-        });
-      }
-    });
-
-    setDoc(doc(db, "tasks", directorTaskId), directorTask).catch((err) => {
-      console.warn("Failed to sync director task for attendance:", err);
-    });
+      await batch.commit();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, "training_sessions_batch");
+    }
   };
 
   const ratePlayer = async (
@@ -1531,7 +1527,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     updateDoc(doc(db, "clients", clientId), {
       progress: metrics,
       achievements: autoAchievements,
-    }).catch((err) => {
+    }).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(
         `Failed to sync player metrics for client ${clientId} in Firestore:`,
         err,
@@ -1547,7 +1543,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       status: "new",
     };
     setTasks((prev) => [newTask, ...prev]);
-    setDoc(doc(db, "tasks", id), newTask).catch((err) => {
+    setDoc(doc(db, "tasks", id), newTask).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn("Failed to add task to Firestore, kept locally:", err);
     });
   };
@@ -1556,7 +1552,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     setTasks((prev) =>
       prev.map((t) => (t.id === id ? { ...t, status: "completed" } : t)),
     );
-    updateDoc(doc(db, "tasks", id), { status: "completed" }).catch((err) => {
+    updateDoc(doc(db, "tasks", id), { status: "completed" }).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(
         `Failed to complete task ${id} in Firestore, kept locally:`,
         err,
@@ -1582,7 +1578,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     setMessages((prev) => [...prev, newMsg]);
 
     // Background sync
-    setDoc(doc(db, "messages", id), newMsg).catch((err) => {
+    setDoc(doc(db, "messages", id), newMsg).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn("Failed to sync new message in Firestore:", err);
     });
   };
@@ -1591,14 +1587,14 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     setMessages((prev) =>
       prev.map((m) => (m.id === id ? { ...m, text: newText } : m)),
     );
-    updateDoc(doc(db, "messages", id), { text: newText }).catch((err) => {
+    updateDoc(doc(db, "messages", id), { text: newText }).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(`Failed to update message ${id} in Firestore:`, err);
     });
   };
 
   const deleteChatMessage = async (id: string) => {
     setMessages((prev) => prev.filter((m) => m.id !== id));
-    deleteDoc(doc(db, "messages", id)).catch((err) => {
+    deleteDoc(doc(db, "messages", id)).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(`Failed to delete message ${id} in Firestore:`, err);
     });
   };
@@ -1616,7 +1612,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     };
 
     setNotifications((prev) => [newNotif, ...prev]);
-    setDoc(doc(db, "notifications", id), newNotif).catch((err) => {
+    setDoc(doc(db, "notifications", id), newNotif).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn("Failed to sync new notification in Firestore:", err);
     });
   }
@@ -1625,7 +1621,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)),
     );
-    updateDoc(doc(db, "notifications", id), { isRead: true }).catch((err) => {
+    updateDoc(doc(db, "notifications", id), { isRead: true }).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(
         `Failed to mark notification ${id} as read in Firestore:`,
         err,
@@ -1766,7 +1762,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     const id = `acc_${Date.now()}`;
     const newAcc = { ...acc, id };
     setAccounts((prev) => [...prev, newAcc]);
-    setDoc(doc(db, "accounts", id), newAcc).catch((e) => console.warn(e));
+    setDoc(doc(db, "accounts", id), newAcc).catch((err) => handleFirestoreError(err, OperationType.WRITE, "update"));
   };
   const updateAccount = async (
     id: string,
@@ -1775,18 +1771,18 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     setAccounts((prev) =>
       prev.map((a) => (a.id === id ? { ...a, ...updates } : a)),
     );
-    updateDoc(doc(db, "accounts", id), updates).catch((e) => console.warn(e));
+    updateDoc(doc(db, "accounts", id), updates).catch((err) => handleFirestoreError(err, OperationType.WRITE, "update"));
   };
   const deleteAccount = async (id: string) => {
     setAccounts((prev) => prev.filter((a) => a.id !== id));
-    deleteDoc(doc(db, "accounts", id)).catch((e) => console.warn(e));
+    deleteDoc(doc(db, "accounts", id)).catch((err) => handleFirestoreError(err, OperationType.WRITE, "update"));
   };
 
   const addFinanceRecord = async (record: Omit<FinanceRecord, "id">) => {
     const id = `f_${Date.now()}`;
     const newRecord = { ...record, id };
     setFinances((prev) => [newRecord, ...prev]);
-    setDoc(doc(db, "finances", id), newRecord).catch((e) => console.warn(e));
+    setDoc(doc(db, "finances", id), newRecord).catch((err) => handleFirestoreError(err, OperationType.WRITE, "update"));
   };
 
   const updateFinancialPlan = async (plan: FinancialPlan) => {
@@ -1802,27 +1798,41 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const resetAllData = async () => {
     try {
+      { const deleteBatch = writeBatch(db);
       for (const item of leads) {
-        await deleteDoc(doc(db, "leads", item.id));
+        deleteBatch.delete(doc(db, "leads", item.id));
       }
+      await deleteBatch.commit(); }
+      { const deleteBatch = writeBatch(db);
       for (const item of clients) {
-        await deleteDoc(doc(db, "clients", item.id));
+        deleteBatch.delete(doc(db, "clients", item.id));
       }
+      await deleteBatch.commit(); }
+      { const deleteBatch = writeBatch(db);
       for (const item of tasks) {
-        await deleteDoc(doc(db, "tasks", item.id));
+        deleteBatch.delete(doc(db, "tasks", item.id));
       }
+      await deleteBatch.commit(); }
+      { const deleteBatch = writeBatch(db);
       for (const item of coaches) {
-        await deleteDoc(doc(db, "coaches", item.id));
+        deleteBatch.delete(doc(db, "coaches", item.id));
       }
+      await deleteBatch.commit(); }
+      { const deleteBatch = writeBatch(db);
       for (const item of groups) {
-        await deleteDoc(doc(db, "groups", item.id));
+        deleteBatch.delete(doc(db, "groups", item.id));
       }
+      await deleteBatch.commit(); }
+      { const deleteBatch = writeBatch(db);
       for (const item of finances) {
-        await deleteDoc(doc(db, "finances", item.id));
+        deleteBatch.delete(doc(db, "finances", item.id));
       }
+      await deleteBatch.commit(); }
+      { const deleteBatch = writeBatch(db);
       for (const item of messages) {
-        await deleteDoc(doc(db, "messages", item.id));
+        deleteBatch.delete(doc(db, "messages", item.id));
       }
+      await deleteBatch.commit(); }
 
       for (const item of INITIAL_LEADS) {
         await setDoc(doc(db, "leads", item.id), item);
@@ -1865,33 +1875,43 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   }) => {
     try {
       if (options.leads) {
-        for (const item of leads) {
-          await deleteDoc(doc(db, "leads", item.id));
-        }
+        { const deleteBatch = writeBatch(db);
+      for (const item of leads) {
+        deleteBatch.delete(doc(db, "leads", item.id));
+      }
+      await deleteBatch.commit(); }
         setLeads([]);
       }
       if (options.clients) {
-        for (const item of clients) {
-          await deleteDoc(doc(db, "clients", item.id));
-        }
+        { const deleteBatch = writeBatch(db);
+      for (const item of clients) {
+        deleteBatch.delete(doc(db, "clients", item.id));
+      }
+      await deleteBatch.commit(); }
         setClients([]);
       }
       if (options.tasks) {
-        for (const item of tasks) {
-          await deleteDoc(doc(db, "tasks", item.id));
-        }
+        { const deleteBatch = writeBatch(db);
+      for (const item of tasks) {
+        deleteBatch.delete(doc(db, "tasks", item.id));
+      }
+      await deleteBatch.commit(); }
         setTasks([]);
       }
       if (options.finances) {
-        for (const item of finances) {
-          await deleteDoc(doc(db, "finances", item.id));
-        }
+        { const deleteBatch = writeBatch(db);
+      for (const item of finances) {
+        deleteBatch.delete(doc(db, "finances", item.id));
+      }
+      await deleteBatch.commit(); }
         setFinances([]);
       }
       if (options.messages) {
-        for (const item of messages) {
-          await deleteDoc(doc(db, "messages", item.id));
-        }
+        { const deleteBatch = writeBatch(db);
+      for (const item of messages) {
+        deleteBatch.delete(doc(db, "messages", item.id));
+      }
+      await deleteBatch.commit(); }
         setMessages([]);
       }
 
@@ -1908,12 +1928,16 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const overwriteClients = async (newClients: Client[]) => {
     try {
+      { const deleteBatch = writeBatch(db);
       for (const item of clients) {
-        await deleteDoc(doc(db, "clients", item.id));
+        deleteBatch.delete(doc(db, "clients", item.id));
       }
+      await deleteBatch.commit(); }
+      const batch = writeBatch(db);
       for (const item of newClients) {
-        await setDoc(doc(db, "clients", item.id), item);
+        batch.set(doc(db, "clients", item.id), item);
       }
+      await batch.commit();
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "clients");
     }
@@ -1921,12 +1945,16 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const overwriteLeads = async (newLeads: Lead[]) => {
     try {
+      { const deleteBatch = writeBatch(db);
       for (const item of leads) {
-        await deleteDoc(doc(db, "leads", item.id));
+        deleteBatch.delete(doc(db, "leads", item.id));
       }
+      await deleteBatch.commit(); }
+      const batch = writeBatch(db);
       for (const item of newLeads) {
-        await setDoc(doc(db, "leads", item.id), item);
+        batch.set(doc(db, "leads", item.id), item);
       }
+      await batch.commit();
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "leads");
     }
@@ -1934,12 +1962,16 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const overwriteFinances = async (newFinances: FinanceRecord[]) => {
     try {
+      { const deleteBatch = writeBatch(db);
       for (const item of finances) {
-        await deleteDoc(doc(db, "finances", item.id));
+        deleteBatch.delete(doc(db, "finances", item.id));
       }
+      await deleteBatch.commit(); }
+      const batch = writeBatch(db);
       for (const item of newFinances) {
-        await setDoc(doc(db, "finances", item.id), item);
+        batch.set(doc(db, "finances", item.id), item);
       }
+      await batch.commit();
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "finances");
     }
@@ -1947,9 +1979,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const appendClients = async (newClients: Client[]) => {
     try {
+      const batch = writeBatch(db);
       for (const item of newClients) {
-        await setDoc(doc(db, "clients", item.id), item);
+        batch.set(doc(db, "clients", item.id), item);
       }
+      await batch.commit();
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "clients");
     }
@@ -1957,9 +1991,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const appendLeads = async (newLeads: Lead[]) => {
     try {
+      const batch = writeBatch(db);
       for (const item of newLeads) {
-        await setDoc(doc(db, "leads", item.id), item);
+        batch.set(doc(db, "leads", item.id), item);
       }
+      await batch.commit();
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "leads");
     }
@@ -1967,9 +2003,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const appendFinances = async (newFinances: FinanceRecord[]) => {
     try {
+      const batch = writeBatch(db);
       for (const item of newFinances) {
-        await setDoc(doc(db, "finances", item.id), item);
+        batch.set(doc(db, "finances", item.id), item);
       }
+      await batch.commit();
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "finances");
     }
@@ -1977,12 +2015,14 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const overwriteCoaches = async (newCoaches: Coach[]) => {
     try {
+      const batch = writeBatch(db);
       for (const item of coaches) {
-        await deleteDoc(doc(db, "coaches", item.id));
+        batch.delete(doc(db, "coaches", item.id));
       }
       for (const item of newCoaches) {
-        await setDoc(doc(db, "coaches", item.id), item);
+        batch.set(doc(db, "coaches", item.id), item);
       }
+      await batch.commit();
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "coaches");
     }
@@ -1990,9 +2030,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const appendCoaches = async (newCoaches: Coach[]) => {
     try {
+      const batch = writeBatch(db);
       for (const item of newCoaches) {
-        await setDoc(doc(db, "coaches", item.id), item);
+        batch.set(doc(db, "coaches", item.id), item);
       }
+      await batch.commit();
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "coaches");
     }
@@ -2000,7 +2042,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const deleteLead = async (id: string) => {
     setLeads((prev) => prev.filter((l) => l.id !== id));
-    deleteDoc(doc(db, "leads", id)).catch((err) => {
+    deleteDoc(doc(db, "leads", id)).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(
         `Failed to delete lead ${id} on Firestore, kept locally:`,
         err,
@@ -2010,7 +2052,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const deleteClient = async (id: string) => {
     setClients((prev) => prev.filter((c) => c.id !== id));
-    deleteDoc(doc(db, "clients", id)).catch((err) => {
+    deleteDoc(doc(db, "clients", id)).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(
         `Failed to delete client ${id} on Firestore, kept locally:`,
         err,
@@ -2020,7 +2062,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const deleteTask = async (id: string) => {
     setTasks((prev) => prev.filter((t) => t.id !== id));
-    deleteDoc(doc(db, "tasks", id)).catch((err) => {
+    deleteDoc(doc(db, "tasks", id)).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(
         `Failed to delete task ${id} on Firestore, kept locally:`,
         err,
@@ -2030,7 +2072,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const deleteFinanceRecord = async (id: string) => {
     setFinances((prev) => prev.filter((f) => f.id !== id));
-    deleteDoc(doc(db, "finances", id)).catch((err) => {
+    deleteDoc(doc(db, "finances", id)).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(
         `Failed to delete finance record ${id} on Firestore, kept locally:`,
         err,
@@ -2042,7 +2084,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     setClients((prev) =>
       prev.map((c) => (c.id === clientId ? { ...c, notes } : c)),
     );
-    updateDoc(doc(db, "clients", clientId), { notes }).catch((err) => {
+    updateDoc(doc(db, "clients", clientId), { notes }).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(
         `Failed to update notes for client ${clientId} on Firestore, kept locally:`,
         err,
@@ -2059,7 +2101,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     setClients((prev) =>
       prev.map((c) => (c.id === clientId ? { ...c, ...updates } : c)),
     );
-    updateDoc(doc(db, "clients", clientId), updates as any).catch((err) => {
+    updateDoc(doc(db, "clients", clientId), updates as any).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(
         `Failed to update client ${clientId} on Firestore, kept locally:`,
         err,
@@ -2106,10 +2148,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         };
 
         setTasks((prev) => [managerTask, trainerTask, ...prev]);
-        setDoc(doc(db, "tasks", managerTaskId), managerTask).catch((err) => {
+        setDoc(doc(db, "tasks", managerTaskId), managerTask).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
           console.warn("Failed to sync manager risk task to Firestore:", err);
         });
-        setDoc(doc(db, "tasks", trainerTaskId), trainerTask).catch((err) => {
+        setDoc(doc(db, "tasks", trainerTaskId), trainerTask).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
           console.warn("Failed to sync trainer risk task to Firestore:", err);
         });
       }
@@ -2164,7 +2206,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       maxCapacity,
     };
     setGroups((prev) => [...prev, newGroup]);
-    setDoc(doc(db, "groups", newGroup.id), newGroup).catch((err) => {
+    setDoc(doc(db, "groups", newGroup.id), newGroup).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(`Failed to create group in Firestore:`, err);
     });
   };
@@ -2204,7 +2246,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     setGroups((prev) =>
       prev.map((g) => (g.id === id ? { ...g, ...updates } : g)),
     );
-    updateDoc(doc(db, "groups", id), updates).catch((err) => {
+    updateDoc(doc(db, "groups", id), updates).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(`Failed to update group ${id} on Firestore:`, err);
     });
 
@@ -2234,7 +2276,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   const deleteGroup = async (id: string) => {
     const groupName = groups.find((g) => g.id === id)?.name;
     setGroups((prev) => prev.filter((g) => g.id !== id));
-    deleteDoc(doc(db, "groups", id)).catch((err) => {
+    deleteDoc(doc(db, "groups", id)).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(`Failed to delete group ${id} on Firestore:`, err);
     });
     if (groupName) {
@@ -2280,7 +2322,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     updateDoc(doc(db, "groups", groupId), {
       selectedClientIds: newSelectedIds,
       playersCount: newSelectedIds.length,
-    }).catch((err) => {
+    }).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(`Failed to assign client to select team in Firestore:`, err);
     });
   };
@@ -2311,7 +2353,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     updateDoc(doc(db, "groups", groupId), {
       selectedClientIds: newSelectedIds,
       playersCount: newSelectedIds.length,
-    }).catch((err) => {
+    }).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(
         `Failed to remove client from select team in Firestore:`,
         err,
@@ -2353,7 +2395,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       groupName: finalGroupName,
       coachId,
       coachName,
-    }).catch((err) => {
+    }).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(
         `Failed to assign client ${clientId} to group in Firestore:`,
         err,
@@ -2406,14 +2448,14 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       },
     };
     setCoaches((prev) => [...prev, newCoach]);
-    setDoc(doc(db, "coaches", newCoach.id), newCoach).catch((err) => {
+    setDoc(doc(db, "coaches", newCoach.id), newCoach).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(`Failed to create coach in Firestore:`, err);
     });
   };
 
   const deleteCoach = async (id: string) => {
     setCoaches((prev) => prev.filter((c) => c.id !== id));
-    deleteDoc(doc(db, "coaches", id)).catch((err) => {
+    deleteDoc(doc(db, "coaches", id)).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(`Failed to delete coach ${id} on Firestore:`, err);
     });
     // For groups assigned to this coach, set coach to 'Не назначен'
@@ -2427,7 +2469,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       updateDoc(doc(db, "groups", g.id), {
         coachId: "",
         coachName: "Не назначен",
-      }).catch((err) => {
+      }).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
         console.warn(`Failed to reset group coach in Firestore:`, err);
       });
     }
@@ -2459,7 +2501,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     setCoaches((prev) =>
       prev.map((c) => (c.id === coachId ? { ...c, phone, telegram } : c)),
     );
-    updateDoc(doc(db, "coaches", coachId), { phone, telegram }).catch((err) => {
+    updateDoc(doc(db, "coaches", coachId), { phone, telegram }).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(`Failed to update coach contacts in Firestore:`, err);
     });
   };
@@ -2501,7 +2543,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       );
     }
 
-    updateDoc(doc(db, "coaches", coachId), flatUpdates).catch((err) => {
+    updateDoc(doc(db, "coaches", coachId), flatUpdates).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(`Failed to update coach ${coachId} in Firestore:`, err);
     });
 
@@ -2529,21 +2571,21 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     const id = `cp_${Date.now()}`;
     const newCp = { ...cp, id };
     setCounterparties((prev) => [...prev, newCp]);
-    setDoc(doc(db, "counterparties", id), newCp).catch((err) => {
+    setDoc(doc(db, "counterparties", id), newCp).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn("Failed to add counterparty:", err);
     });
   };
 
   const updateCounterparty = async (id: string, updates: Partial<Counterparty>) => {
     setCounterparties((prev) => prev.map((cp) => (cp.id === id ? { ...cp, ...updates } : cp)));
-    updateDoc(doc(db, "counterparties", id), updates).catch((err) => {
+    updateDoc(doc(db, "counterparties", id), updates).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn("Failed to update counterparty:", err);
     });
   };
 
   const deleteCounterparty = async (id: string) => {
     setCounterparties((prev) => prev.filter((cp) => cp.id !== id));
-    deleteDoc(doc(db, "counterparties", id)).catch((err) => {
+    deleteDoc(doc(db, "counterparties", id)).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn("Failed to delete counterparty:", err);
     });
   };
