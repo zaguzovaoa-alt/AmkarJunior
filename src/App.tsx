@@ -186,6 +186,20 @@ function DashboardContainer() {
               setActiveTab={setCurrentTab}
             />
           );
+        if (currentTab === "trainer_sessions")
+          return (
+            <TrainerCRM
+              activeTab="trainer_sessions"
+              setActiveTab={setCurrentTab}
+            />
+          );
+        if (currentTab === "trainer_homeworks")
+          return (
+            <TrainerCRM
+              activeTab="trainer_homeworks"
+              setActiveTab={setCurrentTab}
+            />
+          );
         if (currentTab === "trainer_knowledge")
           return (
             <TrainerCRM

@@ -28,6 +28,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { compressImage } from "../utils/image";
 import { calculateAge } from "../utils/dateUtils";
 import { BirthdaysBanner } from "./BirthdaysBanner";
+import { TrainerSessions } from "./TrainerSessions";
 import { parseScheduleString } from "../utils/scheduleParser";
 import { TrainingGroup } from "../types";
 
@@ -2209,6 +2210,12 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
         )}
 
         {/* TAB 9: HOMEWORKS */}
+        
+        {/* TAB 10: SESSIONS */}
+        {activeTab === "trainer_sessions" && (
+          <TrainerSessions />
+        )}
+
         {activeTab === "trainer_homeworks" && (
           <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm text-left space-y-6">
             <div className="flex justify-between items-center border-b pb-3">

@@ -73,6 +73,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         return [
           { id: "trainer_home", label: "Главная", icon: BarChart },
           { id: "trainer_schedule", label: "Мое расписание", icon: Calendar },
+          { id: "trainer_sessions", label: "Учет тренировок", icon: CheckSquare },
           { id: "trainer_groups", label: "Мои группы", icon: Users },
           { id: "trainer_attendance", label: "Посещения", icon: CheckSquare },
           { id: "trainer_progress", label: "Успеваемость", icon: Award },
