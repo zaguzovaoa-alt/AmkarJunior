@@ -101,7 +101,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [appUser]);
 
-  const resolveAppUser = async (u: User, optionalPhone?: string) => {
+  const resolveAppUser = async (u: User, optionalPhone?: string, explicitData?: Partial<AppUser>) => {
     try {
       const dbPhone = u.phoneNumber || optionalPhone;
       const activePhone = dbPhone ? normalizePhoneNumber(dbPhone) : null;
@@ -301,8 +301,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         uid: u.uid,
         email: u.email,
         phone: activePhone || dbPhone || null,
-        fullName: isCoach ? (coachData?.name || `Тренер ${activePhone || dbPhone}`) : (u.displayName || (activePhone || dbPhone ? `Пользователь ${activePhone || dbPhone}` : "Новый Пользователь")),
-        role: initialRole,
+        fullName: explicitData?.fullName || (isCoach ? (coachData?.name || `Тренер ${activePhone || dbPhone}`) : (u.displayName || (activePhone || dbPhone ? `Пользователь ${activePhone || dbPhone}` : "Новый Пользователь"))),
+        role: explicitData?.role || initialRole,
         createdAt: Date.now()
       };
 
@@ -494,7 +494,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       try {
         const cred = await signInAnonymously(auth);
-        await resolveAppUser(cred.user, phone);
+        await resolveAppUser(cred.user, phone, {
+           fullName: docName || (isAdmin ? "Администратор" : "Пользователь"),
+           role: docRole,
+        });
         return true;
       } catch (authErr: any) {
         console.warn("signInAnonymously failed (using local virtual fallback):", authErr);
