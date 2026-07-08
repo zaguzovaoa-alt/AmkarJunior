@@ -367,129 +367,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         : data.check_status;
         
       if (data.status === 'OK') {
-        // 401 means Authorization Successful (call was made)
         if (check_status == 401) {
-           try {
-             const cred = await signInAnonymously(auth);
-             await resolveAppUser(cred.user, phone);
-             return true;
-           } catch (authErr: any) {
-             console.warn("verifyPhoneCode: signInAnonymously failed, using virtual fallback:", authErr);
-             
-             const cleanPhone = normalizePhoneNumber(phone);
-             const isAdmin = cleanPhone === '+79825885477';
-
-             let formatted = cleanPhone;
-      if (cleanPhone.length === 12 && cleanPhone.startsWith('+7')) {
-        formatted = `+7 (${cleanPhone.slice(2,5)}) ${cleanPhone.slice(5,8)}-${cleanPhone.slice(8,10)}-${cleanPhone.slice(10,12)}`;
-      }
-      
-      const phoneCandidates = Array.from(new Set([
-        phone.trim(), 
-        cleanPhone, 
-        phone.replace(/\s+/g, ''),
-        cleanPhone.replace('+7', '8'),
-        cleanPhone.replace(/^\+7/, ''),
-        formatted
-      ])).filter(Boolean);
-
-             let found = false;
-             let matchedSnap: any = null;
-             let docRole: UserRole = 'parent';
-             let docName = '';
-             let docId = 'virtual_' + cleanPhone.replace(/[^\w]/g, '');
-
-             for (const p of phoneCandidates) {
-               const q = query(collection(db, 'systemUsers'), where('phone', '==', p));
-               const snap = await getDocs(q);
-               if (!snap.empty) {
-                 found = true;
-                 matchedSnap = snap.docs[0];
-                 docRole = matchedSnap.data().role as UserRole;
-                 docName = matchedSnap.data().fullName || '';
-                 docId = matchedSnap.id;
-                 break;
-               }
-             }
-
-             if (!found) {
-               for (const p of phoneCandidates) {
-                 const q = query(collection(db, 'coaches'), where('phone', '==', p));
-                 const snap = await getDocs(q);
-                 if (!snap.empty) {
-                   found = true;
-                   matchedSnap = snap.docs[0];
-                   docRole = 'trainer';
-                   docName = matchedSnap.data().name || '';
-                   break;
-                 }
-               }
-             }
-
-             if (!found) {
-               for (const p of phoneCandidates) {
-                 const q = query(collection(db, 'clients'), where('parentPhone', '==', p));
-                 const snap = await getDocs(q);
-                 if (!snap.empty) {
-                   found = true;
-                   matchedSnap = snap.docs[0];
-                   docRole = 'parent';
-                   docName = matchedSnap.data().parentName || '';
-                   break;
-                 }
-               }
-             }
-
-             if (isAdmin) {
-               docRole = 'admin';
-               if (!docName) docName = 'Администратор';
-             }
-
-             const mockUser = {
-               uid: docId,
-               email: null,
-               phoneNumber: cleanPhone,
-               displayName: docName || (isAdmin ? "Администратор" : "Пользователь"),
-               isAnonymous: true,
-             } as any;
-
-             setUser(mockUser);
-
-             const fallbackAppUser: AppUser = {
-               uid: docId,
-               email: null,
-               phone: cleanPhone,
-               fullName: docName || (isAdmin ? "Администратор" : "Пользователь"),
-               role: docRole,
-               createdAt: Date.now()
-             };
-
-             try {
-               await setDoc(doc(db, 'systemUsers', docId), fallbackAppUser, { merge: true });
-             } catch (dbErr) {
-               console.error("Failed to write virtual systemUser info to DB:", dbErr);
-             }
-
-             setAppUser(fallbackAppUser);
-             return true;
-           }
+           return true; 
         }
         
-        // 400 means Waiting for Call
-        if (check_status === 400) {
+        if (check_status == 400) {
            return false; // Still waiting
         }
-        
-        if (check_status !== undefined) {
-           setPhoneError(data.status_text || data.check_status_text || "Ошибка авторизации звонком.");
-        }
-        return false;
       }
       
-      return false;
+      throw new Error(data.status_text || "Invalid check status");
     } catch (err: any) {
-      console.error("verifyPhoneCode top catch:", err);
-      setPhoneError("Ошибка проверки статуса звонка: " + err.message);
+      console.error(err);
+      setPhoneError(err.message || "Ошибка проверки кода.");
       throw err;
     }
   };
@@ -521,60 +411,73 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let docId = 'virtual_' + cleanPhone.replace(/[^\w]/g, '');
       let collectionName = '';
 
+      let allMatchedDocs: { snap: any, collectionName: string, role: UserRole, name: string }[] = [];
+
       for (const p of phoneCandidates) {
         const qSys = query(collection(db, 'systemUsers'), where('phone', '==', p));
         const snapSys = await getDocs(qSys);
         if (!snapSys.empty) {
-          matchedSnap = snapSys.docs[0];
-          docRole = matchedSnap.data().role as UserRole;
-          docName = matchedSnap.data().fullName || '';
-          collectionName = 'systemUsers';
-          found = true;
-          break;
+          for (const d of snapSys.docs) {
+             allMatchedDocs.push({ snap: d, collectionName: 'systemUsers', role: d.data().role as UserRole || 'parent', name: d.data().fullName || '' });
+          }
         }
 
         const qCoach = query(collection(db, 'coaches'), where('phone', '==', p));
         const snapCoach = await getDocs(qCoach);
         if (!snapCoach.empty) {
-          matchedSnap = snapCoach.docs[0];
-          docRole = 'trainer';
-          docName = matchedSnap.data().name || '';
-          collectionName = 'coaches';
-          found = true;
-          break;
+          for (const d of snapCoach.docs) {
+             allMatchedDocs.push({ snap: d, collectionName: 'coaches', role: 'trainer', name: d.data().name || '' });
+          }
         }
 
         const qClient = query(collection(db, 'clients'), where('parentPhone', '==', p));
         const snapClient = await getDocs(qClient);
         if (!snapClient.empty) {
-          matchedSnap = snapClient.docs[0];
-          docRole = 'parent';
-          docName = matchedSnap.data().parentName || '';
-          collectionName = 'clients';
-          found = true;
-          break;
+          for (const d of snapClient.docs) {
+             allMatchedDocs.push({ snap: d, collectionName: 'clients', role: 'parent', name: d.data().parentName || '' });
+          }
         }
       }
 
-      if (found) {
-        docId = matchedSnap.id;
-        const data = matchedSnap.data();
+      if (allMatchedDocs.length > 0) {
+        found = true;
         
-        if (forceSetPassword && password) {
-          await setDoc(doc(db, collectionName, docId), { password }, { merge: true });
-        } else {
-          if (data.password) {
-            if (!password) {
+        let targetDoc = allMatchedDocs[0];
+        
+        if (!forceSetPassword && password) {
+           const docWithMatchingPass = allMatchedDocs.find(d => d.snap.data().password === password);
+           if (docWithMatchingPass) {
+             targetDoc = docWithMatchingPass;
+           } else {
+             const docWithPass = allMatchedDocs.find(d => d.snap.data().password);
+             if (docWithPass) {
+                 setPhoneError("Неверный пароль");
+                 throw new Error("INVALID_PASSWORD");
+             } else {
+                 setPhoneError("Пароль не установлен. Требуется подтверждение номера.");
+                 throw new Error("PASSWORD_NOT_SET");
+             }
+           }
+        } else if (!forceSetPassword && !password) {
+           const docWithPass = allMatchedDocs.find(d => d.snap.data().password);
+           if (docWithPass) {
               setPhoneError("Требуется пароль");
               throw new Error("PASSWORD_REQUIRED");
-            }
-            if (data.password !== password) {
-              setPhoneError("Неверный пароль");
-              throw new Error("INVALID_PASSWORD");
-            }
-          } else {
-            setPhoneError("Пароль не установлен. Требуется подтверждение номера.");
-            throw new Error("PASSWORD_NOT_SET");
+           } else {
+              setPhoneError("Пароль не установлен. Требуется подтверждение номера.");
+              throw new Error("PASSWORD_NOT_SET");
+           }
+        }
+
+        matchedSnap = targetDoc.snap;
+        docRole = targetDoc.role;
+        docName = targetDoc.name;
+        collectionName = targetDoc.collectionName;
+        docId = matchedSnap.id;
+        
+        if (forceSetPassword && password) {
+          for (const d of allMatchedDocs) {
+             await setDoc(doc(db, d.collectionName, d.snap.id), { password }, { merge: true });
           }
         }
       } else {
@@ -595,7 +498,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return true;
       } catch (authErr: any) {
         console.warn("signInAnonymously failed (using local virtual fallback):", authErr);
-
+        
         const mockUser = {
           uid: docId,
           email: null,
@@ -603,9 +506,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           displayName: docName || (isAdmin ? "Администратор" : "Пользователь"),
           isAnonymous: true,
         } as any;
-
+        
         setUser(mockUser);
-
+        
         const fallbackAppUser: AppUser = {
           uid: docId,
           email: null,
@@ -614,13 +517,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           role: docRole,
           createdAt: Date.now()
         };
-
+        
         try {
           await setDoc(doc(db, 'systemUsers', docId), fallbackAppUser, { merge: true });
         } catch (dbErr) {
           console.error("Failed to write virtual systemUser info to DB:", dbErr);
         }
-
+        
         setAppUser(fallbackAppUser);
         return true;
       }
