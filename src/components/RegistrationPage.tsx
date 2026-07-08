@@ -1,3 +1,5 @@
+import { signInAnonymously } from "firebase/auth";
+import { auth } from "../firebase";
 import React, { useState } from "react";
 import { useCRM } from "../context/CRMContext";
 import { useAuth } from "../context/AuthContext";
@@ -39,8 +41,8 @@ export const RegistrationPage: React.FC = () => {
   const [newClientData, setNewClientData] = useState<any>(null);
 
   const [verifyingPhone, setVerifyingPhone] = useState(false);
-  const [verificationCode, setVerificationCode] = useState("");
-  const [expectedCode, setExpectedCode] = useState("");
+  const [checkId, setCheckId] = useState("");
+  const [callPhonePretty, setCallPhonePretty] = useState("");
 
 
   
@@ -77,11 +79,12 @@ export const RegistrationPage: React.FC = () => {
         body: JSON.stringify({ phone: parentPhone }),
       });
       const data = await res.json();
-      if (data.status === "OK" && data.code) {
-        setExpectedCode(data.code.toString());
+      if (data.status === "OK" && data.check_id) {
+        setCheckId(data.check_id);
+        setCallPhonePretty(data.call_phone_pretty || data.call_phone);
         setVerifyingPhone(true);
       } else {
-        setError(data.status_text || data.message || "Ошибка отправки звонка");
+        setError(data.status_text || data.message || "Ошибка инициализации звонка");
       }
     } catch (e: any) {
       setError("Ошибка сети при проверке номера");
@@ -92,10 +95,6 @@ export const RegistrationPage: React.FC = () => {
 
   
   const finalizeRegistration = () => {
-    if (verificationCode !== expectedCode) {
-      setError("Неверный код");
-      return;
-    }
     const birthYear =
       parseInt(childBirthDate.split("-")[0]) || new Date().getFullYear();
     const childAge = new Date().getFullYear() - birthYear;
@@ -112,21 +111,12 @@ export const RegistrationPage: React.FC = () => {
       childBirthDate,
       childBirthYear: birthYear,
       childAge,
-      status: "active" as const,
-      abonement: "none" as const,
-      abonementStatus: "Нет абонемента" as const,
-      abonementSessionsLeft: 0,
-      groupName: null,
-      coachId: null,
-      coachName: null,
-      medicalCertificateUrl: null,
-      insuranceUrl: null,
-      payments: [],
-      attendance: [],
-      progress: { technique: 0, tactics: 0, physical: 0, discipline: 0 },
-      achievements: [],
-      invitedBy: refCode || undefined,
-      notes: "Регистрация через портал профиля",
+      status: "lead",
+      registeredAt: new Date().toISOString(),
+      balance: 0,
+      referralCode: `REF${Math.floor(1000 + Math.random() * 9000)}`,
+      referredBy: refCode || null,
+      visits: 0,
     };
 
     setNewClientData(newClient);
@@ -134,25 +124,82 @@ export const RegistrationPage: React.FC = () => {
     setIsPasswordStep(true);
   };
 
+  useEffect(() => {
+    let interval: any;
+    if (verifyingPhone && checkId) {
+      interval = setInterval(async () => {
+        try {
+          const res = await fetch("/api/callcheck/status", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ check_id: checkId }),
+          });
+          const data = await res.json();
+          if (data.status === "OK" && data.check_status === "401") {
+            clearInterval(interval);
+            finalizeRegistration();
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }, 5000);
+    }
+    return () => clearInterval(interval);
+  }, [verifyingPhone, checkId, parentName, parentPhone, parentEmail, childSurname, childName, childBirthDate]);
+
+  useEffect(() => {
+    let interval: any;
+    if (verifyingPhone && checkId) {
+      interval = setInterval(async () => {
+        try {
+          const res = await fetch("/api/callcheck/status", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ check_id: checkId }),
+          });
+          const data = await res.json();
+          if (data.status === "OK" && data.check_status === "401") {
+            clearInterval(interval);
+            finalizeRegistration();
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }, 5000);
+    }
+    return () => clearInterval(interval);
+  }, [verifyingPhone, checkId]);
+
   const savePassword = async () => {
     if (password.length < 6) {
       setError("Пароль должен быть не менее 6 символов");
       return;
     }
     
-    const clientToSave = { ...newClientData, password };
-    appendClients([clientToSave]);
-    
-    // Automatically log the parent in after successful registration
+    setSaving(true);
     try {
-      await fastLoginWithPhone(parentPhone, password);
-      window.location.href = "/";
-    } catch (e) {
-      console.error(e);
+      if (!auth.currentUser) {
+        await signInAnonymously(auth);
+      }
+      const clientToSave = { ...newClientData, password };
+      await appendClients([clientToSave]);
+      
+      // Automatically log the parent in after successful registration
+      try {
+        await fastLoginWithPhone(parentPhone, password);
+        window.location.href = "/";
+      } catch (e) {
+        console.error("Login after registration failed:", e);
+        window.location.href = "/"; // still redirect
+      }
+  
+      setSubmitted(true);
+      setIsPasswordStep(false);
+    } catch (err: any) {
+      setError("Ошибка при сохранении: " + err?.message);
+    } finally {
+      setSaving(false);
     }
-
-    setSubmitted(true);
-    setIsPasswordStep(false);
   };
 
 

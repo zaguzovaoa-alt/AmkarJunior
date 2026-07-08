@@ -34,8 +34,7 @@ async function startServer() {
     try {
       const phone = req.body?.phone || "";
       const cleanPhone = phone.replace(/[^0-9]/g, '');
-      // Use code/call to receive a call where the code is the last 4 digits
-      const url = `https://sms.ru/code/call?api_id=${SMS_RU_API_ID}&phone=${cleanPhone}`;
+      const url = `https://sms.ru/callcheck/add?api_id=${SMS_RU_API_ID}&phone=${cleanPhone}&json=1`;
       const response = await fetch(url);
       const data = await response.json();
       res.json(data);

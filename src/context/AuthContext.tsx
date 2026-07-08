@@ -379,13 +379,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
              const cleanPhone = normalizePhoneNumber(phone);
              const isAdmin = cleanPhone === '+79825885477';
 
-             const phoneCandidates = Array.from(new Set([
-               phone.trim(), 
-               cleanPhone, 
-               phone.replace(/\s+/g, ''),
-               cleanPhone.replace('+7', '8'),
-               cleanPhone.replace(/^\+7/, '')
-             ])).filter(Boolean);
+             let formatted = cleanPhone;
+      if (cleanPhone.length === 12 && cleanPhone.startsWith('+7')) {
+        formatted = `+7 (${cleanPhone.slice(2,5)}) ${cleanPhone.slice(5,8)}-${cleanPhone.slice(8,10)}-${cleanPhone.slice(10,12)}`;
+      }
+      
+      const phoneCandidates = Array.from(new Set([
+        phone.trim(), 
+        cleanPhone, 
+        phone.replace(/\s+/g, ''),
+        cleanPhone.replace('+7', '8'),
+        cleanPhone.replace(/^\+7/, ''),
+        formatted
+      ])).filter(Boolean);
 
              let found = false;
              let matchedSnap: any = null;
@@ -494,12 +500,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const cleanPhone = normalizePhoneNumber(phone);
       const isAdmin = cleanPhone === '+79825885477';
 
+      let formatted = cleanPhone;
+      if (cleanPhone.length === 12 && cleanPhone.startsWith('+7')) {
+        formatted = `+7 (${cleanPhone.slice(2,5)}) ${cleanPhone.slice(5,8)}-${cleanPhone.slice(8,10)}-${cleanPhone.slice(10,12)}`;
+      }
+      
       const phoneCandidates = Array.from(new Set([
         phone.trim(), 
         cleanPhone, 
         phone.replace(/\s+/g, ''),
         cleanPhone.replace('+7', '8'),
-        cleanPhone.replace(/^\+7/, '')
+        cleanPhone.replace(/^\+7/, ''),
+        formatted
       ])).filter(Boolean);
 
       let found = false;

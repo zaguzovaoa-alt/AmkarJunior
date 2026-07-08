@@ -1,3 +1,5 @@
+import { signInAnonymously } from "firebase/auth";
+import { auth } from "../firebase";
 import React, { useState } from "react";
 import { db } from "../firebase";
 import { doc, setDoc } from "firebase/firestore";
@@ -49,8 +51,8 @@ export const StaffRegistrationPage: React.FC = () => {
   const { fastLoginWithPhone } = useAuth();
 
   const [verifyingPhone, setVerifyingPhone] = useState(false);
-  const [verificationCode, setVerificationCode] = useState("");
-  const [expectedCode, setExpectedCode] = useState("");
+  const [checkId, setCheckId] = useState("");
+  const [callPhonePretty, setCallPhonePretty] = useState("");
 
 
   
@@ -60,8 +62,12 @@ export const StaffRegistrationPage: React.FC = () => {
       setError("Пароль должен быть не менее 6 символов");
       return;
     }
+    
     setSaving(true);
     try {
+      if (!auth.currentUser) {
+        await signInAnonymously(auth);
+      }
       await setDoc(doc(db, "systemUsers", createdUserId!), { password }, { merge: true });
       if (phone) {
         await fastLoginWithPhone(phone, password);
@@ -104,11 +110,12 @@ export const StaffRegistrationPage: React.FC = () => {
         body: JSON.stringify({ phone: phone }),
       });
       const data = await res.json();
-      if (data.status === "OK" && data.code) {
-        setExpectedCode(data.code.toString());
+      if (data.status === "OK" && data.check_id) {
+        setCheckId(data.check_id);
+        setCallPhonePretty(data.call_phone_pretty || data.call_phone);
         setVerifyingPhone(true);
       } else {
-        setError(data.status_text || data.message || "Ошибка отправки звонка");
+        setError(data.status_text || data.message || "Ошибка инициализации звонка");
       }
     } catch (e: any) {
       setError("Ошибка сети при проверке номера");
