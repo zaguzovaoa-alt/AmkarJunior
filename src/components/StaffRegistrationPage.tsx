@@ -1,6 +1,6 @@
 import { signInAnonymously } from "firebase/auth";
 import { auth } from "../firebase";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { db } from "../firebase";
 import { doc, setDoc } from "firebase/firestore";
 import { useAuth } from "../context/AuthContext";
@@ -125,11 +125,30 @@ export const StaffRegistrationPage: React.FC = () => {
   };
 
   
-  const finalizeRegistration = async () => {
-    if (verificationCode !== expectedCode) {
-      setError("Неверный код");
-      return;
+  useEffect(() => {
+    let interval: any;
+    if (verifyingPhone && checkId) {
+      interval = setInterval(async () => {
+        try {
+          const res = await fetch("/api/callcheck/status", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ check_id: checkId }),
+          });
+          const data = await res.json();
+          if (data.status === "OK" && data.check_status === "401") {
+            clearInterval(interval);
+            finalizeRegistration();
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }, 5000);
     }
+    return () => clearInterval(interval);
+  }, [verifyingPhone, checkId, fullName, email, phone, internalRole]);
+
+  const finalizeRegistration = async () => {
 
     setSaving(true);
     try {
@@ -227,41 +246,33 @@ export const StaffRegistrationPage: React.FC = () => {
                 </div>
               </div>
             ) : verifyingPhone && !submitted ? (
-
               <div className="text-center py-8 space-y-4 animate-in fade-in zoom-in duration-300">
-                <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
-                  <Phone className="w-10 h-10" />
+                <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Phone className="w-8 h-8 animate-pulse" />
                 </div>
                 <h3 className="text-xl font-bold text-slate-900">
-                  Подтверждение номера
+                  Ожидаем звонок
                 </h3>
                 <p className="text-sm text-slate-500 max-w-sm mx-auto">
-                  На номер <span className="font-bold text-slate-800">{phone}</span> сейчас поступит звонок. Введите <b>последние 4 цифры</b> номера входящего вызова.
+                  Для подтверждения номера <b>с вашего телефона</b> ({phone}) позвоните на бесплатный номер:
+                </p>
+                <div className="py-4">
+                  <a href={"tel:" + callPhonePretty?.replace(/[^+\d]/g, '')} className="text-2xl font-black text-indigo-600 tracking-wider">
+                    {callPhonePretty}
+                  </a>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Звонок будет сброшен (это бесплатно). Проверка пройдет автоматически.
                 </p>
                 {error && (
                   <div className="p-3 bg-red-50 text-red-600 text-xs font-bold rounded-xl border border-red-100 text-center">
                     {error}
                   </div>
                 )}
-                <div className="max-w-xs mx-auto">
-                  <input
-                    type="text"
-                    maxLength={4}
-                    value={verificationCode}
-                    onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ""))}
-                    className="w-full text-center tracking-[1em] text-3xl font-black bg-slate-50 border border-slate-200 rounded-xl py-4 focus:outline-none focus:border-emerald-500"
-                    placeholder="0000"
-                  />
-                  <button
-                    onClick={finalizeRegistration}
-                    disabled={verificationCode.length !== 4 || saving}
-                    className="w-full mt-4 py-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black rounded-xl shadow-lg shadow-emerald-500/30 transition-all disabled:opacity-50"
-                  >
-                    {saving ? "Регистрация..." : "Подтвердить"}
-                  </button>
+                <div className="max-w-xs mx-auto pt-4">
                   <button
                     onClick={() => setVerifyingPhone(false)}
-                    className="w-full mt-2 py-3 text-sm font-bold text-slate-500 hover:text-slate-700 transition"
+                    className="w-full py-3 text-sm font-bold text-slate-500 hover:text-slate-700 transition"
                   >
                     Отменить
                   </button>

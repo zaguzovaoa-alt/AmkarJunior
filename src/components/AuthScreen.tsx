@@ -16,6 +16,7 @@ export const AuthScreen: React.FC = () => {
   const [phone, setPhone] = useState("+7");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
 
   
