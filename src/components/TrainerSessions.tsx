@@ -15,7 +15,10 @@ export const TrainerSessions: React.FC = () => {
   ) || coaches[0];
   
   const [filterMonth, setFilterMonth] = useState(
-    new Date().toISOString().substring(0, 7)
+    (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+    })()
   );
 
   const mySessions = (trainingSessions || []).filter(

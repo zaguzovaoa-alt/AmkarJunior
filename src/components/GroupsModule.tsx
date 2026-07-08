@@ -87,10 +87,17 @@ export const GroupsModule: React.FC = () => {
 
   // 3. Date Filters for Attendance Analysis
   const [attendanceStartDate, setAttendanceStartDate] = useState(
-    new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().substring(0, 10)
+    (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-01`;
+    })()
   );
   const [attendanceEndDate, setAttendanceEndDate] = useState(
-    new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().substring(0, 10)
+    (() => {
+      const d = new Date();
+      const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${lastDay}`;
+    })()
   );
   
   // Analytics modal state

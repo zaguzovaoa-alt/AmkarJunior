@@ -95,23 +95,15 @@ export const FinanceModule: React.FC = () => {
 
   const [salaryTab, setSalaryTab] = useState<"staff" | "transactions">("staff");
 
-  const currentMonthStr = new Date().toISOString().substring(0, 7);
+  
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const lastDay = new Date(yyyy, now.getMonth() + 1, 0).getDate();
+  const currentMonthStr = `${yyyy}-${mm}`;
 
-  // States for date range filtering on dashboard
-  const defaultStartDate = new Date(
-    new Date().getFullYear(),
-    new Date().getMonth(),
-    1,
-  )
-    .toISOString()
-    .substring(0, 10);
-  const defaultEndDate = new Date(
-    new Date().getFullYear(),
-    new Date().getMonth() + 1,
-    0,
-  )
-    .toISOString()
-    .substring(0, 10);
+  const defaultStartDate = `${yyyy}-${mm}-01`;
+  const defaultEndDate = `${yyyy}-${mm}-${lastDay}`;
 
   const [dashStartDate, setDashStartDate] = useState(defaultStartDate);
   const [dashEndDate, setDashEndDate] = useState(defaultEndDate);
@@ -174,7 +166,7 @@ export const FinanceModule: React.FC = () => {
       type: fType,
       amount: Number(fAmount),
       category: financeCategories.find((c) => c.id === fCat)?.name || fCat,
-      date: new Date().toISOString().substring(0, 10),
+      date: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(),
       description: fDesc,
       targetMonth: fTargetMonth,
       accountId: fAccount,
@@ -291,7 +283,7 @@ export const FinanceModule: React.FC = () => {
       type: "expense",
       amount: amount,
       category: "Перевод между счетами",
-      date: new Date().toISOString().substring(0, 10),
+      date: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(),
       description: "Исходящий перевод средств",
       targetMonth: currentMonthStr,
       accountId: transferFromAcc,
@@ -302,7 +294,7 @@ export const FinanceModule: React.FC = () => {
       type: "income",
       amount: amount,
       category: "Перевод между счетами",
-      date: new Date().toISOString().substring(0, 10),
+      date: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(),
       description: "Входящий перевод средств",
       targetMonth: currentMonthStr,
       accountId: transferToAcc,
@@ -1232,7 +1224,7 @@ export const FinanceModule: React.FC = () => {
               .reduce((acc, f) => acc + Number(f.amount || 0), 0);
             const netFlow = incomes - expenses;
 
-            const today = new Date().toISOString().substring(0, 10);
+            const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
             const todayFinances = finances.filter((f) => f.date === today);
             const todayIncomesList = todayFinances.filter(
               (f) => f.type === "income",
@@ -1627,7 +1619,9 @@ export const FinanceModule: React.FC = () => {
             const currentMonthDate = new Date(gridFilterMonth + "-01");
             const prevMonthDate = new Date(currentMonthDate);
             prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
-            const prevMonthStr = prevMonthDate.toISOString().substring(0, 7);
+            const pY = prevMonthDate.getFullYear();
+            const pM = String(prevMonthDate.getMonth() + 1).padStart(2, "0");
+            const prevMonthStr = `${pY}-${pM}`;
 
             const monthNames = [
               "январю",
@@ -1751,7 +1745,9 @@ export const FinanceModule: React.FC = () => {
             for (let i = 0; i < 6; i++) {
               const d = new Date(currentMonthDate);
               d.setMonth(d.getMonth() - i);
-              const mStr = d.toISOString().substring(0, 7);
+              const dY = d.getFullYear();
+              const dM = String(d.getMonth() + 1).padStart(2, "0");
+              const mStr = `${dY}-${dM}`;
               const mName = d.toLocaleString("ru-RU", {
                 month: "long",
                 year: "numeric",

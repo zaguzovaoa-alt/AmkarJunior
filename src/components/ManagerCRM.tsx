@@ -137,7 +137,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
 
   // Manual payment entry state variables
   const [manualPaymentDate, setManualPaymentDate] = useState<string>(() =>
-    new Date().toISOString().substring(0, 10),
+    (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(),
   );
   const [manualPaymentType, setManualPaymentType] = useState<
     "12_sessions" | "8_sessions" | "4_sessions" | "1_session"
@@ -742,7 +742,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
 
   const handleOpenBookTrial = (lead: Lead) => {
     setBookingTrialLead(lead);
-    setTrialDate(new Date().toISOString().substring(0, 10));
+    setTrialDate((() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })());
     setTrialTime("17:00");
     setTrialCoachId("");
     setTrialGroupId("");

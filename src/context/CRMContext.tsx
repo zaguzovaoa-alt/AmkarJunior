@@ -1340,7 +1340,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         type: "expense",
         category: "Аренда",
         amount: groupObj.venueCost,
-        date: new Date().toISOString().split("T")[0],
+        date: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(),
         description: `Аренда площадки для тренировки (${groupName})`,
         groupName: groupName,
         isFixed: false,
@@ -1359,7 +1359,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         type: "expense",
         category: "Зарплата",
         amount: headCoachObj.rate,
-        date: new Date().toISOString().split("T")[0],
+        date: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(),
         description: `Оплата за тренировку: ${coachName} (${groupName})`,
         groupName: groupName,
         isFixed: false,
@@ -1378,7 +1378,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
           type: "expense",
           category: "Зарплата",
           amount: astCoachObj.rate,
-          date: new Date().toISOString().split("T")[0],
+          date: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(),
           description: `Оплата (Ассистент): ${astCoachObj.name} (${groupName})`,
           groupName: groupName,
           isFixed: false,
@@ -1497,7 +1497,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         id: "ac_tech_master",
         title: "Мастер Техники ⚽",
         description: "Получена высшая оценка 4.8+ за технические навыки",
-        earnedAt: new Date().toISOString().substring(0, 10),
+        earnedAt: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(),
         icon: "🏆",
       });
     }
@@ -1509,7 +1509,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         id: "ac_dis_master",
         title: "Железная Дисциплина ⚡",
         description: "Отличное поведение и дисциплина на тренировках",
-        earnedAt: new Date().toISOString().substring(0, 10),
+        earnedAt: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(),
         icon: "🎖️",
       });
     }

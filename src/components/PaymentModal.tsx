@@ -67,7 +67,7 @@ export const PaymentModal = ({
         const updatedSessions = (c.abonementSessionsLeft || 0) + sessions;
         const newPayment = {
           id: `p_${Date.now()}`,
-          date: new Date().toISOString().substring(0, 10),
+          date: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(),
           amount,
           item: `Абонемент на ${sessions} занятий`,
           status: "Оплачено",
@@ -95,7 +95,7 @@ export const PaymentModal = ({
           type: "income",
           category: catObj ? catObj.name : categoryName,
           amount,
-          date: new Date().toISOString().substring(0, 10),
+          date: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(),
           description: `Оплата ${sessions} занятий (${c.childSurname} ${c.childName}) ЮKassa`,
           accountId: "acc_bank",
           isFixed: false

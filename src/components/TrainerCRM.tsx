@@ -238,7 +238,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
           l.status === "trial_booked" &&
           l.trialGroupId &&
           l.trialGroupId === groupObj?.id &&
-          l.trialDate === new Date().toISOString().split("T")[0], // Only show trial on the exact trialDate
+          l.trialDate === (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(), // Only show trial on the exact trialDate
       )
       .map((l) => ({
         id: l.id,
@@ -1267,7 +1267,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                             l.trialGroupId &&
                             l.trialGroupId === groupObj?.id &&
                             l.trialDate ===
-                              new Date().toISOString().split("T")[0],
+                              (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(),
                         )
                         .map((l) => ({
                           id: l.id,

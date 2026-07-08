@@ -113,7 +113,7 @@ const FIELD_DEFINITIONS = {
     {
       key: "date",
       label: "Дата транзакции (ГГГГ-ММ-ДД)",
-      default: () => new Date().toISOString().substring(0, 10),
+      default: () => (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(),
     },
     {
       key: "type",
@@ -207,6 +207,11 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
     currentRole,
     accounts,
   } = useCRM();
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const currentMonthStr = `${yyyy}-${mm}`;
+
 
   const totalBalance = useMemo(() => {
     const calculatedAccountsMap = new Map<
@@ -1000,7 +1005,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
       } else if (type === "finances") {
         loaded.push({
           id: rowDict.id || `f_loaded_${uniqueSuffix}`,
-          date: rowDict.date || new Date().toISOString().substring(0, 10),
+          date: rowDict.date || (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(),
           type: (rowDict.type === "expense" || rowDict.type === "расход"
             ? "expense"
             : "income") as "income" | "expense",
@@ -1410,7 +1415,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
               </span>
               <div className="text-3xl font-black text-slate-900 mt-1 font-display tracking-tight">
                 {finances
-                  .filter((f) => f.type === "income")
+                  .filter((f) => f.type === "income" && f.date.substring(0, 7) === currentMonthStr)
                   .reduce((sum, item) => sum + item.amount, 0)
                   .toLocaleString("ru-RU")}{" "}
                 ₽
