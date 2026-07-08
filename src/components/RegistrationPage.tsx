@@ -135,7 +135,7 @@ export const RegistrationPage: React.FC = () => {
             body: JSON.stringify({ check_id: checkId }),
           });
           const data = await res.json();
-          if (data.status === "OK" && data.check_status === "401") {
+          if (data.status === "OK" && String(data.check_status) === "401") {
             clearInterval(interval);
             finalizeRegistration();
           }
@@ -146,29 +146,6 @@ export const RegistrationPage: React.FC = () => {
     }
     return () => clearInterval(interval);
   }, [verifyingPhone, checkId, parentName, parentPhone, parentEmail, childSurname, childName, childBirthDate]);
-
-  useEffect(() => {
-    let interval: any;
-    if (verifyingPhone && checkId) {
-      interval = setInterval(async () => {
-        try {
-          const res = await fetch("/api/callcheck/status", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ check_id: checkId }),
-          });
-          const data = await res.json();
-          if (data.status === "OK" && data.check_status === "401") {
-            clearInterval(interval);
-            finalizeRegistration();
-          }
-        } catch (e) {
-          console.error(e);
-        }
-      }, 5000);
-    }
-    return () => clearInterval(interval);
-  }, [verifyingPhone, checkId]);
 
   const savePassword = async () => {
     if (password.length < 6) {
