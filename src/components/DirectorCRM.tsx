@@ -1421,8 +1421,8 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                 ₽
               </div>
               <div className="text-[10px] text-emerald-600 font-semibold mt-1">
-                Всего платежей:{" "}
-                {finances.filter((f) => f.type === "income").length}
+                Всего платежей за месяц: {" "}
+                {finances.filter((f) => f.type === "income" && f.date.substring(0, 7) === currentMonthStr).length}
               </div>
             </div>
           </div>
