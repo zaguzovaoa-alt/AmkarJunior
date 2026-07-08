@@ -14,21 +14,69 @@ export const AuthScreen: React.FC = () => {
   } = useAuth();
 
   const [phone, setPhone] = useState("+7");
+  const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
+
+  
+  const [verifyingPhone, setVerifyingPhone] = useState(false);
+  const [verificationCode, setVerificationCode] = useState("");
+  const [expectedCode, setExpectedCode] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const handleFastLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!phone || phone.length < 10 || !privacyAccepted) return;
     setIsSubmitting(true);
+    setError(null);
     try {
-      await fastLoginWithPhone(phone);
-    } catch (err) {
-      // handled in context
+      await fastLoginWithPhone(phone, password);
+    } catch (err: any) {
+      if (err.message === "PASSWORD_NOT_SET") {
+        try {
+          const res = await fetch("/api/callcheck/add", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ phone }),
+          });
+          const data = await res.json();
+          if (data.status === "OK" && data.code) {
+            setExpectedCode(data.code.toString());
+            setVerifyingPhone(true);
+          } else {
+            setError(data.status_text || data.message || "Ошибка отправки звонка");
+          }
+        } catch (e: any) {
+          setError("Ошибка сети при проверке номера");
+        }
+      } else {
+        setError(err.message === "PASSWORD_REQUIRED" ? "Требуется пароль" : err.message === "INVALID_PASSWORD" ? "Неверный пароль" : err.message);
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const handleVerifyAndSetPassword = async () => {
+    if (verificationCode !== expectedCode) {
+      setError("Неверный код");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Пароль должен быть не менее 6 символов");
+      return;
+    }
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await fastLoginWithPhone(phone, password, true);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
 
   if (loading) {
     return (
@@ -104,10 +152,51 @@ export const AuthScreen: React.FC = () => {
               exit={{ opacity: 0, x: -20 }}
               className="space-y-4"
             >
+              {verifyingPhone ? (
+              <div className="text-center space-y-4">
+                <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Smartphone className="w-8 h-8" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-900">
+                  Подтверждение номера
+                </h3>
+                <p className="text-sm text-slate-500 max-w-sm mx-auto">
+                  На номер <span className="font-bold">{phone}</span> поступит звонок. Введите последние 4 цифры номера входящего.
+                </p>
+                {(error || phoneError) && (
+                  <div className="p-3 bg-red-50 text-red-600 text-xs font-bold rounded-xl border border-red-100 text-center">
+                    {error || phoneError}
+                  </div>
+                )}
+                <div className="max-w-xs mx-auto space-y-3">
+                  <input
+                    type="tel"
+                    maxLength={4}
+                    value={verificationCode}
+                    onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ""))}
+                    className="w-full text-center tracking-[1em] text-3xl font-medium bg-slate-50 border border-slate-200 rounded-xl py-4 focus:outline-none focus:border-emerald-500"
+                    placeholder="••••"
+                  />
+                  <button
+                    onClick={handleVerifyAndSetPassword}
+                    disabled={verificationCode.length !== 4 || isSubmitting}
+                    className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black rounded-xl shadow-lg shadow-emerald-500/30 transition-all disabled:opacity-50"
+                  >
+                    {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : "Подтвердить и сохранить пароль"}
+                  </button>
+                  <button
+                    onClick={() => setVerifyingPhone(false)}
+                    className="w-full py-3 text-sm font-bold text-slate-500 hover:text-slate-700 transition"
+                  >
+                    Отменить
+                  </button>
+                </div>
+              </div>
+            ) : (
               <form onSubmit={handleFastLogin} className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                    Ваш Номер телефона
+                    Номер телефона
                   </label>
                   <input
                     type="tel"
@@ -116,20 +205,32 @@ export const AuthScreen: React.FC = () => {
                     placeholder="+7 (999) 000-00-00"
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition font-medium"
                   />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    Пароль (обязательно)
+                  </label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Ваш пароль"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition font-medium"
+                  />
                   <p className="text-[10px] mt-2 text-slate-400">
-                    При вводе номера, который есть в базе данных, вход произойдет автоматически.
+                    При первом входе введите желаемый пароль (минимум 6 символов). Потребуется подтверждение по звонку.
                   </p>
                 </div>
-                {phoneError && (
+                {(error || phoneError) && (
                   <div className="p-3 bg-red-50 text-red-600 text-xs rounded-xl flex items-start space-x-2">
                     <Info className="w-4 h-4 shrink-0" />
-                    <span>{phoneError}</span>
+                    <span>{error || phoneError}</span>
                   </div>
                 )}
                 <button
                   type="submit"
                   disabled={
-                    isSubmitting || phone.length < 10 || !privacyAccepted
+                    isSubmitting || phone.length < 10 || !privacyAccepted || password.length < 6
                   }
                   className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3.5 rounded-xl transition flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -140,6 +241,7 @@ export const AuthScreen: React.FC = () => {
                   )}
                 </button>
               </form>
+            )}
             </motion.div>
           </AnimatePresence>
         </div>

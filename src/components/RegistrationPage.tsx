@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useCRM } from "../context/CRMContext";
+import { useAuth } from "../context/AuthContext";
 import {
   Shield,
   Send,
@@ -15,6 +16,7 @@ import heroImage from "../assets/images/kids_soccer_background_1780828846133.png
 
 export const RegistrationPage: React.FC = () => {
   const { schoolName, appendClients } = useCRM();
+  const { fastLoginWithPhone } = useAuth();
 
   const [parentName, setParentName] = useState("");
   const [parentPhone, setParentPhone] = useState("");
@@ -29,8 +31,20 @@ export const RegistrationPage: React.FC = () => {
 
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [password, setPassword] = useState("");
+  const [isPasswordStep, setIsPasswordStep] = useState(false);
+  const [createdClientId, setCreatedClientId] = useState<string | null>(null);
+  const [newClientData, setNewClientData] = useState<any>(null);
+
+  const [verifyingPhone, setVerifyingPhone] = useState(false);
+  const [verificationCode, setVerificationCode] = useState("");
+  const [expectedCode, setExpectedCode] = useState("");
+
+
+  
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
@@ -55,14 +69,39 @@ export const RegistrationPage: React.FC = () => {
       return;
     }
 
+    try {
+      setSaving(true);
+      const res = await fetch("/api/callcheck/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: parentPhone }),
+      });
+      const data = await res.json();
+      if (data.status === "OK" && data.code) {
+        setExpectedCode(data.code.toString());
+        setVerifyingPhone(true);
+      } else {
+        setError(data.status_text || data.message || "Ошибка отправки звонка");
+      }
+    } catch (e: any) {
+      setError("Ошибка сети при проверке номера");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  
+  const finalizeRegistration = () => {
+    if (verificationCode !== expectedCode) {
+      setError("Неверный код");
+      return;
+    }
     const birthYear =
       parseInt(childBirthDate.split("-")[0]) || new Date().getFullYear();
     const childAge = new Date().getFullYear() - birthYear;
-
     const params = new URLSearchParams(window.location.search);
     const refCode = params.get("ref");
 
-    // Create new client directly
     const newClient = {
       id: `cl_${Date.now()}`,
       parentName,
@@ -73,7 +112,7 @@ export const RegistrationPage: React.FC = () => {
       childBirthDate,
       childBirthYear: birthYear,
       childAge,
-      status: "active" as const, // Or trial? Let's make it active with no abonement
+      status: "active" as const,
       abonement: "none" as const,
       abonementStatus: "Нет абонемента" as const,
       abonementSessionsLeft: 0,
@@ -90,9 +129,33 @@ export const RegistrationPage: React.FC = () => {
       notes: "Регистрация через портал профиля",
     };
 
-    appendClients([newClient]);
-    setSubmitted(true);
+    setNewClientData(newClient);
+    setVerifyingPhone(false);
+    setIsPasswordStep(true);
   };
+
+  const savePassword = async () => {
+    if (password.length < 6) {
+      setError("Пароль должен быть не менее 6 символов");
+      return;
+    }
+    
+    const clientToSave = { ...newClientData, password };
+    appendClients([clientToSave]);
+    
+    // Automatically log the parent in after successful registration
+    try {
+      await fastLoginWithPhone(parentPhone, password);
+      window.location.href = "/";
+    } catch (e) {
+      console.error(e);
+    }
+
+    setSubmitted(true);
+    setIsPasswordStep(false);
+  };
+
+
 
   return (
     <div className="min-h-screen font-sans pb-20 relative bg-slate-50">
@@ -127,7 +190,84 @@ export const RegistrationPage: React.FC = () => {
               </p>
             </div>
 
-            {submitted ? (
+            
+            
+            {isPasswordStep ? (
+              <div className="text-center py-8 space-y-4 animate-in fade-in zoom-in duration-300">
+                <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto">
+                  <Shield className="w-10 h-10" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-900">
+                  Создайте пароль
+                </h3>
+                <p className="text-sm text-slate-500 max-w-sm mx-auto">
+                  Придумайте пароль для входа в свой личный кабинет. Минимум 6 символов.
+                </p>
+                {error && (
+                  <div className="p-3 bg-red-50 text-red-600 text-xs font-bold rounded-xl border border-red-100 text-center">
+                    {error}
+                  </div>
+                )}
+                <div className="max-w-xs mx-auto">
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full text-center text-xl font-medium bg-slate-50 border border-slate-200 rounded-xl py-4 focus:outline-none focus:border-red-500"
+                    placeholder="Пароль"
+                  />
+                  <button
+                    onClick={savePassword}
+                    disabled={password.length < 6}
+                    className="w-full mt-4 py-4 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-black rounded-xl shadow-lg shadow-red-500/30 transition-all disabled:opacity-50"
+                  >
+                    Завершить регистрацию
+                  </button>
+                </div>
+              </div>
+            ) : verifyingPhone && !submitted ? (
+
+              <div className="text-center py-8 space-y-4 animate-in fade-in zoom-in duration-300">
+                <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto">
+                  <Phone className="w-10 h-10" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-900">
+                  Подтверждение номера
+                </h3>
+                <p className="text-sm text-slate-500 max-w-sm mx-auto">
+                  На номер <span className="font-bold text-slate-800">{parentPhone}</span> сейчас поступит звонок. Введите <b>последние 4 цифры</b> номера входящего вызова.
+                </p>
+                {error && (
+                  <div className="p-3 bg-red-50 text-red-600 text-xs font-bold rounded-xl border border-red-100 text-center">
+                    {error}
+                  </div>
+                )}
+                <div className="max-w-xs mx-auto">
+                  <input
+                    type="text"
+                    maxLength={4}
+                    value={verificationCode}
+                    onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ""))}
+                    className="w-full text-center tracking-[1em] text-3xl font-black bg-slate-50 border border-slate-200 rounded-xl py-4 focus:outline-none focus:border-red-500"
+                    placeholder="0000"
+                  />
+                  <button
+                    onClick={finalizeRegistration}
+                    disabled={verificationCode.length !== 4}
+                    className="w-full mt-4 py-4 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-black rounded-xl shadow-lg shadow-red-500/30 transition-all disabled:opacity-50"
+                  >
+                    Подтвердить
+                  </button>
+                  <button
+                    onClick={() => setVerifyingPhone(false)}
+                    className="w-full mt-2 py-3 text-sm font-bold text-slate-500 hover:text-slate-700 transition"
+                  >
+                    Отменить
+                  </button>
+                </div>
+              </div>
+            ) : submitted ? (
+
               <div className="text-center py-8 space-y-4 animate-in fade-in zoom-in duration-300">
                 <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
                   <CheckCircle className="w-10 h-10" />
@@ -330,11 +470,11 @@ export const RegistrationPage: React.FC = () => {
 
                   <button
                     type="submit"
-                    disabled={!privacyAccepted || !photoAccepted}
+                    disabled={!privacyAccepted || !photoAccepted || saving}
                     className="w-full py-4 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-black rounded-xl shadow-lg shadow-red-500/30 flex items-center justify-center space-x-2 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 disabled:shadow-none"
                   >
                     <Send className="w-5 h-5" />
-                    <span>Создать профиль</span>
+                    <span>{saving ? "Проверка..." : "Создать профиль"}</span>
                   </button>
                 </div>
               </form>

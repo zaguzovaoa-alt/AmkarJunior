@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { db } from "../firebase";
 import { doc, setDoc } from "firebase/firestore";
+import { useAuth } from "../context/AuthContext";
 import {
   Shield,
   Send,
@@ -41,6 +42,40 @@ export const StaffRegistrationPage: React.FC = () => {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
+  const [password, setPassword] = useState("");
+  const [isPasswordStep, setIsPasswordStep] = useState(false);
+  const [createdUserId, setCreatedUserId] = useState<string | null>(null);
+
+  const { fastLoginWithPhone } = useAuth();
+
+  const [verifyingPhone, setVerifyingPhone] = useState(false);
+  const [verificationCode, setVerificationCode] = useState("");
+  const [expectedCode, setExpectedCode] = useState("");
+
+
+  
+  
+  const savePassword = async () => {
+    if (password.length < 6) {
+      setError("Пароль должен быть не менее 6 символов");
+      return;
+    }
+    setSaving(true);
+    try {
+      await setDoc(doc(db, "systemUsers", createdUserId!), { password }, { merge: true });
+      if (phone) {
+        await fastLoginWithPhone(phone, password);
+        window.location.href = "/";
+      }
+      setSubmitted(true);
+      setIsPasswordStep(false);
+    } catch (err: any) {
+      setError("Ошибка при сохранении пароля: " + err?.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -51,17 +86,47 @@ export const StaffRegistrationPage: React.FC = () => {
       );
       return;
     }
+    if (!phone) {
+      setError("Телефон обязателен для проверки");
+      return;
+    }
 
     if (!privacyAccepted) {
       setError("Необходимо согласие с Политикой конфиденциальности");
       return;
     }
 
-    setSaving(true);
+    try {
+      setSaving(true);
+      const res = await fetch("/api/callcheck/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: phone }),
+      });
+      const data = await res.json();
+      if (data.status === "OK" && data.code) {
+        setExpectedCode(data.code.toString());
+        setVerifyingPhone(true);
+      } else {
+        setError(data.status_text || data.message || "Ошибка отправки звонка");
+      }
+    } catch (e: any) {
+      setError("Ошибка сети при проверке номера");
+    } finally {
+      setSaving(false);
+    }
+  };
 
+  
+  const finalizeRegistration = async () => {
+    if (verificationCode !== expectedCode) {
+      setError("Неверный код");
+      return;
+    }
+
+    setSaving(true);
     try {
       const idToSave = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-
       const payload = {
         fullName: fullName.trim(),
         email: email ? email.toLowerCase().trim() : null,
@@ -70,9 +135,10 @@ export const StaffRegistrationPage: React.FC = () => {
         uid: idToSave,
         createdAt: Date.now(),
       };
-
       await setDoc(doc(db, "systemUsers", idToSave), payload);
-      setSubmitted(true);
+      setCreatedUserId(idToSave);
+      setVerifyingPhone(false);
+      setIsPasswordStep(true);
     } catch (err: any) {
       console.error(err);
       setError("Ошибка при регистрации: " + err?.message);
@@ -80,6 +146,7 @@ export const StaffRegistrationPage: React.FC = () => {
       setSaving(false);
     }
   };
+
 
   return (
     <div className="min-h-screen font-sans pb-20 relative bg-slate-50">
@@ -117,7 +184,84 @@ export const StaffRegistrationPage: React.FC = () => {
               </p>
             </div>
 
-            {submitted ? (
+            
+            
+            {isPasswordStep ? (
+              <div className="text-center py-8 space-y-4 animate-in fade-in zoom-in duration-300">
+                <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto">
+                  <Shield className="w-10 h-10" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-900">
+                  Создайте пароль
+                </h3>
+                <p className="text-sm text-slate-500 max-w-sm mx-auto">
+                  Придумайте пароль для входа в свой рабочий кабинет. Минимум 6 символов.
+                </p>
+                {error && (
+                  <div className="p-3 bg-red-50 text-red-600 text-xs font-bold rounded-xl border border-red-100 text-center">
+                    {error}
+                  </div>
+                )}
+                <div className="max-w-xs mx-auto">
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full text-center text-xl font-medium bg-slate-50 border border-slate-200 rounded-xl py-4 focus:outline-none focus:border-indigo-500"
+                    placeholder="Пароль"
+                  />
+                  <button
+                    onClick={savePassword}
+                    disabled={password.length < 6 || saving}
+                    className="w-full mt-4 py-4 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-black rounded-xl shadow-lg shadow-indigo-500/30 transition-all disabled:opacity-50"
+                  >
+                    {saving ? "Сохранение..." : "Завершить регистрацию"}
+                  </button>
+                </div>
+              </div>
+            ) : verifyingPhone && !submitted ? (
+
+              <div className="text-center py-8 space-y-4 animate-in fade-in zoom-in duration-300">
+                <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
+                  <Phone className="w-10 h-10" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-900">
+                  Подтверждение номера
+                </h3>
+                <p className="text-sm text-slate-500 max-w-sm mx-auto">
+                  На номер <span className="font-bold text-slate-800">{phone}</span> сейчас поступит звонок. Введите <b>последние 4 цифры</b> номера входящего вызова.
+                </p>
+                {error && (
+                  <div className="p-3 bg-red-50 text-red-600 text-xs font-bold rounded-xl border border-red-100 text-center">
+                    {error}
+                  </div>
+                )}
+                <div className="max-w-xs mx-auto">
+                  <input
+                    type="text"
+                    maxLength={4}
+                    value={verificationCode}
+                    onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ""))}
+                    className="w-full text-center tracking-[1em] text-3xl font-black bg-slate-50 border border-slate-200 rounded-xl py-4 focus:outline-none focus:border-emerald-500"
+                    placeholder="0000"
+                  />
+                  <button
+                    onClick={finalizeRegistration}
+                    disabled={verificationCode.length !== 4 || saving}
+                    className="w-full mt-4 py-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black rounded-xl shadow-lg shadow-emerald-500/30 transition-all disabled:opacity-50"
+                  >
+                    {saving ? "Регистрация..." : "Подтвердить"}
+                  </button>
+                  <button
+                    onClick={() => setVerifyingPhone(false)}
+                    className="w-full mt-2 py-3 text-sm font-bold text-slate-500 hover:text-slate-700 transition"
+                  >
+                    Отменить
+                  </button>
+                </div>
+              </div>
+            ) : submitted ? (
+
               <div className="text-center py-8 space-y-4 animate-in fade-in zoom-in duration-300">
                 <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
                   <CheckCircle className="w-10 h-10" />
@@ -172,6 +316,7 @@ export const StaffRegistrationPage: React.FC = () => {
                         <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                         <input
                           type="tel"
+                          required
                           value={phone}
                           onChange={(e) => setPhone(e.target.value)}
                           className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-10 pr-4 text-sm font-medium text-slate-800 focus:outline-none focus:border-emerald-500"

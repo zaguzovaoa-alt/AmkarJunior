@@ -22,6 +22,7 @@ import firebaseConfig from "../firebase-applet-config.json";
 import { PaymentModal } from "./components/PaymentModal";
 
 function DashboardContainer() {
+  const { appUser } = useAuth();
   const {
     currentRole,
     currentTab,
@@ -439,6 +440,7 @@ service cloud.firestore {
             </button>
             <span
               onClick={() => {
+                if (appUser?.role !== "admin" && appUser?.role !== "director") return;
                 const roles: (
                   | "admin"
                   | "director"
@@ -449,7 +451,11 @@ service cloud.firestore {
                 const nextIdx = (roles.indexOf(currentRole) + 1) % roles.length;
                 setCurrentRole(roles[nextIdx]);
               }}
-              className="text-red-600 bg-red-50 px-2 py-1 rounded-md border border-red-200/60 hover:bg-red-100/80 transition duration-150 cursor-pointer text-[10px] font-bold inline-flex items-center space-x-1"
+              className={`px-2 py-1 rounded-md border transition duration-150 text-[10px] font-bold inline-flex items-center space-x-1 ${
+                appUser?.role === "admin" || appUser?.role === "director"
+                  ? "text-red-600 bg-red-50 border-red-200/60 hover:bg-red-100/80 cursor-pointer"
+                  : "text-slate-600 bg-slate-50 border-slate-200/60 cursor-default"
+              }`}
               title="Нажмите для смены роли"
             >
               <span>
@@ -465,7 +471,9 @@ service cloud.firestore {
                           ? "Родитель"
                           : currentRole}
               </span>
-              <RefreshCw className="w-2.5 h-2.5 ml-1 animate-spin-hover text-red-500" />
+              {(appUser?.role === "admin" || appUser?.role === "director") && (
+                <RefreshCw className="w-2.5 h-2.5 ml-1 animate-spin-hover text-red-500" />
+              )}
             </span>
           </div>
 
@@ -652,14 +660,20 @@ export default function App() {
 
   if (currentPath === "/register") {
     return (
-      <CRMProvider>
-        <RegistrationPage />
-      </CRMProvider>
+      <AuthProvider>
+        <CRMProvider>
+          <RegistrationPage />
+        </CRMProvider>
+      </AuthProvider>
     );
   }
 
   if (currentPath === "/staff-join") {
-    return <StaffRegistrationPage />;
+    return (
+      <AuthProvider>
+        <StaffRegistrationPage />
+      </AuthProvider>
+    );
   }
 
   // /crm and any other route will hit the CRM Auth Gateway

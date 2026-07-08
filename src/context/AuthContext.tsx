@@ -37,7 +37,7 @@ interface AuthContextType {
   user: User | null;
   appUser: AppUser | null;
   loading: boolean;
-  fastLoginWithPhone: (phone: string) => Promise<boolean>;
+  fastLoginWithPhone: (phone: string, password?: string, forceSetPassword?: boolean) => Promise<boolean>;
   sendPhoneCode: (phone: string) => Promise<{ check_id: string; call_phone: string; call_phone_pretty: string }>;
   verifyPhoneCode: (check_id: string, phone: string) => Promise<boolean>;
   logout: () => Promise<void>;
@@ -488,7 +488,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const fastLoginWithPhone = async (phone: string) => {
+  const fastLoginWithPhone = async (phone: string, password?: string, forceSetPassword?: boolean) => {
     setPhoneError(null);
     try {
       const cleanPhone = normalizePhoneNumber(phone);
@@ -507,54 +507,69 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let docRole: UserRole = 'parent';
       let docName = '';
       let docId = 'virtual_' + cleanPhone.replace(/[^\w]/g, '');
-      
-      // Check systemUsers
+      let collectionName = '';
+
       for (const p of phoneCandidates) {
-        const q = query(collection(db, 'systemUsers'), where('phone', '==', p));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          found = true;
-          matchedSnap = snap.docs[0];
+        const qSys = query(collection(db, 'systemUsers'), where('phone', '==', p));
+        const snapSys = await getDocs(qSys);
+        if (!snapSys.empty) {
+          matchedSnap = snapSys.docs[0];
           docRole = matchedSnap.data().role as UserRole;
           docName = matchedSnap.data().fullName || '';
-          docId = matchedSnap.id;
+          collectionName = 'systemUsers';
+          found = true;
+          break;
+        }
+
+        const qCoach = query(collection(db, 'coaches'), where('phone', '==', p));
+        const snapCoach = await getDocs(qCoach);
+        if (!snapCoach.empty) {
+          matchedSnap = snapCoach.docs[0];
+          docRole = 'trainer';
+          docName = matchedSnap.data().name || '';
+          collectionName = 'coaches';
+          found = true;
+          break;
+        }
+
+        const qClient = query(collection(db, 'clients'), where('parentPhone', '==', p));
+        const snapClient = await getDocs(qClient);
+        if (!snapClient.empty) {
+          matchedSnap = snapClient.docs[0];
+          docRole = 'parent';
+          docName = matchedSnap.data().parentName || '';
+          collectionName = 'clients';
+          found = true;
           break;
         }
       }
 
-      if (!found) {
-        // Check coaches
-        for (const p of phoneCandidates) {
-          const q = query(collection(db, 'coaches'), where('phone', '==', p));
-          const snap = await getDocs(q);
-          if (!snap.empty) {
-            found = true;
-            matchedSnap = snap.docs[0];
-            docRole = 'trainer';
-            docName = matchedSnap.data().name || '';
-            break;
+      if (found) {
+        docId = matchedSnap.id;
+        const data = matchedSnap.data();
+        
+        if (forceSetPassword && password) {
+          await setDoc(doc(db, collectionName, docId), { password }, { merge: true });
+        } else {
+          if (data.password) {
+            if (!password) {
+              setPhoneError("Требуется пароль");
+              throw new Error("PASSWORD_REQUIRED");
+            }
+            if (data.password !== password) {
+              setPhoneError("Неверный пароль");
+              throw new Error("INVALID_PASSWORD");
+            }
+          } else {
+            setPhoneError("Пароль не установлен. Требуется подтверждение номера.");
+            throw new Error("PASSWORD_NOT_SET");
           }
         }
-      }
-
-      if (!found) {
-        // Check clients
-        for (const p of phoneCandidates) {
-          const q = query(collection(db, 'clients'), where('parentPhone', '==', p));
-          const snap = await getDocs(q);
-          if (!snap.empty) {
-            found = true;
-            matchedSnap = snap.docs[0];
-            docRole = 'parent';
-            docName = matchedSnap.data().parentName || '';
-            break;
-          }
+      } else {
+        if (!isAdmin) {
+          setPhoneError("Пользователь с таким номером не найден");
+          return false;
         }
-      }
-
-      if (!isAdmin && !found) {
-        setPhoneError("Номер телефона не найден в базе данных.");
-        return false;
       }
 
       if (isAdmin) {
