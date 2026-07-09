@@ -156,7 +156,11 @@ export const RegistrationPage: React.FC = () => {
     setSaving(true);
     try {
       if (!auth.currentUser) {
-        await signInAnonymously(auth);
+        try {
+          await signInAnonymously(auth);
+        } catch (e) {
+          console.warn("signInAnonymously failed, continuing:", e);
+        }
       }
       const clientToSave = { ...newClientData, password };
       await appendClients([clientToSave]);

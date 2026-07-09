@@ -66,7 +66,11 @@ export const StaffRegistrationPage: React.FC = () => {
     setSaving(true);
     try {
       if (!auth.currentUser) {
-        await signInAnonymously(auth);
+        try {
+          await signInAnonymously(auth);
+        } catch (e) {
+          console.warn("signInAnonymously failed, continuing:", e);
+        }
       }
       await setDoc(doc(db, "systemUsers", createdUserId!), { password }, { merge: true });
       if (phone) {
