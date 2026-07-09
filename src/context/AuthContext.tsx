@@ -442,6 +442,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (allMatchedDocs.length > 0) {
         found = true;
         
+        // Sort by ID descending so newer profiles come first
+        allMatchedDocs.sort((a, b) => b.snap.id.localeCompare(a.snap.id));
         let targetDoc = allMatchedDocs[0];
         
         if (!forceSetPassword && password) {

@@ -1,4 +1,6 @@
-rules_version = '2';
+import fs from 'fs';
+
+let rules = `rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
@@ -171,4 +173,7 @@ service cloud.firestore {
       allow read, write: if isSignedIn();
     }
   }
-}
+}`;
+
+fs.writeFileSync('firestore.rules', rules);
+console.log("Updated firestore.rules safely");
