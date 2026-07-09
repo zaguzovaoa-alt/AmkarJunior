@@ -454,8 +454,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                  setPhoneError("Неверный пароль");
                  throw new Error("INVALID_PASSWORD");
              } else {
-                 setPhoneError("Пароль не установлен. Требуется подтверждение номера.");
-                 throw new Error("PASSWORD_NOT_SET");
+                 setPhoneError("Логин или пароль не верный");
+                 throw new Error("Логин или пароль не верный");
              }
            }
         } else if (!forceSetPassword && !password) {
@@ -464,8 +464,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setPhoneError("Требуется пароль");
               throw new Error("PASSWORD_REQUIRED");
            } else {
-              setPhoneError("Пароль не установлен. Требуется подтверждение номера.");
-              throw new Error("PASSWORD_NOT_SET");
+              setPhoneError("Логин или пароль не верный");
+              throw new Error("Логин или пароль не верный");
            }
         }
 

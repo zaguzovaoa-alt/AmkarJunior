@@ -33,7 +33,7 @@ export const AuthScreen: React.FC = () => {
     try {
       await fastLoginWithPhone(phone, password);
     } catch (err: any) {
-      if (err.message === "PASSWORD_NOT_SET") {
+      if (err.message === "Логин или пароль не верный") {
         try {
           const res = await fetch("/api/callcheck/add", {
             method: "POST",
