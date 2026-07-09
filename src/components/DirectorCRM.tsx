@@ -1365,7 +1365,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
               <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
                 Деньги на счетах
               </span>
-              <div className="text-3xl font-black text-slate-900 mt-1 font-display tracking-tight whitespace-nowrap">
+              <div className="text-3xl font-light text-slate-800 mt-1 tracking-tight whitespace-nowrap">
                 {totalBalance.toLocaleString("ru-RU")} ₽
               </div>
               <div className="text-[10px] text-gray-400 font-semibold mt-1">
@@ -1380,7 +1380,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
               <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
                 Клиенты
               </span>
-              <div className="text-3xl font-black text-slate-900 mt-1 font-display tracking-tight">
+              <div className="text-3xl font-light text-slate-800 mt-1 tracking-tight">
                 {clients.length}
               </div>
               <div className="text-[10px] text-gray-400 font-semibold mt-1">
@@ -1391,7 +1391,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
               <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
                 Активные абонементы
               </span>
-              <div className="text-3xl font-black text-slate-900 mt-1 font-display tracking-tight">
+              <div className="text-3xl font-light text-slate-800 mt-1 tracking-tight">
                 {activeClients.length}
               </div>
               <div className="text-[10px] text-emerald-600 font-semibold mt-1">
@@ -1402,7 +1402,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
               <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
                 Всего заявок
               </span>
-              <div className="text-3xl font-black text-slate-900 mt-1 font-display tracking-tight">
+              <div className="text-3xl font-light text-slate-800 mt-1 tracking-tight">
                 {leads.length}
               </div>
               <div className="text-[10px] text-amber-600 font-semibold mt-1">
@@ -1413,7 +1413,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
               <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
                 Выручка за месяц
               </span>
-              <div className="text-3xl font-black text-slate-900 mt-1 font-display tracking-tight">
+              <div className="text-3xl font-light text-slate-800 mt-1 tracking-tight">
                 {finances
                   .filter((f) => f.type === "income" && f.date.substring(0, 7) === currentMonthStr)
                   .reduce((sum, item) => sum + item.amount, 0)
@@ -1789,7 +1789,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
               <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
                 Проведено тренировок
               </span>
-              <div className="text-3xl font-black text-slate-900 mt-1 font-display tracking-tight">
+              <div className="text-3xl font-light text-slate-800 mt-1 tracking-tight">
                 {trainingSessions.length}
               </div>
               <div className="text-[10px] text-emerald-600 font-semibold mt-1">
@@ -1801,7 +1801,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
               <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
                 Ср. Явка учеников
               </span>
-              <div className="text-3xl font-black text-slate-900 mt-1 font-display tracking-tight">
+              <div className="text-3xl font-light text-slate-800 mt-1 tracking-tight">
                 {(() => {
                   const total = trainingSessions.reduce(
                     (sum, s) =>
@@ -1825,7 +1825,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
               <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
                 Списано занятий
               </span>
-              <div className="text-3xl font-black text-slate-900 mt-1 font-display tracking-tight">
+              <div className="text-3xl font-light text-slate-800 mt-1 tracking-tight">
                 {trainingSessions.reduce((sum, s) => sum + s.presentCount, 0)}{" "}
                 ед.
               </div>
@@ -1838,7 +1838,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
               <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
                 Уважительная причина
               </span>
-              <div className="text-3xl font-black text-indigo-600 mt-1 font-display tracking-tight">
+              <div className="text-3xl font-light text-indigo-600 mt-1 tracking-tight">
                 {trainingSessions.reduce((sum, s) => sum + s.sickCount, 0)} зан.
               </div>
               <div className="text-[10px] text-indigo-500 font-semibold mt-1">

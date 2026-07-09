@@ -107,6 +107,44 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
     return calculatedAccounts.reduce((sum, acc) => sum + acc.actualBalance, 0);
   }, [accounts, finances]);
 
+  const { newClientsThisMonth, newClientsLastMonthDiff, newClientsThisWeek } = useMemo(() => {
+    const now = new Date();
+    
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
+    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999).getTime();
+    
+    const oneWeekAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7).getTime();
+
+    const getClientCreatedAt = (c: any) => {
+      if (c.registeredAt) {
+        return new Date(c.registeredAt).getTime();
+      }
+      const match = c.id.match(/^cl_(\d+)$/);
+      if (match) {
+        return parseInt(match[1], 10);
+      }
+      return 0; // fallback
+    };
+
+    let newThisMonth = 0;
+    let newLastMonth = 0;
+    let newThisWeek = 0;
+
+    clients.forEach(c => {
+      const createdAt = getClientCreatedAt(c);
+      if (createdAt >= currentMonthStart) newThisMonth++;
+      if (createdAt >= lastMonthStart && createdAt <= lastMonthEnd) newLastMonth++;
+      if (createdAt >= oneWeekAgo) newThisWeek++;
+    });
+
+    return {
+      newClientsThisMonth: newThisMonth,
+      newClientsLastMonthDiff: newThisMonth - newLastMonth,
+      newClientsThisWeek: newThisWeek
+    };
+  }, [clients]);
+
   const [deleteLeadModal, setDeleteLeadModal] = useState<{
     isOpen: boolean;
     leadId: string;
@@ -1312,7 +1350,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                     {clients.length}
                   </div>
                   <div className="text-[10px] text-emerald-500 font-bold mt-1 tracking-wide">
-                    +18 за неделю
+                    {newClientsThisWeek > 0 ? `+${newClientsThisWeek} за неделю` : (newClientsThisWeek === 0 ? "0 за неделю" : `${newClientsThisWeek} за неделю`)}
                   </div>
                 </div>
               </div>
@@ -1351,9 +1389,9 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                   </div>
                 </div>
                 <div className="mt-3">
-                  <div className="text-2xl font-bold text-gray-900">24</div>
-                  <div className="text-[10px] text-emerald-500 font-bold mt-1 tracking-wide">
-                    +6 к прошлому месяцу
+                  <div className="text-2xl font-bold text-gray-900">{newClientsThisMonth}</div>
+                  <div className={`text-[10px] font-bold mt-1 tracking-wide ${newClientsLastMonthDiff >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                    {newClientsLastMonthDiff > 0 ? "+" : ""}{newClientsLastMonthDiff} к прошлому месяцу
                   </div>
                 </div>
               </div>
