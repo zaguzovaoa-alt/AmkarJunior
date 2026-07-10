@@ -159,7 +159,12 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
       ? myChildren[0]
       : clients.find((c) => c.id === "cl2") || clients[0];
 
-  const myClient = Object.assign({}, myClientRaw || {});
+  const myClient = {
+    ...(myClientRaw || {}),
+    payments: myClientRaw?.payments || [],
+    attendance: myClientRaw?.attendance || [],
+    achievements: myClientRaw?.achievements || [],
+  } as any;
   const [selectedArticle, setSelectedArticle] = useState<any | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -341,7 +346,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
     if (!chatInput.trim()) return;
     addChatMessage({
       senderRole: "parent",
-      senderName: `${myClient.parentName} (Родитель: ${myClient.childName})`,
+      senderName: `${myClient.parentName || "Родитель"} (Родитель: ${myClient.childName || "Ученик"})`,
       text: chatInput,
       visibleTo: chatVisibility,
     });
@@ -557,11 +562,11 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
           </div>
           <div className="flex items-center space-x-2">
             <div className="h-9 w-9 rounded-full bg-emerald-100 border border-emerald-200 flex items-center justify-center font-bold text-emerald-600">
-              {myClient.parentName[0]}
+              {myClient.parentName ? myClient.parentName[0] : "Р"}
             </div>
             <div className="text-xs hidden sm:block text-left">
               <div className="font-bold text-gray-800">
-                {myClient.parentName}
+                {myClient.parentName || "Родитель"}
               </div>
               <div className="text-gray-500 text-[10px]">Родитель</div>
             </div>
@@ -1832,7 +1837,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                         ];
                       addChatMessage({
                         senderRole: "parent",
-                        senderName: `${myClient.parentName} (Родитель: ${myClient.childName})`,
+                        senderName: `${myClient.parentName || "Родитель"} (Родитель: ${myClient.childName || "Ученик"})`,
                         text: `[Прикреплен файл]: ${picked}`,
                         visibleTo: chatVisibility,
                       });

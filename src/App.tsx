@@ -556,12 +556,17 @@ import { TelegramReportScheduler } from "./components/TelegramReportScheduler";
 
 function AuthGateway() {
   const { user, appUser, loading, logout } = useAuth();
-  const { currentRole, setCurrentRole, updateUserProfile } = useCRM();
+  const { currentRole, setCurrentRole, updateUserProfile, currentTab, setCurrentTab } = useCRM();
 
   // Sync Firebase appUser role to the CRM mock state when the user logs in
   React.useEffect(() => {
     if (appUser && appUser.role) {
       setCurrentRole(appUser.role);
+      if (appUser.role === "parent" && (!currentTab || !currentTab.startsWith("parent_"))) {
+        setCurrentTab("parent_home");
+      } else if (appUser.role === "trainer" && (!currentTab || (!currentTab.startsWith("trainer_") && !currentTab.startsWith("hq_")))) {
+        setCurrentTab("trainer_home");
+      }
     }
     if (appUser) {
       updateUserProfile({
