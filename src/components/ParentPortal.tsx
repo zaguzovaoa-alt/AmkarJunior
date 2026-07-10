@@ -111,13 +111,36 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
     setTimeout(() => setStoreStatus(null), 3000);
   };
 
-  const handleCopyReferral = () => {
+  const [copiedReferral, setCopiedReferral] = useState(false);
+  const handleCopyReferral = async () => {
     if (myClient) {
       const code = myClient.referralCode || myClient.id;
       const refLink = `${window.location.origin}/register?ref=${code}`;
-      navigator.clipboard.writeText(refLink);
-      setStoreStatus("Реферальная ссылка скопирована!");
-      setTimeout(() => setStoreStatus(null), 3000);
+      
+      try {
+        await navigator.clipboard.writeText(refLink);
+        setCopiedReferral(true);
+        setTimeout(() => setCopiedReferral(false), 3000);
+      } catch (err) {
+        console.warn("Clipboard fallback", err);
+        const textArea = document.createElement("textarea");
+        textArea.value = refLink;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        textArea.style.top = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+          document.execCommand('copy');
+          setCopiedReferral(true);
+          setTimeout(() => setCopiedReferral(false), 3000);
+        } catch (err2) {
+          console.error("Fallback failed", err2);
+          alert("Не удалось скопировать ссылку. Ссылка: " + refLink);
+        }
+        textArea.remove();
+      }
     }
   };
   const [chatInput, setChatInput] = useState("");
@@ -1322,9 +1345,9 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                       </p>
                       <button
                         onClick={handleCopyReferral}
-                        className="w-full py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold uppercase transition"
+                        className={`w-full py-2 ${copiedReferral ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-orange-500 hover:bg-orange-600'} text-white rounded-xl text-xs font-bold uppercase transition`}
                       >
-                        Копировать ссылку
+                        {copiedReferral ? "Ссылка скопирована! ✅" : "Копировать ссылку"}
                       </button>
                     </div>
                   </div>
