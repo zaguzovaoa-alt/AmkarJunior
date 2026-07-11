@@ -11,6 +11,7 @@ import {
   getDocFromServer,
   query,
   getDocs,
+  where,
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../firebase";
 import { sendTelegramAlert } from "../utils/telegram";

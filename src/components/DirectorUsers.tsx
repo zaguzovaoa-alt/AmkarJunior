@@ -27,6 +27,7 @@ import { handleFirestoreError, OperationType } from "../firebase";
 export const DirectorUsers: React.FC = () => {
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<"staff" | "clients">("staff");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
@@ -94,7 +95,7 @@ export const DirectorUsers: React.FC = () => {
         fullName: "",
         email: "",
         phone: "",
-        role: "manager",
+        role: activeTab === "clients" ? "parent" : "manager",
       });
     }
     setIsModalOpen(true);
@@ -155,35 +156,56 @@ export const DirectorUsers: React.FC = () => {
     }
   };
 
+  const staffRoles = ["admin", "director", "manager", "trainer"];
+  const displayedUsers = activeTab === "staff" 
+    ? users.filter(u => staffRoles.includes(u.role))
+    : users.filter(u => !staffRoles.includes(u.role));
+
   return (
     <div className="p-4 md:p-6 bg-slate-50 min-h-[calc(100vh-64px)] font-sans">
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl md:text-2xl font-black text-slate-800 flex items-center space-x-3 leading-tight">
             <Shield className="w-6 h-6 md:w-7 md:h-7 text-emerald-500 shrink-0" />
-            <span>Управление Доступами (Сотрудники)</span>
+            <span>Управление Доступами</span>
           </h2>
           <p className="text-slate-500 text-sm mt-1">
-            Добавьте email или телефоны тренеров и менеджеров для предоставления
-            доступа.
+            Настройка доступов для сотрудников и учеников/родителей.
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
-          <button
-            onClick={() => setInviteModalOpen(true)}
-            className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 w-full sm:w-auto px-4 py-2.5 rounded-lg flex items-center justify-center space-x-2 font-bold shadow-sm transition"
-          >
-            <Shield className="w-4 h-4 text-emerald-500" />
-            <span>Пригласить по ссылке</span>
-          </button>
+          {activeTab === "staff" && (
+            <button
+              onClick={() => setInviteModalOpen(true)}
+              className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 w-full sm:w-auto px-4 py-2.5 rounded-lg flex items-center justify-center space-x-2 font-bold shadow-sm transition"
+            >
+              <Shield className="w-4 h-4 text-emerald-500" />
+              <span>Пригласить по ссылке</span>
+            </button>
+          )}
           <button
             onClick={() => handleOpenModal()}
             className="bg-emerald-500 hover:bg-emerald-600 text-white w-full sm:w-auto px-4 py-2.5 rounded-lg flex items-center justify-center space-x-2 font-bold shadow-sm transition"
           >
             <Plus className="w-5 h-5" />
-            <span>Добавить сотрудника</span>
+            <span>Добавить пользователя</span>
           </button>
         </div>
+      </div>
+
+      <div className="flex space-x-2 mb-6 border-b border-gray-200 pb-px">
+        <button
+          onClick={() => setActiveTab("staff")}
+          className={`px-4 py-2 text-sm font-bold border-b-2 transition ${activeTab === "staff" ? "border-emerald-500 text-emerald-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+        >
+          Сотрудники
+        </button>
+        <button
+          onClick={() => setActiveTab("clients")}
+          className={`px-4 py-2 text-sm font-bold border-b-2 transition ${activeTab === "clients" ? "border-emerald-500 text-emerald-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+        >
+          Ученики / Родители
+        </button>
       </div>
 
       {loading ? (
@@ -197,7 +219,7 @@ export const DirectorUsers: React.FC = () => {
               <thead className="bg-slate-100 text-slate-500 text-xs uppercase tracking-wider font-bold">
                 <tr>
                   <th className="px-6 py-4 border-b border-slate-200">
-                    Сотрудник
+                    {activeTab === "staff" ? "Сотрудник" : "Пользователь"}
                   </th>
                   <th className="px-6 py-4 border-b border-slate-200">Роль</th>
                   <th className="px-6 py-4 border-b border-slate-200">
@@ -212,7 +234,7 @@ export const DirectorUsers: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {users.map((u) => (
+                {displayedUsers.map((u) => (
                   <tr key={u.uid} className="hover:bg-slate-50 transition">
                     <td className="px-6 py-4 font-bold text-slate-800">
                       {u.fullName}
