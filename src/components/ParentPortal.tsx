@@ -34,6 +34,7 @@ import amkarUniform from "../assets/images/amkar_uniform.jpg";
 import { isBirthdayToday } from "../utils/dateUtils";
 import { PaymentModal } from "./PaymentModal";
 import { CredentialsSettings } from "./CredentialsSettings";
+import { ChildSettings } from "./ChildSettings";
 import { useAuth } from "../context/AuthContext";
 import { Product } from "../types";
 
@@ -532,7 +533,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
           <div className="flex flex-col gap-2">
             <div className="flex items-center space-x-2.5 bg-slate-100 px-3.5 py-1.5 rounded-xl border border-gray-200 w-full relative">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+              {myClient.avatarUrl ? <img src={myClient.avatarUrl} className="w-6 h-6 rounded-full object-cover shrink-0 border border-gray-300" alt="" /> : <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>}
               {myChildren.length > 1 ? (
                 <select
                   value={myClient.id}
@@ -2336,6 +2337,11 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                   />
                 </div>
 
+              </div>
+
+              <ChildSettings client={myClient} />
+
+              <div className="space-y-4 pt-2">
                 <div className="p-4 bg-slate-50 rounded-xl border space-y-2">
                   <div className="font-bold text-slate-800 text-xs">
                     Уведомления в Telegram

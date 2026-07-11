@@ -124,6 +124,7 @@ export interface Client {
   achievements: Achievement[];
   notes: string;
   avatarUrl?: string;
+  uniformSize?: string;
   relationshipRisk?: 'none' | 'low' | 'high';
   relationshipNotes?: string;
   managerBonusAccrued?: number;
