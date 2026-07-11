@@ -68,6 +68,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           },
           { id: "parent_knowledge", label: "База знаний", icon: BookOpen },
           { id: "parent_gamification", label: "Награды и Цели", icon: Trophy },
+          { id: "parent_settings", label: "Настройки", icon: Settings },
         ];
       case "trainer":
         return [
@@ -85,6 +86,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             badge: finalMessageCount || undefined,
           },
           { id: "trainer_knowledge", label: "База знаний", icon: BookOpen },
+          { id: "trainer_settings", label: "Настройки", icon: Settings },
         ];
       case "admin":
       case "director":
@@ -150,6 +152,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             icon: RefreshCw,
           },
           { id: "hq_store", label: "Магазин (Админ)", icon: ShoppingCart },
+          { id: "manager_settings", label: "Настройки", icon: Settings },
         ];
       default:
         return [];

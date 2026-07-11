@@ -95,6 +95,7 @@ export interface HomeworkSubmission {
 
 export interface Client {
   id: string;
+  password?: string;
   parentName: string;
   parentPhone: string;
   parentEmail: string;
@@ -166,6 +167,7 @@ export interface TrainingGroup {
 
 export interface Coach {
   id: string;
+  password?: string;
   name: string;
   role: string; // e.g., 'Старший тренер', 'Тренер Вратарей'
   joinedYear: number;

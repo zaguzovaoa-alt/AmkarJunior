@@ -89,7 +89,7 @@ function DashboardContainer() {
         return <DirectorCRM setActiveTab={setCurrentTab} />;
 
       case "manager":
-        if (currentTab === "hq_settings") return <HQSettings />;
+        if (currentTab === "hq_settings" || currentTab === "manager_settings") return <HQSettings />;
         if (currentTab === "hq_store") return <AdminStore />;
         if (currentTab === "manager_leads" || currentTab === "hq_leads") {
           return (
@@ -213,7 +213,6 @@ function DashboardContainer() {
         );
 
       case "parent":
-        if (currentTab === "parent_settings") return <HQSettings />;
         return (
           <ParentPortal activeTab={currentTab} setActiveTab={setCurrentTab} />
         );

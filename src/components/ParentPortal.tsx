@@ -33,6 +33,8 @@ import { motion, AnimatePresence } from "motion/react";
 import amkarUniform from "../assets/images/amkar_uniform.jpg";
 import { isBirthdayToday } from "../utils/dateUtils";
 import { PaymentModal } from "./PaymentModal";
+import { CredentialsSettings } from "./CredentialsSettings";
+import { useAuth } from "../context/AuthContext";
 import { Product } from "../types";
 
 interface ParentPortalProps {
@@ -44,6 +46,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
   activeTab,
   setActiveTab,
 }) => {
+  const { appUser } = useAuth();
   const {
     clients,
     messages,
@@ -2318,17 +2321,9 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                     readOnly
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                    Телефон для экстренной связи
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-mono"
-                    value={myClient.parentPhone}
-                    readOnly
-                  />
-                </div>
+                
+                <CredentialsSettings currentPhone={appUser?.phone || myClient.parentPhone || ""} />
+
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
                     Контактный Email

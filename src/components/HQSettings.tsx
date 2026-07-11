@@ -22,6 +22,8 @@ import {
   BellRing,
   Check,
 } from "lucide-react";
+import { CredentialsSettings } from "./CredentialsSettings";
+import { useAuth } from "../context/AuthContext";
 import firebaseConfig from "../../firebase-applet-config.json";
 
 export const HQSettings: React.FC = () => {
@@ -46,6 +48,7 @@ export const HQSettings: React.FC = () => {
     updateCRMConfig,
   } = useCRM();
 
+  const { appUser } = useAuth();
   const [savingSettings, setSavingSettings] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -236,6 +239,17 @@ export const HQSettings: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main DB Admin Box */}
           <div className="lg:col-span-2 space-y-6">
+            
+            <div className="bg-white rounded-2xl p-6 border border-gray-150 shadow-xs space-y-5 text-left">
+              <div className="flex items-center space-x-2 border-b pb-3.5">
+                <Lock className="w-5 h-5 text-slate-800" />
+                <h3 className="font-extrabold text-slate-950 text-base">
+                  Настройки профиля
+                </h3>
+              </div>
+              <CredentialsSettings currentPhone={appUser?.phone || ""} />
+            </div>
+
             {/* CLEAN ACTION SLATE CARD */}
             <div className="bg-white rounded-2xl p-6 border border-gray-150 shadow-xs space-y-5 text-left">
               <div className="flex items-center space-x-2 border-b pb-3.5">

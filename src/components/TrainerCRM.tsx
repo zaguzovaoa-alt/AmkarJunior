@@ -28,6 +28,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { compressImage } from "../utils/image";
 import { calculateAge } from "../utils/dateUtils";
 import { BirthdaysBanner } from "./BirthdaysBanner";
+import { CredentialsSettings } from "./CredentialsSettings";
 import { TrainerSessions } from "./TrainerSessions";
 import { parseScheduleString } from "../utils/scheduleParser";
 import { TrainingGroup } from "../types";
@@ -2390,6 +2391,14 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* TAB 11: SETTINGS */}
+        {activeTab === "trainer_settings" && (
+          <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm max-w-lg mx-auto text-left space-y-6">
+            <h3 className="text-lg font-bold text-slate-900 border-b pb-3">Настройки профиля тренера</h3>
+            <CredentialsSettings currentPhone={appUser?.phone || myCoach.phone || ""} />
           </div>
         )}
       </div>

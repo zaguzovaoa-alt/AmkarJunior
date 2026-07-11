@@ -49,6 +49,7 @@ export interface UserProfile {
 interface CRMContextType {
   userProfile: UserProfile;
   updateUserProfile: (profile: Partial<UserProfile>) => Promise<void>;
+  updateUserCredentials: (newPhone: string, newPassword?: string) => Promise<void>;
   leads: Lead[];
   clients: Client[];
   tasks: CRMTask[];
@@ -474,6 +475,59 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       await setDoc(configDocRef, { userProfile: newProfile }, { merge: true });
     } catch (e) {
       console.error("Failed to sync profile", e);
+    }
+  };
+
+  const updateUserCredentials = async (newPhone: string, newPassword?: string) => {
+    try {
+      const p = userProfile.phone;
+      if (!p) return;
+
+      const candidates = [p, p.replace('+7', '8'), p.replace(/^\+7/, '')].filter(Boolean);
+      
+      const updates: any = {};
+      if (newPhone) updates.phone = newPhone;
+      if (newPassword !== undefined) updates.password = newPassword;
+
+      if (Object.keys(updates).length === 0) return;
+
+      let matchedDocs: { col: string, id: string }[] = [];
+
+      for (const cand of candidates) {
+        const sysQ = query(collection(db, 'systemUsers'), where('phone', '==', cand));
+        const sysDocs = await getDocs(sysQ);
+        sysDocs.forEach(d => matchedDocs.push({ col: 'systemUsers', id: d.id }));
+
+        const coachQ = query(collection(db, 'coaches'), where('phone', '==', cand));
+        const coachDocs = await getDocs(coachQ);
+        coachDocs.forEach(d => matchedDocs.push({ col: 'coaches', id: d.id }));
+
+        const clientQ = query(collection(db, 'clients'), where('parentPhone', '==', cand));
+        const clientDocs = await getDocs(clientQ);
+        clientDocs.forEach(d => matchedDocs.push({ col: 'clients', id: d.id }));
+      }
+
+      for (const m of matchedDocs) {
+        if (m.col === 'clients' && updates.phone) {
+           await updateDoc(doc(db, m.col, m.id), { parentPhone: updates.phone, ...(updates.password ? { password: updates.password } : {}) });
+        } else {
+           await updateDoc(doc(db, m.col, m.id), updates);
+        }
+      }
+
+      if (newPhone) {
+        await updateUserProfile({ phone: newPhone });
+      }
+
+      const vUserStr = localStorage.getItem('virtual_user');
+      if (vUserStr) {
+        const vUser = JSON.parse(vUserStr);
+        if (newPhone) vUser.phone = newPhone;
+        localStorage.setItem('virtual_user', JSON.stringify(vUser));
+      }
+    } catch (e) {
+      console.error("Failed to update credentials", e);
+      throw e;
     }
   };
 
@@ -2595,6 +2649,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       value={{
         userProfile,
         updateUserProfile,
+        updateUserCredentials,
         leads,
         clients,
         tasks,
