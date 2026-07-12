@@ -451,13 +451,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
            if (docWithMatchingPass) {
              targetDoc = docWithMatchingPass;
            } else {
-             const docWithPass = allMatchedDocs.find(d => d.snap.data().password);
-             if (docWithPass) {
-                 setPhoneError("Неверный пароль");
-                 throw new Error("INVALID_PASSWORD");
+             const matchingStaff = allMatchedDocs.find(d => 
+                d.role !== 'parent' && 
+                !d.snap.data().password && 
+                phoneCandidates.includes(password.trim())
+             );
+             if (matchingStaff) {
+                targetDoc = matchingStaff;
              } else {
-                 setPhoneError("Логин или пароль не верный");
-                 throw new Error("Логин или пароль не верный");
+                 const docWithPass = allMatchedDocs.find(d => d.snap.data().password);
+                 if (docWithPass) {
+                     setPhoneError("Неверный пароль");
+                     throw new Error("INVALID_PASSWORD");
+                 } else {
+                     setPhoneError("Логин или пароль не верный");
+                     throw new Error("Логин или пароль не верный");
+                 }
              }
            }
         } else if (!forceSetPassword && !password) {

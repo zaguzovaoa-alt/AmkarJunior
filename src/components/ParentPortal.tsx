@@ -2340,43 +2340,10 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
               </div>
 
               <ChildSettings client={myClient} />
-
-              <div className="space-y-4 pt-2">
-                <div className="p-4 bg-slate-50 rounded-xl border space-y-2">
-                  <div className="font-bold text-slate-800 text-xs">
-                    Уведомления в Telegram
-                  </div>
-                  <p className="text-[11px] text-gray-500">
-                    Хотите получать автоматические отчеты по тренировочным
-                    оценкам, напоминания об оплатах и посещаемости прямо в
-                    мессенджер Telegram? Подключите нашего бота-ассистента.
-                  </p>
-                  <button
-                    onClick={() => {
-                      setCopiedLink(true);
-                      setTimeout(() => setCopiedLink(false), 2000);
-                    }}
-                    className="py-1.5 px-3 bg-[#2AABEE] hover:bg-[#229ED9] text-white font-bold rounded-lg text-xs transition flex items-center justify-center space-x-2"
-                  >
-                    {!copiedLink && (
-                      <svg
-                        viewBox="0 0 24 24"
-                        className="w-4 h-4 fill-white flex-shrink-0"
-                      >
-                        <path d="M12 0C5.372 0 0 5.373 0 12s5.372 12 12 12 12-5.373 12-12S18.628 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.223-.548.223l.188-2.85 5.18-4.686c.223-.195-.054-.304-.346-.11l-6.4 4.024-2.76-.86c-.6-.185-.61-.595.125-.89l10.82-4.172c.504-.197.942.115.807.94z" />
-                      </svg>
-                    )}
-                    <span>
-                      {copiedLink
-                        ? "Ссылка скопирована! ✅"
-                        : "Подключить Telegram бот"}
-                    </span>
-                  </button>
-                </div>
-              </div>
             </motion.div>
           )}
         </AnimatePresence>
+
       </div>
 
       {isPaymentModalOpen && (
