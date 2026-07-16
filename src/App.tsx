@@ -482,8 +482,8 @@ service cloud.firestore {
             {/* Quick action: Open secure payment portal for default sandbox */}
             {currentRole === "parent" && (
               <button
-                onClick={() => setPaymentModalClientId("cl1")}
-                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold rounded uppercase transition font-mono"
+                disabled={true} title="Оплата временно недоступна"
+                className="px-2.5 py-1 bg-emerald-600 text-white text-[10px] font-bold rounded uppercase transition font-mono opacity-50 cursor-not-allowed"
               >
                 💳 Оплатить абонемент
               </button>

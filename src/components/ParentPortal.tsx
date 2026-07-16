@@ -665,7 +665,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                       </div>
                     </div>
                     <button
-                      onClick={() => setIsPaymentModalOpen(true)}
+                      disabled={true} title="Оплата временно недоступна"
                       className="bg-red-600 hover:bg-red-700 text-white px-5 py-2 text-xs font-bold rounded-lg shadow-md transition-all active:scale-95 flex-shrink-0 whitespace-nowrap"
                     >
                       Продлить абонемент
@@ -1641,8 +1641,8 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                   Детализированная история транзакций
                 </h3>
                 <button
-                  onClick={() => setIsPaymentModalOpen(true)}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 text-xs font-bold rounded-lg shadow-sm transition flex items-center space-x-2"
+                  disabled={true} title="Оплата временно недоступна"
+                  className="bg-emerald-600 text-white px-4 py-2 text-xs font-bold rounded-lg shadow-sm transition flex items-center space-x-2 opacity-50 cursor-not-allowed"
                 >
                   <CreditCard className="w-4 h-4" />
                   <span>Оплатить абонемент</span>

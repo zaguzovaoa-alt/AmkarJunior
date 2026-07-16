@@ -225,8 +225,8 @@ export const PaymentModal = ({
 
               <button
                 onClick={handlePay}
-                disabled={loading}
-                className="w-full flex items-center justify-center space-x-2 py-4 bg-[#000000] hover:bg-[#1a1a1a] text-[#00FFFF] font-black tracking-widest text-lg rounded-2xl shadow-[0_0_15px_rgba(0,255,255,0.4)] disabled:opacity-70 transition-all active:scale-95"
+                disabled={true} title="Оплата временно недоступна"
+                className="w-full flex items-center justify-center space-x-2 py-4 bg-[#000000]  text-[#00FFFF] font-black tracking-widest text-lg rounded-2xl shadow-[0_0_15px_rgba(0,255,255,0.4)] disabled:opacity-70 transition-all cursor-not-allowed"
               >
                 {loading ? (
                   <Loader2 className="w-6 h-6 animate-spin text-[#00FFFF]" />
