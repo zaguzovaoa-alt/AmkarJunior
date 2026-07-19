@@ -1050,6 +1050,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       relatedLeadId: newLead.id,
     };
 
+    const ageText = newLead.childAge > 0 ? ` (${newLead.childAge} лет)` : "";
     const directorTaskId = `t_${Date.now()}_d`;
     const directorTask: CRMTask = {
       id: directorTaskId,
@@ -1057,7 +1058,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       assignedTo: "director",
       status: "new",
       dueDate: new Date().toLocaleDateString("ru-RU"),
-      description: `Новый потенциальный клиент: ${newLead.childSurname} ${newLead.childName} (${newLead.childAge} лет). Источник: ${newLead.source}`,
+      description: `Новый потенциальный клиент: ${newLead.childSurname} ${newLead.childName}${ageText}. Источник: ${newLead.source}`,
     };
 
     setTasks((prev) => [managerTask, directorTask, ...prev]);
@@ -1086,10 +1087,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       const latestConfig = configDoc.data()?.crmConfig || crmConfig;
       
       if (latestConfig.telegramAlerts?.newLead !== false && latestConfig.telegramBotToken && latestConfig.telegramGroupChatId) {
+        const ageTextTelegram = newLead.childAge > 0 ? ` (${newLead.childAge} лет)` : "";
         sendTelegramAlert(
           latestConfig.telegramBotToken,
           latestConfig.telegramGroupChatId,
-          `🚨 <b>НОВАЯ ЗАЯВКА</b>\n<b>Имя:</b> ${newLead.childSurname} ${newLead.childName} (${newLead.childAge} лет)\n<b>Источник:</b> ${newLead.source}\n<b>Родитель:</b> ${newLead.parentName}\n<b>Телефон:</b> ${newLead.parentPhone}`,
+          `🚨 <b>НОВАЯ ЗАЯВКА</b>\n<b>Имя:</b> ${newLead.childSurname} ${newLead.childName}${ageTextTelegram}\n<b>Источник:</b> ${newLead.source}\n<b>Родитель:</b> ${newLead.parentName}\n<b>Телефон:</b> ${newLead.parentPhone}`,
         );
       }
     } catch (e) {
@@ -1202,6 +1204,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
     setLeads((prev) => prev.map((l) => (l.id === leadId ? updatedLead : l)));
 
+    const ageTextTask = lead.childAge > 0 ? ` (возраст: ${lead.childAge} лет)` : "";
     const trainerTaskId = `t_${Date.now()}_tr`;
     const trainerTask: CRMTask = {
       id: trainerTaskId,
@@ -1209,7 +1212,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       assignedTo: "trainer",
       status: "pending",
       dueDate: `${date} в ${time}`,
-      description: `Назначен тренер: ${coach?.name || "Не указан"}. Проверить навыки ребенка (возраст: ${lead.childAge} лет). Оставить отзыв после тренировки.`,
+      description: `Назначен тренер: ${coach?.name || "Не указан"}. Проверить навыки ребенка${ageTextTask}. Оставить отзыв после тренировки.`,
       relatedClientId: lead.id,
     };
 
