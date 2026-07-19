@@ -16,7 +16,8 @@ import {
   RefreshCw,
   Trophy,
   Share2,
-  ShoppingCart
+  ShoppingCart,
+  Camera
 } from "lucide-react";
 import { useCRM } from "../context/CRMContext";
 import { AmkarLogo } from "./AmkarLogo";
@@ -109,6 +110,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           { id: "hq_finances", label: "Финансы", icon: DollarSign },
           { id: "hq_analytics", label: "Бонусы и Аналитика", icon: Sparkles },
           { id: "hq_attendance", label: "Посещения", icon: CheckSquare },
+          { id: "hq_sessions", label: "Журнал тренировок", icon: Camera },
           { id: "hq_tasks", label: "Задачи", icon: CheckSquare },
           {
             id: "hq_messages",

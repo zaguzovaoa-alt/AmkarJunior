@@ -95,6 +95,9 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
   >(null);
   const [sessionNotes, setSessionNotes] = useState<string>("");
   const [selectedAssistantId, setSelectedAssistantId] = useState<string>("");
+  const [attendanceDate, setAttendanceDate] = useState<string>(
+    new Date().toISOString().split("T")[0]
+  );
   const [copiedLink, setCopiedLink] = useState(false);
 
   // States for player rating
@@ -279,7 +282,8 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
       return;
     }
     
-    const formattedDate = "Сегодня";
+    const [year, month, day] = attendanceDate.split("-");
+    const formattedDate = `${day}.${month}.${year}`;
 
     const clientRecords: {
       clientId: string;
@@ -1148,9 +1152,17 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
             ) : (
               <div className="space-y-6">
                 <div className="p-3 bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-150 flex items-center justify-between">
-                  <span className="text-xs font-bold font-mono">
-                    Вы зашли в табель {selectedGroupForAttendance} — Сегодня
-                  </span>
+                  <div className="flex items-center space-x-3">
+                    <span className="text-xs font-bold font-mono">
+                      Табель: {selectedGroupForAttendance}
+                    </span>
+                    <input
+                      type="date"
+                      className="px-2 py-1 bg-white border border-emerald-200 rounded text-xs font-bold font-mono outline-none focus:border-emerald-400"
+                      value={attendanceDate}
+                      onChange={(e) => setAttendanceDate(e.target.value)}
+                    />
+                  </div>
                   <button
                     onClick={() => setSelectedGroupForAttendance(null)}
                     className="text-xs focus:underline text-slate-500 font-bold"
@@ -1200,7 +1212,6 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                         <input
                           type="file"
                           accept="image/*"
-                          capture="environment"
                           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                           onChange={(e) => {
                             const file = e.target.files?.[0];

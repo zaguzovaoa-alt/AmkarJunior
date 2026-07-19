@@ -5,6 +5,7 @@ import { AuthScreen } from "./components/AuthScreen";
 import { Sidebar } from "./components/Sidebar";
 import { ParentPortal } from "./components/ParentPortal";
 import { TrainerCRM } from "./components/TrainerCRM";
+import { TrainerSessions } from "./components/TrainerSessions";
 import { ManagerCRM } from "./components/ManagerCRM";
 import { DirectorCRM } from "./components/DirectorCRM";
 import { FinanceModule } from "./components/FinanceModule";
@@ -50,6 +51,7 @@ function DashboardContainer() {
           return <CoachesList />;
         if (currentTab === "director_sync" || currentTab === "hq_calendar_sync")
           return <GoogleCalendarSync />;
+        if (currentTab === "hq_sessions") return <TrainerSessions />;
         if (currentTab === "hq_attendance")
           return (
             <TrainerCRM
@@ -120,6 +122,7 @@ function DashboardContainer() {
         if (currentTab === "manager_groups" || currentTab === "hq_groups")
           return <GroupsModule />;
         if (currentTab === "hq_tasks") return <TasksModule />;
+        if (currentTab === "hq_sessions") return <TrainerSessions />;
         if (currentTab === "hq_attendance")
           return (
             <TrainerCRM

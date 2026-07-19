@@ -5,6 +5,8 @@ import { AnimatePresence, motion } from "motion/react";
 import { messaging } from "../firebase";
 import { getToken, onMessage } from "firebase/messaging";
 
+const pushedNotifsCache = new Set<string>();
+
 export const NotificationListener: React.FC = () => {
   const {
     notifications,
@@ -107,11 +109,11 @@ export const NotificationListener: React.FC = () => {
 
     // For any relevant unread notification that we haven't toasted yet, Toast + Push Notification
     const newlyUnread = relevantUnread.filter(
-      (n) => !pushedNotifsRef.current.has(n.id),
+      (n) => !pushedNotifsCache.has(n.id),
     );
 
     newlyUnread.forEach((n) => {
-      pushedNotifsRef.current.add(n.id);
+      pushedNotifsCache.add(n.id);
       setActiveToasts((prev) => [...prev, n.id]);
 
       // Hardware Push

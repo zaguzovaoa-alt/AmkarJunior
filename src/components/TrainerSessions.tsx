@@ -1,11 +1,12 @@
 import React, { useState } from "react";
 import { useCRM } from "../context/CRMContext";
 import { useAuth } from "../context/AuthContext";
-import { Calendar, User, Clock, CheckCircle } from "lucide-react";
+import { Calendar, User, Clock, CheckCircle, Camera, X } from "lucide-react";
+import { TrainingSessionProtocol } from "../types";
 import { HeaderDescription } from "./HeaderDescription";
 
 export const TrainerSessions: React.FC = () => {
-  const { trainingSessions, coaches } = useCRM();
+  const { trainingSessions, coaches, currentRole } = useCRM();
   const { appUser } = useAuth();
   
   const myCoach = coaches.find(
@@ -14,6 +15,7 @@ export const TrainerSessions: React.FC = () => {
       (c.phone && appUser?.phone && c.phone === appUser?.phone)
   ) || coaches[0];
   
+  const [selectedSession, setSelectedSession] = useState<TrainingSessionProtocol | null>(null);
   const [filterMonth, setFilterMonth] = useState(
     (() => {
       const d = new Date();
@@ -21,9 +23,10 @@ export const TrainerSessions: React.FC = () => {
     })()
   );
 
+  const isPrivileged = currentRole === 'admin' || currentRole === 'director';
   const mySessions = (trainingSessions || []).filter(
     (s) =>
-      (s.coachId === myCoach?.id ||
+      (isPrivileged || s.coachId === myCoach?.id ||
       s.coachName?.includes(myCoach?.name || "") ||
       s.assistantId === myCoach?.id) &&
       s.date.substring(0, 7) === filterMonth
@@ -38,7 +41,7 @@ export const TrainerSessions: React.FC = () => {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-100 pb-6 mb-6">
           <div className="flex items-center">
             <h1 className="text-2xl font-bold text-slate-900 font-sans tracking-tight">Учет тренировок</h1>
-            <HeaderDescription text={<>Мониторинг проведенных тренировок в качестве основного тренера и ассистента.</>} />
+            <HeaderDescription text={<>{isPrivileged ? "Журнал всех проведенных тренировок и фотоотчетов." : "Мониторинг проведенных тренировок в качестве основного тренера и ассистента."}</>} />
           </div>
           <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 w-max">
             <input
@@ -95,7 +98,14 @@ export const TrainerSessions: React.FC = () => {
                   </div>
                 </div>
                 
-                <div className="flex items-center gap-6 sm:gap-8">
+                <div className="flex items-center gap-4 sm:gap-6">
+                  {session.photoUrl && (
+                    <div className="w-12 h-12 rounded-lg overflow-hidden border border-slate-200 cursor-pointer" onClick={() => setSelectedSession(session as any)}>
+                      <img src={session.photoUrl} alt="Фото" className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                  <button onClick={() => setSelectedSession(session as any)} className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-600 transition">Подробнее</button>
+                  <div className="flex items-center gap-4 sm:gap-6">
                   <div className="text-center">
                     <div className="text-xl font-black text-emerald-600">{session.presentCount}</div>
                     <div className="text-[10px] font-bold text-slate-400 uppercase">Присутствовало</div>
@@ -108,11 +118,73 @@ export const TrainerSessions: React.FC = () => {
                     <CheckCircle className="w-4 h-4 text-emerald-500" />
                   </div>
                 </div>
+                </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {selectedSession && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-4 border-b flex justify-between items-center bg-slate-50">
+              <h3 className="font-bold text-slate-900">Отчет по тренировке</h3>
+              <button onClick={() => setSelectedSession(null)} className="p-1 hover:bg-slate-200 rounded-lg transition"><X className="w-5 h-5 text-slate-500" /></button>
+            </div>
+            <div className="overflow-y-auto p-4 space-y-4">
+              {selectedSession.photoUrl ? (
+                <div className="rounded-xl overflow-hidden border border-gray-200 bg-slate-50 flex items-center justify-center min-h-[200px]">
+                  <img src={selectedSession.photoUrl} alt="Фотоотчет" className="w-full object-contain max-h-[40vh]" />
+                </div>
+              ) : (
+                <div className="py-8 text-center text-gray-400 bg-slate-50 rounded-xl border border-dashed">
+                  <Camera className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <span>Фотоотчет не прикреплен</span>
+                </div>
+              )}
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 bg-slate-50 rounded-xl">
+                   <div className="text-[10px] uppercase font-bold text-slate-500 mb-1">Группа</div>
+                   <div className="font-bold text-sm text-slate-900">{selectedSession.groupName}</div>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-xl">
+                   <div className="text-[10px] uppercase font-bold text-slate-500 mb-1">Дата и время проведения</div>
+                   <div className="font-bold text-sm text-slate-900">{selectedSession.date} • {selectedSession.dateString}</div>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-xl">
+                   <div className="text-[10px] uppercase font-bold text-slate-500 mb-1">Тренер</div>
+                   <div className="font-bold text-sm text-slate-900">{selectedSession.coachName}</div>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-xl">
+                   <div className="text-[10px] uppercase font-bold text-slate-500 mb-1">Ассистент</div>
+                   <div className="font-bold text-sm text-slate-900">{selectedSession.assistantName || 'Не указан'}</div>
+                </div>
+              </div>
+
+              <div className="p-4 border rounded-xl space-y-3">
+                 <h4 className="font-bold text-sm text-slate-900">Посещаемость</h4>
+                 <div className="flex gap-4 text-xs">
+                    <span className="text-emerald-600 font-bold">Присутствовали: {selectedSession.presentCount}</span>
+                    <span className="text-rose-600 font-bold">Пропустили: {selectedSession.absentCount + selectedSession.sickCount}</span>
+                 </div>
+                 <div className="space-y-1 mt-3">
+                   {selectedSession.records && selectedSession.records.map(rec => (
+                     <div key={rec.clientId} className="flex justify-between items-center py-1 border-b last:border-0 border-gray-100 text-xs">
+                       <span className="font-medium">{rec.clientName}</span>
+                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${rec.status === 'present' ? 'bg-emerald-50 text-emerald-700' : rec.status === 'absent_sick' ? 'bg-amber-50 text-amber-700' : rec.status === 'trial_free' ? 'bg-fuchsia-50 text-fuchsia-700' : 'bg-rose-50 text-rose-700'}`}>
+                         {rec.status === 'present' ? 'Был' : rec.status === 'absent_sick' ? 'Болел' : rec.status === 'trial_free' ? 'Пробная' : 'Пропуск'}
+                       </span>
+                     </div>
+                   ))}
+                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
