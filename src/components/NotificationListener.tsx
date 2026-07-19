@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useCRM } from "../context/CRMContext";
 import { Bell, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -17,6 +17,7 @@ export const NotificationListener: React.FC = () => {
   const [browserPermission, setBrowserPermission] =
     useState<NotificationPermission>("default");
   const [activeToasts, setActiveToasts] = useState<string[]>([]);
+  const pushedNotifsRef = useRef<Set<string>>(new Set());
   const [fcmToken, setFcmToken] = useState<string | null>(null);
 
   useEffect(() => {
@@ -106,10 +107,11 @@ export const NotificationListener: React.FC = () => {
 
     // For any relevant unread notification that we haven't toasted yet, Toast + Push Notification
     const newlyUnread = relevantUnread.filter(
-      (n) => !activeToasts.includes(n.id),
+      (n) => !pushedNotifsRef.current.has(n.id),
     );
 
     newlyUnread.forEach((n) => {
+      pushedNotifsRef.current.add(n.id);
       setActiveToasts((prev) => [...prev, n.id]);
 
       // Hardware Push
