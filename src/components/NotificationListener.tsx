@@ -114,7 +114,15 @@ export const NotificationListener: React.FC = () => {
 
       // Hardware Push
       if (browserPermission === "granted") {
-        new Notification(n.title, { body: n.body, icon: "/favicon.ico" });
+        if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.ready.then((registration) => {
+            registration.showNotification(n.title, { body: n.body, icon: "/favicon.ico" });
+          }).catch(() => {
+            new Notification(n.title, { body: n.body, icon: "/favicon.ico" });
+          });
+        } else {
+          new Notification(n.title, { body: n.body, icon: "/favicon.ico" });
+        }
       }
 
       // Auto-hide toast after 8 seconds, but keep it in history/unread unless explicitly marked

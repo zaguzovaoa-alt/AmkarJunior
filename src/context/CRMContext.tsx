@@ -1081,12 +1081,19 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     }
 
     // TELEGRAM ALERT: New Lead
-    if (crmConfig.telegramAlerts?.newLead !== false) {
-      sendTelegramAlert(
-        crmConfig.telegramBotToken,
-        crmConfig.telegramGroupChatId,
-        `🚨 <b>НОВАЯ ЗАЯВКА</b>\n<b>Имя:</b> ${newLead.childSurname} ${newLead.childName} (${newLead.childAge} лет)\n<b>Источник:</b> ${newLead.source}\n<b>Родитель:</b> ${newLead.parentName}\n<b>Телефон:</b> ${newLead.parentPhone}`,
-      );
+    try {
+      const configDoc = await getDoc(doc(db, "_config", "initialized"));
+      const latestConfig = configDoc.data()?.crmConfig || crmConfig;
+      
+      if (latestConfig.telegramAlerts?.newLead !== false && latestConfig.telegramBotToken && latestConfig.telegramGroupChatId) {
+        sendTelegramAlert(
+          latestConfig.telegramBotToken,
+          latestConfig.telegramGroupChatId,
+          `🚨 <b>НОВАЯ ЗАЯВКА</b>\n<b>Имя:</b> ${newLead.childSurname} ${newLead.childName} (${newLead.childAge} лет)\n<b>Источник:</b> ${newLead.source}\n<b>Родитель:</b> ${newLead.parentName}\n<b>Телефон:</b> ${newLead.parentPhone}`,
+        );
+      }
+    } catch (e) {
+      console.warn("Failed to fetch latest config for telegram alert", e);
     }
 
     addNotification({
