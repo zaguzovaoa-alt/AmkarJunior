@@ -1088,6 +1088,13 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         `🚨 <b>НОВАЯ ЗАЯВКА</b>\n<b>Имя:</b> ${newLead.childSurname} ${newLead.childName} (${newLead.childAge} лет)\n<b>Источник:</b> ${newLead.source}\n<b>Родитель:</b> ${newLead.parentName}\n<b>Телефон:</b> ${newLead.parentPhone}`,
       );
     }
+
+    addNotification({
+      title: "Новая заявка!",
+      body: `Поступила новая заявка: ${newLead.childSurname} ${newLead.childName}. Источник: ${newLead.source}`,
+      type: "system",
+      targetRole: ["director", "admin", "manager"],
+    });
   };
 
   async function addClient(
