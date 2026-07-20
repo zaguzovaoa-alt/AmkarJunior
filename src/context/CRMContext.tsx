@@ -155,6 +155,7 @@ interface CRMContextType {
     },
   ) => void;
   addTask: (task: Omit<CRMTask, "id" | "status">) => void;
+  updateTask: (id: string, updates: Partial<CRMTask>) => Promise<void>;
   completeTask: (id: string) => void;
   addChatMessage: (msg: Omit<ChatMessage, "id" | "timestamp">) => void;
   updateChatMessage: (id: string, newText: string) => void;
@@ -1471,7 +1472,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
               ? c.abonementSessionsLeft - 1
               : c.abonementSessionsLeft,
             notes: mediaFile
-              ? `${c.notes}\n[Посещаемость ${date}]: Тренер прикрепил фото ${mediaFile}.`
+              ? `${c.notes || ""}\n[Посещаемость ${date}]: Тренер прикрепил фотоотчет.`
               : c.notes,
             attendance: [
               { date, status: record.status, reason: record.reason },
@@ -1532,7 +1533,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
               ? c.abonementSessionsLeft - 1
               : c.abonementSessionsLeft,
             notes: mediaFile
-              ? `${c.notes}\n[Посещаемость ${date}]: Тренер прикрепил фото ${mediaFile}.`
+              ? `${c.notes || ""}\n[Посещаемость ${date}]: Тренер прикрепил фотоотчет.`
               : c.notes,
             attendance: [
               { date, status: record.status, reason: record.reason },
@@ -1627,6 +1628,18 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     updateDoc(doc(db, "tasks", id), { status: "completed" }).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(
         `Failed to complete task ${id} in Firestore, kept locally:`,
+        err,
+      );
+    });
+  };
+
+  const updateTask = async (id: string, updates: Partial<CRMTask>) => {
+    setTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, ...updates } : t)),
+    );
+    updateDoc(doc(db, "tasks", id), updates).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
+      console.warn(
+        `Failed to update task ${id} in Firestore, kept locally:`,
         err,
       );
     });
@@ -2703,6 +2716,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         markAttendance,
         ratePlayer,
         completeTask,
+        updateTask,
         addTask,
         notifications,
         addNotification,

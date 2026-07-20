@@ -144,6 +144,8 @@ export interface CRMTask {
   description: string;
   relatedClientId?: string;
   relatedLeadId?: string;
+  checklist?: { id: string; text: string; isCompleted: boolean }[];
+  comments?: { id: string; text: string; author: string; timestamp: string }[];
 }
 
 export interface TrainingGroup {

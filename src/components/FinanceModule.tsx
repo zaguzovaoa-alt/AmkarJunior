@@ -134,6 +134,7 @@ export const FinanceModule: React.FC = () => {
   // States for input form
   const [fType, setFType] = useState<"income" | "expense">("income");
   const [fAmount, setFAmount] = useState("");
+  const [fDate, setFDate] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; });
   const [fCat, setFCat] = useState("");
   const [fAccount, setFAccount] = useState<string>("acc_cash");
   const [fIsFixed, setFIsFixed] = useState(false);
@@ -166,7 +167,7 @@ export const FinanceModule: React.FC = () => {
       type: fType,
       amount: Number(fAmount),
       category: financeCategories.find((c) => c.id === fCat)?.name || fCat,
-      date: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(),
+      date: fDate,
       description: fDesc,
       targetMonth: fTargetMonth,
       accountId: fAccount,
@@ -728,7 +729,7 @@ export const FinanceModule: React.FC = () => {
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart
                       data={dashboardData.dynamicChartData}
-                      margin={{ top: 5, right: 10, left: -20, bottom: 5 }}
+                      margin={{ top: 10, right: 30, left: 10, bottom: 10 }}
                     >
                       <CartesianGrid
                         strokeDasharray="3 3"
@@ -1085,6 +1086,17 @@ export const FinanceModule: React.FC = () => {
                   - Расход
                 </button>
               </div>
+              <div>
+                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                  Дата операции
+                </label>
+                <input
+                  type="date"
+                  value={fDate}
+                  onChange={(e) => setFDate(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-gray-200 focus:ring-1 focus:ring-emerald-500 outline-none rounded-xl font-mono text-sm"
+                />
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
@@ -1424,7 +1436,10 @@ export const FinanceModule: React.FC = () => {
                     </div>
                     <div className="flex-1 min-h-[200px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={dashboardData.dynamicChartData}>
+                        <LineChart 
+                          data={dashboardData.dynamicChartData}
+                          margin={{ top: 10, right: 30, left: 10, bottom: 10 }}
+                        >
                           <CartesianGrid
                             strokeDasharray="3 3"
                             vertical={false}
@@ -1561,9 +1576,24 @@ export const FinanceModule: React.FC = () => {
                                 {f.isFixed ? "Постоянный" : "Переменный"}
                               </td>
                               <td className="px-5 py-3 text-slate-900 font-bold">
-                                {f.description
-                                  ? f.description.split(" ")[0] || "—"
-                                  : "—"}
+                                {(() => {
+                                  if (f.counterpartyId) {
+                                    const cp = counterparties.find(c => c.id === f.counterpartyId);
+                                    if (cp) return cp.name;
+                                  }
+                                  if (f.description) {
+                                    if (f.category === "Зарплата" || f.category === "Тренер") {
+                                      const match = f.description.match(/: ([^(]+)/);
+                                      if (match && match[1]) return match[1].trim();
+                                    }
+                                    const match = f.description.match(/\(([^)]+)\)/);
+                                    if (match && match[1]) {
+                                      return match[1].trim();
+                                    }
+                                    return f.description.split(" ")[0] || "—";
+                                  }
+                                  return "—";
+                                })()}
                               </td>
                               <td className="px-5 py-3 text-emerald-600 font-bold text-right">
                                 {f.type === "income"
@@ -1897,8 +1927,8 @@ export const FinanceModule: React.FC = () => {
                             data={incomesByCategory}
                             cx="50%"
                             cy="50%"
-                            innerRadius={60}
-                            outerRadius={80}
+                            innerRadius="60%"
+                            outerRadius="80%"
                             paddingAngle={2}
                             dataKey="value"
                             stroke="none"
@@ -1968,8 +1998,8 @@ export const FinanceModule: React.FC = () => {
                             data={expensesByCategory}
                             cx="50%"
                             cy="50%"
-                            innerRadius={60}
-                            outerRadius={80}
+                            innerRadius="60%"
+                            outerRadius="80%"
                             paddingAngle={2}
                             dataKey="value"
                             stroke="none"

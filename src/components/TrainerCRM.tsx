@@ -30,6 +30,7 @@ import { calculateAge } from "../utils/dateUtils";
 import { BirthdaysBanner } from "./BirthdaysBanner";
 import { CredentialsSettings } from "./CredentialsSettings";
 import { TrainerSessions } from "./TrainerSessions";
+import { AttendanceTable } from "./AttendanceTable";
 import { parseScheduleString } from "../utils/scheduleParser";
 import { TrainingGroup } from "../types";
 
@@ -79,6 +80,19 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
       name: "Пьянченко Василий Витальевич",
       role: "Старший тренер",
     };
+
+  const getGroupAttendanceRate = (groupId: string) => {
+    const groupSessions = (trainingSessions || []).filter(s => s.groupId === groupId);
+    if (groupSessions.length === 0) return "-";
+    let totalPresent = 0;
+    let totalRecords = 0;
+    groupSessions.forEach(session => {
+      totalPresent += session.presentCount || 0;
+      totalRecords += (session.presentCount || 0) + (session.absentCount || 0) + (session.sickCount || 0);
+    });
+    if (totalRecords === 0) return "-";
+    return Math.round((totalPresent / totalRecords) * 100) + "%";
+  };
 
   // Local states for interactive things
   const [selectedGroupForAttendance, setSelectedGroupForAttendance] = useState<
@@ -855,28 +869,27 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                       return (
                         <div
                           key={idx}
-                          className="py-3 border-b border-gray-50 last:border-0 flex justify-between items-center group cursor-pointer hover:bg-slate-50 transition px-2 rounded-lg -mx-2"
+                          className="py-3 border-b border-gray-50 last:border-0 flex justify-between items-center group cursor-pointer hover:bg-slate-50 transition px-2 rounded-lg -mx-2 gap-2"
                         >
-                          <div className="flex items-center space-x-3 text-left w-1/3">
+                          <div className="flex items-center space-x-2 sm:space-x-3 text-left flex-1 min-w-0">
                             <span
-                              className={`px-2 py-1 rounded font-bold text-[10px] ${badgeColor}`}
+                              className={`px-2 py-1 rounded font-bold text-[10px] whitespace-nowrap ${badgeColor}`}
                             >
                               {grp.year}
                             </span>
-                            <div className="space-y-0.5 max-w-[120px]">
+                            <div className="space-y-0.5 flex-1 min-w-0">
                               <div className="font-bold text-slate-900 text-xs truncate flex items-center gap-1">
                                 {grp.isSelectTeam && (
                                   <Trophy className="w-3 h-3 text-orange-500 shrink-0" />
                                 )}
                                 <span className="truncate">{grp.name}</span>
                               </div>
-                              <div className="text-[9px] text-gray-400">
+                              <div className="text-[9px] text-gray-400 truncate">
                                 Тренировка сегодня, 17:00
                               </div>
                             </div>
                           </div>
-
-                          <div className="flex space-x-4 flex-1 justify-end items-center text-xs">
+                          <div className="flex space-x-3 sm:space-x-4 shrink-0 justify-end items-center text-xs">
                             <div className="text-left w-12 hidden sm:block">
                               <div className="font-bold text-slate-800 text-[11px]">
                                 {grp.playersCount}
@@ -887,7 +900,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                             </div>
                             <div className="text-left w-20 hidden lg:block">
                               <div className="font-bold text-slate-800 text-[11px]">
-                                {grp.attendanceRate}%
+                                {getGroupAttendanceRate(grp.id)}
                               </div>
                               <div className="text-[9px] text-gray-400">
                                 Посещаемость
@@ -1228,13 +1241,13 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
 
                   {uploadedAttendancePhoto &&
                     uploadedAttendancePhoto.startsWith("data:image") && (
-                      <div className="mt-3 relative w-full h-32 rounded-lg overflow-hidden border border-slate-200">
+                      <div className="mt-3 relative w-full h-48 bg-gray-50 rounded-lg overflow-hidden border border-slate-200 flex items-center justify-center">
                         <img
                           src={uploadedAttendancePhoto}
                           alt="Preview"
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-contain"
                         />
-                        <div className="absolute top-2 right-2 bg-emerald-500 text-white px-2 py-1 rounded text-[10px] font-bold">
+                        <div className="absolute top-2 right-2 bg-emerald-500 text-white px-2 py-1 rounded text-[10px] font-bold shadow-sm">
                           ФОТО ЗАГРУЖЕНО
                         </div>
                       </div>
@@ -1847,8 +1860,8 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
           <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm text-left space-y-4">
             {!selectedGroupId ? (
               <>
-                <div className="flex justify-between items-center border-b pb-3 mb-4">
-                  <h3 className="text-lg font-bold text-slate-900">
+                <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-4 border-b pb-3 mb-4">
+                  <h3 className="text-lg font-bold text-slate-900 leading-tight">
                     Детальная информация о моих группах
                   </h3>
                   <button
@@ -1906,7 +1919,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                         <div className="flex justify-between">
                           <span className="text-gray-500">Посещаемость:</span>
                           <span className="font-bold text-emerald-600">
-                            {grp.attendanceRate}%
+                            {getGroupAttendanceRate(grp.id)}
                           </span>
                         </div>
                         <div className="flex justify-between">
@@ -1917,16 +1930,16 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                         </div>
                       </div>
 
-                      <div className="mt-5 pt-4 border-t flex space-x-2">
+                      <div className="mt-5 pt-4 border-t flex flex-col sm:flex-row gap-2">
                         <button
                           onClick={() => setSelectedGroupId(grp.id)}
-                          className="flex-1 bg-slate-100 text-slate-700 text-xs font-bold py-2 rounded-xl hover:bg-slate-200 transition"
+                          className="flex-1 bg-slate-100 text-slate-700 text-xs font-bold py-2 px-1 rounded-xl hover:bg-slate-200 transition text-center"
                         >
                           Состав группы
                         </button>
                         <button
                           onClick={() => startAttendanceMarking(grp.id)}
-                          className="flex-1 bg-slate-900 text-white text-xs font-bold py-2 rounded-xl hover:bg-slate-800 transition"
+                          className="flex-1 bg-slate-900 text-white text-xs font-bold py-2 px-1 rounded-xl hover:bg-slate-800 transition text-center"
                         >
                           Посещения
                         </button>
@@ -2096,6 +2109,10 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                           ))}
                         </div>
                       )}
+                    </div>
+                    
+                    <div className="pt-6 border-t mt-6">
+                      <AttendanceTable group={grp} clients={clients} trainingSessions={trainingSessions || []} />
                     </div>
                   </div>
                 );
