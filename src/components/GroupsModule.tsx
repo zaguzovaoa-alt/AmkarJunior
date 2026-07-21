@@ -61,6 +61,7 @@ export const GroupsModule: React.FC = () => {
   const [newTargetCompetition, setNewTargetCompetition] = useState("");
   const [newGroupVenueCost, setNewGroupVenueCost] = useState<number>(0);
   const [newGroupMaxCapacity, setNewGroupMaxCapacity] = useState<number>(15);
+  const [newGroupVenueId, setNewGroupVenueId] = useState("");
 
   // Edit Group Form States
   const [editingGroup, setEditingGroup] = useState<any | null>(null);
@@ -80,6 +81,7 @@ export const GroupsModule: React.FC = () => {
   const [editTargetCompetition, setEditTargetCompetition] = useState("");
   const [editVenueCost, setEditVenueCost] = useState<number>(0);
   const [editMaxCapacity, setEditMaxCapacity] = useState<number>(15);
+  const [editVenueId, setEditVenueId] = useState("");
 
   // Quick assignment states
   const [selectedClientIdToAssign, setSelectedClientIdToAssign] = useState("");
@@ -152,7 +154,8 @@ export const GroupsModule: React.FC = () => {
         newTargetCompetition,
         [],
         newGroupVenueCost,
-        newGroupMaxCapacity
+        newGroupMaxCapacity,
+        newGroupVenueId
       );
 
       // Reset
@@ -166,6 +169,7 @@ export const GroupsModule: React.FC = () => {
       setNewTargetCompetition("");
       setNewGroupVenueCost(0);
       setNewGroupMaxCapacity(15);
+      setNewGroupVenueId("");
       setShowCreateModal(false);
     } catch (err: any) {
       alert("Ошибка при создании группы: " + err.message);
@@ -183,6 +187,7 @@ export const GroupsModule: React.FC = () => {
     setEditIsSelectTeam(group.isSelectTeam || false);
     setEditTargetCompetition(group.targetCompetition || "");
     setEditVenueCost(group.venueCost || 0);
+    setEditVenueId(group.venueId || "");
     setEditMaxCapacity(group.maxCapacity || 15);
   };
 
@@ -214,7 +219,8 @@ export const GroupsModule: React.FC = () => {
         isSelectTeam: editIsSelectTeam,
         targetCompetition: editTargetCompetition,
         venueCost: editVenueCost,
-        maxCapacity: editMaxCapacity
+        maxCapacity: editMaxCapacity,
+        venueId: editVenueId
       });
 
       setEditingGroup(null);
@@ -225,7 +231,8 @@ export const GroupsModule: React.FC = () => {
 
   const handleDeleteGroup = async (id: string, name: string) => {
     const isConfirmed = window.confirm(
-      `Вы действительно хотите распустить и удалить группу "${name}"?\nВсе ученики этой группы будут переведены в статус ожидания распределения.`,
+      `Вы действительно хотите распустить и удалить группу "${name}"?
+Все ученики этой группы будут переведены в статус ожидания распределения.`,
     );
     if (!isConfirmed) return;
 
@@ -370,7 +377,10 @@ export const GroupsModule: React.FC = () => {
               return (
                 <div key={g.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-left hover:shadow-md transition">
                   <div className="font-bold text-slate-900 border-b pb-2 tracking-tight flex justify-between items-center">
-                    <span>{g.name}</span>
+                    <div className="flex flex-col">
+<span>{g.name}</span>
+<span className="text-[10px] text-gray-500 font-medium mt-0.5">Площадка: {g.venueId ? counterparties.find(c => c.id === g.venueId)?.name || 'Неизвестно' : 'Не назначена'}</span>
+</div>
                     <span className="text-[10px] font-mono text-gray-400 bg-slate-100 px-2 py-0.5 rounded">Вместимость: {maxCap}</span>
                   </div>
                   <div className="pt-3 space-y-2">

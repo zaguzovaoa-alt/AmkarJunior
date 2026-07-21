@@ -42,6 +42,16 @@ import { compressImage } from "../utils/image";
 import { ConfirmModal } from "./ConfirmModal";
 import { BirthdaysBanner } from "./BirthdaysBanner";
 
+const formatBirthDate = (dateString?: string, fallbackYear?: number) => {
+  if (!dateString) return fallbackYear ? `${fallbackYear} г.р.` : "";
+  if (dateString.includes("-")) {
+    const [y, m, d] = dateString.split("-");
+    return `${d}.${m}.${y}`;
+  }
+  return dateString;
+};
+
+
 interface ManagerCRMProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
@@ -1752,8 +1762,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                   {client.childSurname} {client.childName}
                                 </div>
                                 <div className="text-[10px] text-gray-500 font-medium leading-tight mt-0.5">
-                                  {client.childAge} лет ({client.childBirthYear}{" "}
-                                  г.р.)
+                                  {client.childAge} лет ({formatBirthDate(client.childBirthDate, client.childBirthYear)})
                                 </div>
                               </td>
                               <td className="p-2 md:p-3 hidden sm:table-cell align-middle">
@@ -2452,9 +2461,9 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                               {selectedClient.childSurname}{" "}
                               {selectedClient.childName}
                             </h3>
-                            <div className="text-xs text-gray-500 font-medium pb-1.5">
-                              {selectedClient.childBirthYear} г.р. (
-                              {selectedClient.childAge} лет)
+                            <div className="text-xs text-gray-500 font-medium pb-1.5 flex flex-wrap gap-1 items-center">
+                              <span>{selectedClient.childAge} лет</span>
+                              <span>({formatBirthDate(selectedClient.childBirthDate, selectedClient.childBirthYear)})</span>
                             </div>
                             <span
                               className={`px-3 py-1 rounded-full text-[10px] font-bold tracking-wide capitalize ${
@@ -2588,6 +2597,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                           ].map((tb) => (
                             <button
                               key={tb.id}
+                              type="button"
                               onClick={() => setClientDetailTab(tb.id as any)}
                               className={`pb-3 font-semibold text-[11px] whitespace-nowrap border-b-2 transition-colors ${
                                 clientDetailTab === tb.id
@@ -2865,7 +2875,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                           {clientDetailTab === "visits" && (
                             <div className="space-y-1">
                               <strong>Последняя активность:</strong>
-                              {selectedClient.attendance.length === 0 ? (
+                              {!selectedClient.attendance || selectedClient.attendance.length === 0 ? (
                                 <p className="text-gray-400 italic">
                                   Нет зарегистрированных посещений.
                                 </p>

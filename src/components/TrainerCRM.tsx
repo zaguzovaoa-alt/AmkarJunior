@@ -34,6 +34,16 @@ import { AttendanceTable } from "./AttendanceTable";
 import { parseScheduleString } from "../utils/scheduleParser";
 import { TrainingGroup } from "../types";
 
+const formatBirthDate = (dateString?: string, fallbackYear?: number) => {
+  if (!dateString) return fallbackYear ? `${fallbackYear} г.р.` : "";
+  if (dateString.includes("-")) {
+    const [y, m, d] = dateString.split("-");
+    return `${d}.${m}.${y}`;
+  }
+  return dateString;
+};
+
+
 interface TrainerCRMProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
@@ -148,6 +158,8 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
   const [editPlayerNotes, setEditPlayerNotes] = useState("");
   const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
+  const [selectedClientDetailsId, setSelectedClientDetailsId] = useState<string | null>(null);
+  const [clientDetailTab, setClientDetailTab] = useState<"info" | "abos" | "visits" | "progress">("info");
 
   const [isAddingHomework, setIsAddingHomework] = useState(false);
   const [newHomework, setNewHomework] = useState({
@@ -2016,28 +2028,59 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                               className="bg-white border rounded-2xl p-4 shadow-sm hover:shadow-md transition space-y-3 relative"
                             >
                               <div className="flex justify-between items-start">
-                                <div className="flex space-x-3 items-center">
-                                  <div className="h-10 w-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-700 font-bold border border-emerald-200">
-                                    {player.childSurname[0]}
-                                    {player.childName[0]}
+                                <div className="flex space-x-3 items-start">
+                                  <div className="h-10 w-10 shrink-0 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-700 font-bold border border-emerald-200 overflow-hidden">
+                                    {player.avatarUrl ? (
+                                      <img src={player.avatarUrl} alt="" className="w-full h-full object-cover" />
+                                    ) : (
+                                      <>
+                                        {player.childSurname?.[0]}
+                                        {player.childName?.[0]}
+                                      </>
+                                    )}
                                   </div>
-                                  <div>
-                                    <div className="font-bold text-slate-900 text-sm leading-tight">
-                                      {player.childSurname} {player.childName}
+                                  <div className="space-y-1">
+                                    <div>
+                                      <div className="font-bold text-slate-900 text-sm leading-tight">
+                                        {player.childSurname} {player.childName}
+                                      </div>
+                                      <div className="text-[10px] text-gray-500 font-mono mt-0.5 flex flex-wrap gap-1">
+                                        <span>{player.childAge} лет</span>
+                                        <span>({formatBirthDate(player.childBirthDate, player.childBirthYear)})</span>
+                                      </div>
                                     </div>
-                                    <div className="text-[10px] text-gray-500 font-mono mt-0.5">
-                                      {player.childAge} лет (
-                                      {player.childBirthYear} г.р.)
+                                    <div className="text-[10px] text-slate-700 bg-slate-50 px-2 py-1 rounded-md border border-slate-100 w-fit">
+                                      <span className="text-gray-500 font-medium">Родитель: </span>
+                                      <span className="font-bold">{player.parentName}</span>
+                                      {player.parentPhone && (
+                                        <>
+                                          <span className="mx-1 text-gray-300">|</span>
+                                          <a href={`tel:${player.parentPhone}`} className="text-emerald-600 hover:underline font-bold">
+                                            {player.parentPhone}
+                                          </a>
+                                        </>
+                                      )}
+                                    </div>
+                                    <div className="text-[10px] font-bold px-2 py-0.5 rounded-md inline-block mt-1 w-fit border text-emerald-700 bg-emerald-50 border-emerald-100">
+                                      Остаток: {player.abonementSessionsLeft} занятий
                                     </div>
                                   </div>
                                 </div>
-                                <button
-                                  onClick={async () => {
-                                    if (
-                                      window.confirm(
-                                        `Вы уверены, что хотите исключить ${player.childName} из группы?`,
-                                      )
-                                    ) {
+                                <div className="flex space-x-1">
+                                  <button
+                                    onClick={() => setSelectedClientDetailsId(player.id)}
+                                    className="px-2 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg transition text-[10px] font-bold flex items-center"
+                                    title="Подробнее"
+                                  >
+                                    Подробнее
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      if (
+                                        window.confirm(
+                                          `Вы уверены, что хотите исключить ${player.childName} из группы?`,
+                                        )
+                                      ) {
                                       await updateClient(player.id, {
                                         groupName: null,
                                       });
@@ -2048,8 +2091,8 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                                 >
                                   <Trash className="w-4 h-4" />
                                 </button>
+                                </div>
                               </div>
-
                               {editingPlayerId === player.id ? (
                                 <div className="bg-slate-50 rounded-xl p-3 border space-y-2 mt-2">
                                   <textarea
@@ -2234,6 +2277,202 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                     </div>
                   );
                 })()}
+
+            {/* Modal for Client Details */}
+            <AnimatePresence>
+              {selectedClientDetailsId && (() => {
+                  const selectedClient = clients.find(c => c.id === selectedClientDetailsId);
+                  if (!selectedClient) return null;
+                  
+                  return (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                        className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl flex overflow-hidden max-h-[85vh] relative"
+                      >
+                        <button
+                          onClick={() => setSelectedClientDetailsId(null)}
+                          className="absolute top-4 right-4 z-10 w-8 h-8 flex items-center justify-center bg-white rounded-full shadow-md text-gray-500 hover:text-red-500 hover:bg-red-50 transition border"
+                        >
+                          ✕
+                        </button>
+                        
+                        <div className="flex-1 overflow-y-auto bg-slate-50 p-6 flex flex-col sm:flex-row gap-6">
+                           {/* Left Sidebar */}
+                          <div className="w-full sm:w-1/3 space-y-4">
+                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center text-center">
+                              <div className="h-24 w-24 rounded-2xl bg-emerald-100 font-extrabold text-emerald-700 text-3xl flex items-center justify-center overflow-hidden border-4 border-white shadow-md mb-3">
+                                {selectedClient.avatarUrl ? (
+                                  <img src={selectedClient.avatarUrl} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                  selectedClient.childName?.[0] || "?"
+                                )}
+                              </div>
+                              <h3 className="font-black text-xl text-slate-900 leading-tight">
+                                {selectedClient.childSurname} {selectedClient.childName}
+                              </h3>
+                              <p className="text-xs text-gray-500 mt-1 font-mono">
+                                Возраст: {selectedClient.childAge} лет ({formatBirthDate(selectedClient.childBirthDate, selectedClient.childBirthYear)})
+                              </p>
+                              
+                              <div className="mt-4 pt-4 border-t w-full text-left space-y-2">
+                                <div>
+                                  <span className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">Родитель</span>
+                                  <div className="text-sm font-bold text-slate-800">{selectedClient.parentName}</div>
+                                </div>
+                                <div>
+                                  <span className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">Телефон</span>
+                                  <a href={"tel:" + selectedClient.phone} className="text-sm font-bold text-emerald-600 hover:underline block">{selectedClient.phone}</a>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                               <div className="flex flex-col">
+                                 <button
+                                    onClick={() => setClientDetailTab("info")}
+                                    className={"px-4 py-3 text-left text-xs font-bold transition-colors " + (clientDetailTab === "info" ? "bg-slate-900 text-white" : "text-gray-600 hover:bg-slate-50")}
+                                 >
+                                    Основная информация
+                                 </button>
+                                 <button
+                                    onClick={() => setClientDetailTab("visits")}
+                                    className={"px-4 py-3 text-left text-xs font-bold transition-colors border-t " + (clientDetailTab === "visits" ? "bg-slate-900 text-white" : "text-gray-600 hover:bg-slate-50")}
+                                 >
+                                    Посещения
+                                 </button>
+                                 <button
+                                    onClick={() => setClientDetailTab("progress")}
+                                    className={"px-4 py-3 text-left text-xs font-bold transition-colors border-t " + (clientDetailTab === "progress" ? "bg-slate-900 text-white" : "text-gray-600 hover:bg-slate-50")}
+                                 >
+                                    Прогресс
+                                 </button>
+                               </div>
+                            </div>
+                          </div>
+                          
+                          {/* Right Content */}
+                          <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-100 p-6 overflow-y-auto">
+                            {clientDetailTab === "info" && (
+                                <div className="space-y-6">
+                                   <div className="space-y-4">
+                                      <h4 className="font-extrabold text-sm uppercase text-slate-900 tracking-wider flex items-center gap-2">
+                                        <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                                        Медицинская справка
+                                      </h4>
+                                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-150 text-sm">
+                                        {selectedClient.medicalCertificateUrl ? (
+                                           <div className="flex items-center gap-2 text-emerald-700 font-bold">
+                                              <span>✅ Прикреплена</span>
+                                              <a href={selectedClient.medicalCertificateUrl} target="_blank" rel="noreferrer" className="text-xs bg-white border border-emerald-200 px-2 py-1 rounded-lg hover:bg-emerald-50">Скачать/Посмотреть</a>
+                                           </div>
+                                        ) : (
+                                           <span className="text-gray-500 italic">Справка не загружена</span>
+                                        )}
+                                      </div>
+                                      
+                                      <h4 className="font-extrabold text-sm uppercase text-slate-900 tracking-wider flex items-center gap-2 pt-2">
+                                        <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                                        Страховка
+                                      </h4>
+                                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-150 text-sm">
+                                        {selectedClient.insuranceUrl ? (
+                                           <div className="flex items-center gap-2 text-emerald-700 font-bold">
+                                              <span>✅ Прикреплена</span>
+                                              <a href={selectedClient.insuranceUrl} target="_blank" rel="noreferrer" className="text-xs bg-white border border-emerald-200 px-2 py-1 rounded-lg hover:bg-emerald-50">Скачать/Посмотреть</a>
+                                           </div>
+                                        ) : (
+                                           <span className="text-gray-500 italic">Полис не загружен</span>
+                                        )}
+                                      </div>
+                                   </div>
+                                </div>
+                            )}
+                            
+                            {clientDetailTab === "visits" && (
+                               <div className="space-y-4">
+                                  <h4 className="font-extrabold text-sm uppercase text-slate-900 tracking-wider">История посещений</h4>
+                                  <div className="grid grid-cols-2 gap-3 pb-3 border-b">
+                                     <div className="bg-emerald-50 rounded-xl p-3">
+                                        <div className="text-[10px] uppercase text-emerald-800 font-bold">Посещений</div>
+                                        <div className="text-xl font-black text-emerald-600">{selectedClient.attendance?.filter(a => a.status === "present").length || 0}</div>
+                                     </div>
+                                     <div className="bg-red-50 rounded-xl p-3">
+                                        <div className="text-[10px] uppercase text-red-800 font-bold">Пропусков</div>
+                                        <div className="text-xl font-black text-red-600">{selectedClient.attendance?.filter(a => a.status === "absent").length || 0}</div>
+                                     </div>
+                                  </div>
+                                  
+                                  <div className="space-y-2 mt-4 max-h-[400px] overflow-y-auto pr-2">
+                                     {!selectedClient.attendance || selectedClient.attendance.length === 0 ? (
+                                        <p className="text-gray-400 italic text-sm">Нет зарегистрированных посещений.</p>
+                                     ) : (
+                                        selectedClient.attendance.map((t, i) => (
+                                          <div key={i} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                            <div className="text-xs font-bold text-slate-800">{t.date}</div>
+                                            <div className={"text-[10px] font-bold px-2 py-1 rounded-lg " + (t.status === 'present' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700')}>
+                                              {t.status === 'present' ? 'Присутствовал' : 'Пропуск'}
+                                            </div>
+                                          </div>
+                                        ))
+                                     )}
+                                  </div>
+                               </div>
+                            )}
+                            
+                            {clientDetailTab === "progress" && (
+                               <div className="space-y-4">
+                                  <h4 className="font-extrabold text-sm uppercase text-slate-900 tracking-wider">Оценки навыков</h4>
+                                  <div className="grid grid-cols-2 gap-4">
+                                     <div className="space-y-1">
+                                        <div className="flex justify-between text-xs font-bold text-gray-500">
+                                           <span>Техника</span>
+                                           <span>{selectedClient.progress?.technique || 0}/5</span>
+                                        </div>
+                                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                           <div className="h-full bg-blue-500 rounded-full" style={{ width: ((selectedClient.progress?.technique || 0) / 5) * 100 + "%" }}></div>
+                                        </div>
+                                     </div>
+                                     <div className="space-y-1">
+                                        <div className="flex justify-between text-xs font-bold text-gray-500">
+                                           <span>Тактика</span>
+                                           <span>{selectedClient.progress?.tactics || 0}/5</span>
+                                        </div>
+                                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                           <div className="h-full bg-amber-500 rounded-full" style={{ width: ((selectedClient.progress?.tactics || 0) / 5) * 100 + "%" }}></div>
+                                        </div>
+                                     </div>
+                                     <div className="space-y-1">
+                                        <div className="flex justify-between text-xs font-bold text-gray-500">
+                                           <span>Физика</span>
+                                           <span>{selectedClient.progress?.physical || 0}/5</span>
+                                        </div>
+                                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                           <div className="h-full bg-red-500 rounded-full" style={{ width: ((selectedClient.progress?.physical || 0) / 5) * 100 + "%" }}></div>
+                                        </div>
+                                     </div>
+                                     <div className="space-y-1">
+                                        <div className="flex justify-between text-xs font-bold text-gray-500">
+                                           <span>Дисциплина</span>
+                                           <span>{selectedClient.progress?.discipline || 0}/5</span>
+                                        </div>
+                                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                           <div className="h-full bg-emerald-500 rounded-full" style={{ width: ((selectedClient.progress?.discipline || 0) / 5) * 100 + "%" }}></div>
+                                        </div>
+                                     </div>
+                                  </div>
+                               </div>
+                            )}
+                            
+                          </div>
+                        </div>
+                      </motion.div>
+                    </div>
+                  );
+              })()}
+            </AnimatePresence>
             </AnimatePresence>
           </div>
         )}
