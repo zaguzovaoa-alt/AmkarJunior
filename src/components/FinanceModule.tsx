@@ -143,6 +143,7 @@ export const FinanceModule: React.FC = () => {
   const [fCounterparty, setFCounterparty] = useState("");
 
   const [addSuccessMsg, setAddSuccessMsg] = useState("");
+  const [addErrorMsg, setAddErrorMsg] = useState("");
 
   // Transfer and Edit states
   const [editingAccount, setEditingAccount] = useState<string | null>(null);
@@ -159,8 +160,8 @@ export const FinanceModule: React.FC = () => {
 
   const handleAddFinance = () => {
     if (!fAmount || !fCat || !fAccount) {
-      setAddSuccessMsg("Введите сумму, категорию и счет");
-      setTimeout(() => setAddSuccessMsg(""), 3000);
+      setAddErrorMsg("Введите сумму, категорию и счет");
+      setTimeout(() => setAddErrorMsg(""), 3000);
       return;
     }
     addFinanceRecord({
@@ -1074,13 +1075,13 @@ export const FinanceModule: React.FC = () => {
             <div className="space-y-4">
               <div className="flex space-x-2 bg-slate-100 p-1 rounded-xl w-64">
                 <button
-                  onClick={() => setFType("income")}
+                  onClick={() => { setFType("income"); setFCat(""); }}
                   className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${fType === "income" ? "bg-emerald-500 text-white shadow-sm" : "text-gray-500"}`}
                 >
                   + Доход
                 </button>
                 <button
-                  onClick={() => setFType("expense")}
+                  onClick={() => { setFType("expense"); setFCat(""); }}
                   className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${fType === "expense" ? "bg-orange-500 text-white shadow-sm" : "text-gray-500"}`}
                 >
                   - Расход
@@ -1215,6 +1216,11 @@ export const FinanceModule: React.FC = () => {
               {addSuccessMsg && (
                 <p className="text-center text-sm font-bold text-emerald-600 mt-2">
                   {addSuccessMsg}
+                </p>
+              )}
+              {addErrorMsg && (
+                <p className="text-center text-sm font-bold text-red-600 mt-2">
+                  {addErrorMsg}
                 </p>
               )}
             </div>

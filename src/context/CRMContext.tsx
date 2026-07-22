@@ -1867,7 +1867,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const addFinanceRecord = async (record: Omit<FinanceRecord, "id">) => {
     const id = `f_${Date.now()}`;
-    const newRecord = { ...record, id };
+    const newRecord = { accountId: "acc_cash", ...record, id };
     setFinances((prev) => [newRecord, ...prev]);
     setDoc(doc(db, "finances", id), newRecord).catch((err) => handleFirestoreError(err, OperationType.WRITE, "update"));
   };
