@@ -13,7 +13,7 @@ import {
   getDocs,
   where,
 } from "firebase/firestore";
-import { db, handleFirestoreError, OperationType } from "../firebase";
+import { db, handleFirestoreError, sanitizeForFirestore, OperationType } from "../firebase";
 import { sendTelegramAlert } from "../utils/telegram";
 import {
   Lead,
@@ -191,6 +191,8 @@ interface CRMContextType {
   deleteFinanceCategory: (id: string) => Promise<void>;
   updateFinancialPlan: (plan: FinancialPlan) => Promise<void>;
   addFinanceRecord: (record: Omit<FinanceRecord, "id">) => Promise<void>;
+  payFinanceRecord: (id: string, accountId: string) => Promise<void>;
+  payBulkFinanceRecords: (ids: string[], accountId: string) => Promise<void>;
   updateClientNotes: (clientId: string, notes: string) => Promise<void>;
   updateClient: (
     clientId: string,
@@ -830,7 +832,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
           list.push(doc.data() as TrainingSessionProtocol);
         });
         // Sort newest first
-        list.sort((a, b) => b.date.localeCompare(a.date));
+        list.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
         setTrainingSessions(list);
       },
       (err) => handleSnapshotErr(err, "training_sessions"),
@@ -1362,7 +1364,12 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     assistantId?: string,
   ) => {
     const rawClients = clients; // avoid stale state issues in loops
-    const groupObj = groups.find((g) => g.id === groupId || g.name === groupId);
+    const groupObj = groups.find(
+      (g) =>
+        g.id === groupId ||
+        g.name === groupId ||
+        (g.name && g.name.trim().toLowerCase() === groupId.trim().toLowerCase()),
+    );
     const groupName = groupObj?.name || groupId;
     const coachId = groupObj?.coachId || "unknown";
     const coachName = groupObj?.coachName || "Неизвестный тренер";
@@ -1377,7 +1384,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     const absentCount = records.filter((r) => r.status === "absent").length;
     const trialCount = records.filter((r) => r.status === "trial_free").length;
 
-    const newProtocol: TrainingSessionProtocol = {
+    const newProtocol: TrainingSessionProtocol = sanitizeForFirestore({
       id: `ts_${Date.now()}`,
       groupId: groupId,
       groupName: groupName,
@@ -1385,10 +1392,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       dateString: date,
       coachId,
       coachName,
-      assistantId,
-      assistantName,
-      photoUrl: mediaFile,
-      notes: notes,
+      assistantId: assistantId || "",
+      assistantName: assistantName || "",
+      photoUrl: mediaFile || null,
+      notes: notes || "",
       presentCount,
       absentCount,
       sickCount,
@@ -1398,65 +1405,89 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         return {
           clientId: r.clientId,
           clientName: clientObj
-            ? `${clientObj.childSurname} ${clientObj.childName}`
+            ? `${clientObj.childSurname} ${clientObj.childName}`.trim()
             : r.clientId,
           status: r.status,
-          reason: r.reason,
+          reason: r.reason || "",
         };
       }),
-    };
+    });
 
     setTrainingSessions((prev) => [newProtocol, ...prev]);
 
-    // Auto-create expense for venue rental
-    if (groupObj?.venueCost && groupObj.venueCost > 0) {
-      addFinanceRecord({
-        type: "expense",
-        category: "Аренда",
-        amount: groupObj.venueCost,
-        date: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(),
-        description: `Аренда площадки для тренировки (${groupName})`,
-        groupName: groupName,
-        isFixed: false,
-        counterpartyId: groupObj.venueId,
-      });
-    }
+    const formattedToday = (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    })();
 
-    // Auto-create payroll expenses
+    // 1. Auto-accrue Venue Rent Expense (Начисление аренды за площадку, выплата 1 раз в месяц)
+    const venueCostToUse =
+      groupObj?.venueCost && groupObj.venueCost > 0
+        ? groupObj.venueCost
+        : 1500; // default 1500 per training session if not explicitly set
+
+    addFinanceRecord({
+      type: "expense",
+      category: "Аренда",
+      amount: venueCostToUse,
+      date: date || formattedToday,
+      description: `Начисление аренды за тренировку (${groupName})`,
+      groupName: groupName,
+      isFixed: false,
+      counterpartyId: groupObj?.venueId,
+      status: "accrued",
+      paymentStatus: "pending",
+      isAccrual: true,
+      accountId: "",
+    });
+
+    // 2. Auto-accrue Head Coach Payroll Expense (Начисление ЗП главного тренера, выплата 2 раза в месяц)
     const headCoachObj = coaches.find((c) => c.id === coachId);
-    if (
-      headCoachObj &&
-      headCoachObj.paymentType === "per_session" &&
+    const headCoachRate =
+      headCoachObj?.paymentType === "per_session" &&
       headCoachObj.rate &&
       headCoachObj.rate > 0
-    ) {
+        ? headCoachObj.rate
+        : headCoachObj?.rate && headCoachObj.rate > 0
+          ? headCoachObj.rate
+          : 1000;
+
+    if (headCoachObj) {
       addFinanceRecord({
         type: "expense",
         category: "Зарплата",
-        amount: headCoachObj.rate,
-        date: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(),
-        description: `Оплата за тренировку: ${coachName} (${groupName})`,
+        amount: headCoachRate,
+        date: date || formattedToday,
+        description: `Начисление ЗП за тренировку: ${coachName} (${groupName})`,
         groupName: groupName,
         isFixed: false,
+        counterpartyId: headCoachObj.id,
+        status: "accrued",
+        paymentStatus: "pending",
+        isAccrual: true,
+        accountId: "",
       });
     }
 
+    // 3. Auto-accrue Assistant Coach Payroll Expense (Начисление ЗП ассистента, выплата 2 раза в месяц)
     if (assistantId) {
       const astCoachObj = coaches.find((c) => c.id === assistantId);
-      if (
-        astCoachObj &&
-        astCoachObj.paymentType === "per_session" &&
-        astCoachObj.rate &&
-        astCoachObj.rate > 0
-      ) {
+      const astRate =
+        astCoachObj?.rate && astCoachObj.rate > 0 ? astCoachObj.rate : 700;
+      if (astCoachObj) {
         addFinanceRecord({
           type: "expense",
           category: "Зарплата",
-          amount: astCoachObj.rate,
-          date: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(),
-          description: `Оплата (Ассистент): ${astCoachObj.name} (${groupName})`,
+          amount: astRate,
+          date: date || formattedToday,
+          description: `Начисление ЗП (Ассистент): ${astCoachObj.name} (${groupName})`,
           groupName: groupName,
           isFixed: false,
+          counterpartyId: astCoachObj.id,
+          status: "accrued",
+          paymentStatus: "pending",
+          isAccrual: true,
+          accountId: "",
         });
       }
     }
@@ -1477,8 +1508,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
               ? `${c.notes || ""}\n[Посещаемость ${date}]: Тренер прикрепил фотоотчет.`
               : c.notes,
             attendance: [
-              { date, status: record.status, reason: record.reason },
-              ...c.attendance,
+              { date, status: record.status, reason: record.reason || "" },
+              ...(c.attendance || []),
             ],
           };
         }
@@ -1488,14 +1519,14 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
     const group = groups.find((g) => g.id === groupId);
     const directorTaskId = `t_${Date.now()}_att`;
-    const directorTask: CRMTask = {
+    const directorTask: CRMTask = sanitizeForFirestore({
       id: directorTaskId,
       title: `Отмечена посещаемость в группе: ${group?.name || groupId}`,
       assignedTo: "director",
       status: "new",
       dueDate: new Date().toLocaleDateString("ru-RU"),
       description: `Тренер ${group?.coachName || "Тренер"} утвердил лист посещаемости на ${date}. Присутствовало: ${records.filter((r) => r.status === "present").length} человек.`,
-    };
+    });
 
     setTasks((prev) => [directorTask, ...prev]);
 
@@ -1507,7 +1538,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       batch.set(doc(db, "tasks", directorTaskId), directorTask as any);
 
       records.forEach((record) => {
-        const c = clients.find((cl) => cl.id === record.clientId);
+        const c = rawClients.find((cl) => cl.id === record.clientId);
         if (c) {
           const wasPresent = record.status === "present";
           const isSessionDeducted = wasPresent && c.abonementSessionsLeft > 0;
@@ -1518,7 +1549,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
             record.status !== "trial_free" &&
             crmConfig.telegramAlerts?.churnRisk !== false
           ) {
-            const pastAbsences = c.attendance
+            const pastAbsences = (c.attendance || [])
               .slice(0, 1)
               .every((a) => a.status === "absent" || a.status === "absent_sick");
             if (pastAbsences) {
@@ -1530,23 +1561,26 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
             }
           }
 
-          batch.update(doc(db, "clients", c.id), {
+          const clientUpdate = sanitizeForFirestore({
             abonementSessionsLeft: isSessionDeducted
               ? c.abonementSessionsLeft - 1
               : c.abonementSessionsLeft,
             notes: mediaFile
               ? `${c.notes || ""}\n[Посещаемость ${date}]: Тренер прикрепил фотоотчет.`
-              : c.notes,
+              : c.notes || "",
             attendance: [
-              { date, status: record.status, reason: record.reason },
-              ...c.attendance,
+              { date, status: record.status, reason: record.reason || "" },
+              ...(c.attendance || []),
             ],
           });
+
+          batch.update(doc(db, "clients", c.id), clientUpdate);
         }
       });
 
       await batch.commit();
     } catch (err) {
+      console.warn("Error persisting training session batch to Firestore:", err);
       handleFirestoreError(err, OperationType.WRITE, "training_sessions_batch");
     }
   };
@@ -1866,10 +1900,77 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const addFinanceRecord = async (record: Omit<FinanceRecord, "id">) => {
-    const id = `f_${Date.now()}`;
-    const newRecord = { accountId: "acc_cash", ...record, id };
+    const id = `f_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const status = record.status || "paid";
+    const paymentStatus = record.paymentStatus || (status === "accrued" ? "pending" : "paid");
+    const accountId = status === "accrued" ? (record.accountId || "") : (record.accountId || "acc_cash");
+    
+    const newRecord = sanitizeForFirestore({
+      status,
+      paymentStatus,
+      ...record,
+      accountId,
+      id,
+    });
     setFinances((prev) => [newRecord, ...prev]);
     setDoc(doc(db, "finances", id), newRecord).catch((err) => handleFirestoreError(err, OperationType.WRITE, "update"));
+  };
+
+  const payFinanceRecord = async (id: string, accountId: string) => {
+    const today = (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    })();
+    setFinances((prev) =>
+      prev.map((f) =>
+        f.id === id
+          ? {
+              ...f,
+              status: "paid",
+              paymentStatus: "paid",
+              accountId,
+              date: today,
+            }
+          : f,
+      ),
+    );
+    updateDoc(doc(db, "finances", id), {
+      status: "paid",
+      paymentStatus: "paid",
+      accountId,
+      date: today,
+    }).catch((err) => handleFirestoreError(err, OperationType.WRITE, "update"));
+  };
+
+  const payBulkFinanceRecords = async (ids: string[], accountId: string) => {
+    if (!ids || ids.length === 0) return;
+    const today = (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    })();
+    setFinances((prev) =>
+      prev.map((f) =>
+        ids.includes(f.id)
+          ? {
+              ...f,
+              status: "paid",
+              paymentStatus: "paid",
+              accountId,
+              date: today,
+            }
+          : f,
+      ),
+    );
+    const batch = writeBatch(db);
+    ids.forEach((id) => {
+      batch.update(doc(db, "finances", id), {
+        status: "paid",
+        paymentStatus: "paid",
+        accountId,
+        date: today,
+      });
+    });
+    batch.commit().catch((err) => handleFirestoreError(err, OperationType.WRITE, "update"));
   };
 
   const updateFinancialPlan = async (plan: FinancialPlan) => {
@@ -2763,6 +2864,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         addFinanceCategory,
         deleteFinanceCategory,
         addFinanceRecord,
+        payFinanceRecord,
+        payBulkFinanceRecords,
         updateFinancialPlan,
         updateClientNotes,
         updateClient,

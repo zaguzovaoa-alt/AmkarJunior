@@ -300,7 +300,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
     }));
   };
 
-  const submitAttendanceToCRM = () => {
+  const submitAttendanceToCRM = async () => {
     if (!selectedGroupForAttendance) return;
     
     if (!uploadedAttendancePhoto || !uploadedAttendancePhoto.startsWith("data:image")) {
@@ -348,19 +348,26 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
       return;
     }
 
-    markAttendance(
-      selectedGroupForAttendance,
-      formattedDate,
-      clientRecords,
-      uploadedAttendancePhoto || "фотоотчет_тренировки_сп.jpg",
-      sessionNotes,
-      selectedAssistantId || undefined
-    );
-    alert(
-      "Ведомость посещаемости успешно сохранена и передана в бухгалтерию администрации!",
-    );
-    setSelectedGroupForAttendance(null);
-    setSelectedAssistantId("");
+    try {
+      await markAttendance(
+        selectedGroupForAttendance,
+        formattedDate,
+        clientRecords,
+        uploadedAttendancePhoto || "фотоотчет_тренировки_сп.jpg",
+        sessionNotes,
+        selectedAssistantId || undefined
+      );
+      alert(
+        "Ведомость посещаемости успешно сохранена и передана в бухгалтерию администрации!",
+      );
+      setSelectedGroupForAttendance(null);
+      setSelectedAssistantId("");
+    } catch (err: any) {
+      console.error("Ошибка при сохранении ведомости:", err);
+      alert("Произошла ошибка при сохранении ведомости. Все локальные данные сохранены.");
+      setSelectedGroupForAttendance(null);
+      setSelectedAssistantId("");
+    }
   };
 
   const submitPlayerRating = () => {

@@ -25,6 +25,7 @@ export const GroupsModule: React.FC = () => {
     clients,
     trainingSessions,
     finances,
+    counterparties,
     createGroup,
     deleteGroup,
     updateGroup,

@@ -4,8 +4,8 @@ export const compressImage = (file: File, callback: (base64: string) => void) =>
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      const MAX_WIDTH = 600;
-      const MAX_HEIGHT = 600;
+      const MAX_WIDTH = 400;
+      const MAX_HEIGHT = 400;
       let width = img.width;
       let height = img.height;
 
@@ -21,14 +21,14 @@ export const compressImage = (file: File, callback: (base64: string) => void) =>
         }
       }
 
-      canvas.width = width;
-      canvas.height = height;
+      canvas.width = Math.round(width);
+      canvas.height = Math.round(height);
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.drawImage(img, 0, 0, width, height);
-        callback(canvas.toDataURL('image/jpeg', 0.8));
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        callback(canvas.toDataURL('image/jpeg', 0.5));
       } else {
-        callback(e.target?.result as string);
+        callback(file.name);
       }
     };
     if (e.target?.result) {

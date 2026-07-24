@@ -105,7 +105,12 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
     );
 
     finances.forEach((f) => {
-      if (f.accountId && calculatedAccountsMap.has(f.accountId)) {
+      if (
+        f.accountId &&
+        calculatedAccountsMap.has(f.accountId) &&
+        f.status !== "accrued" &&
+        f.paymentStatus !== "pending"
+      ) {
         const acc = calculatedAccountsMap.get(f.accountId)!;
         if (f.type === "income") acc.actualBalance += Number(f.amount || 0);
         else if (f.type === "expense")
@@ -3492,7 +3497,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                       Выберите тренера...
                     </option>
                     {coaches
-                      .filter((c) => c.status === "active")
+                      .filter((c) => c.status === "Активен" || c.status === "На испытательном сроке")
                       .map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.name}

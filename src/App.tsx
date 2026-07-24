@@ -277,7 +277,7 @@ function DashboardContainer() {
                             . Обычно это означает, что вы еще не создали
                             выбранный инстанс БД{" "}
                             <span className="font-semibold underline">
-                              {(firebaseConfig as any).firestoreDatabaseId}
+                              {(firebaseConfig as any).firestoreDatabaseId || "(default)"}
                             </span>{" "}
                             в консоли Firebase (создается через{" "}
                             <em>Cloud Firestore &gt; Create Database</em>) или
@@ -293,7 +293,7 @@ function DashboardContainer() {
                             </code>
                             . Инстанс{" "}
                             <span className="font-semibold underline">
-                              {(firebaseConfig as any).firestoreDatabaseId}
+                              {(firebaseConfig as any).firestoreDatabaseId || "(default)"}
                             </span>{" "}
                             временно закрыт для записи без правил безопасности.
                             Приложение запущено в{" "}
