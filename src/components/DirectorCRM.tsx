@@ -226,15 +226,10 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
     );
 
     finances.forEach((f) => {
-      if (
-        f.accountId &&
-        calculatedAccountsMap.has(f.accountId) &&
-        f.status !== "accrued" &&
-        f.paymentStatus !== "pending"
-      ) {
+      if (f.accountId && calculatedAccountsMap.has(f.accountId)) {
         const acc = calculatedAccountsMap.get(f.accountId)!;
         if (f.type === "income") acc.actualBalance += Number(f.amount || 0);
-        else if (f.type === "expense")
+        else if (f.type === "expense" && f.paymentStatus !== "accrued")
           acc.actualBalance -= Number(f.amount || 0);
       }
     });

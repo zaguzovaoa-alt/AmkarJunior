@@ -1,11 +1,10 @@
 {
-  "projectId": "amkarjunior",
-  "appId": "1:226968112623:web:2902ec072c139668ab3a1a",
-  "apiKey": "AIzaSyD-bSla1fIkT4PBdTh5FGbWmGjbNNnKqu0",
-  "authDomain": "amkarjunior.firebaseapp.com",
-  "databaseURL": "https://amkarjunior-default-rtdb.europe-west1.firebasedatabase.app",
-  "storageBucket": "amkarjunior.firebasestorage.app",
-  "messagingSenderId": "226968112623",
-  "measurementId": "",
-  "firestoreDatabaseId": "(default)"
+  "projectId": "gen-lang-client-0752285455",
+  "appId": "1:168970014430:web:7d24381aae01987b1afc4f",
+  "apiKey": "AIzaSyDV4mWqjXLdRynk-TWER8VqwEHB1_n-EGg",
+  "authDomain": "gen-lang-client-0752285455.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-2f501af5-f006-4da1-bfb5-0c6f206187cd",
+  "storageBucket": "gen-lang-client-0752285455.firebasestorage.app",
+  "messagingSenderId": "168970014430",
+  "measurementId": ""
 }

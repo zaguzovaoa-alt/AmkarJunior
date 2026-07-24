@@ -236,9 +236,8 @@ export interface FinanceRecord {
   accountId?: string; // Links to internal accounts
   isFixed?: boolean; // Indicates if this is a recurring/fixed expense or income
   counterpartyId?: string; // New: link to counterparty
-  status?: 'paid' | 'accrued'; // 'accrued' = начислено (долг/обязательство), 'paid' = фактически оплачено со счета
-  paymentStatus?: 'pending' | 'paid'; // 'pending' = ожидает выплаты, 'paid' = выплачено
-  isAccrual?: boolean; // true if auto-generated from training session
+  paymentStatus?: 'accrued' | 'paid' | 'pending'; // 'accrued' = Начислено (долг), 'paid' = Выплачено/Списано
+  coachId?: string;
 }
 
 export interface FinanceCategory {

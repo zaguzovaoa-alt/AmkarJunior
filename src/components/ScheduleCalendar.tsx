@@ -110,7 +110,7 @@ export const ScheduleCalendar: React.FC<{
     const cached = localStorage.getItem("amkar_custom_events");
     if (cached) {
       try {
-        return JSON.parse(cached);
+        return Array.isArray(JSON.parse(cached)) ? JSON.parse(cached) : [];
       } catch (e) {
         // Fallback to defaults
       }
@@ -304,9 +304,8 @@ export const ScheduleCalendar: React.FC<{
     const uniqueList: CustomEvent[] = [];
 
     combined.forEach((ev) => {
-      if (!ev) return;
       // Create a unique key for matching group + date + time + type
-      const key = `${ev.groupId || "all"}_${ev.date || ""}_${ev.time || ""}_${ev.type || ""}`;
+      const key = `${ev.groupId || "all"}_${ev.date}_${ev.time}_${ev.type}`;
       if (!seenKeys.has(key)) {
         seenKeys.add(key);
         uniqueList.push(ev);
@@ -489,77 +488,68 @@ export const ScheduleCalendar: React.FC<{
     e.preventDefault();
     if (!newEventDate || (!newEventTitle && newEventType !== "regular")) return;
 
-    try {
-      const gObj = groups.find((g) => g.id === newEventGroupId);
-      const cObj = coaches.find((c) => c.id === newEventCoachId);
+    const gObj = groups.find((g) => g.id === newEventGroupId);
+    const cObj = coaches.find((c) => c.id === newEventCoachId);
 
-      const generatedTitle =
-        newEventType === "regular"
-          ? `Регулярная тренировка: ${gObj?.name || "Вся футбольная база"}`
-          : newEventTitle;
+    const generatedTitle =
+      newEventType === "regular"
+        ? `Регулярная тренировка: ${gObj?.name || "Вся футбольная база"}`
+        : newEventTitle;
 
-      const newEv: CustomEvent = {
-        id: `custom_${Date.now()}`,
-        title: generatedTitle,
-        date: newEventDate,
-        time: newEventTime,
-        groupId: newEventGroupId,
-        groupName: gObj?.name || "Все группы",
-        coachId: newEventCoachId || cObj?.id || "all",
-        coachName: cObj?.name || "Дежурный тренер",
-        location: newEventLocation,
-        type: newEventType,
-        notes: newEventNotes,
-      };
+    const newEv: CustomEvent = {
+      id: `custom_${Date.now()}`,
+      title: generatedTitle,
+      date: newEventDate,
+      time: newEventTime,
+      groupId: newEventGroupId,
+      groupName: gObj?.name || "Все группы",
+      coachId: newEventCoachId || cObj?.id || "all",
+      coachName: cObj?.name || "Дежурный тренер",
+      location: newEventLocation,
+      type: newEventType,
+      notes: newEventNotes,
+    };
 
-      if (notificationTarget !== "none") {
-        const targetRole: ("parent" | "trainer" | "manager" | "director")[] = [
-          "parent",
-          "trainer",
-          "manager",
-        ];
-        let bodyText = `Новое событие: ${generatedTitle} (${newEventDate} ${newEventTime}) в ${newEventLocation}`;
-        if (notificationTarget === "group" && gObj) {
-          bodyText += `. Для группы ${gObj.name}.`;
-        }
-
-        addNotification({
-          title: "Обновление расписания",
-          body: bodyText,
-          type: "event",
-          targetRole,
-          targetGroupIds: notificationTarget === "group" && gObj ? [gObj.id] : [],
-        });
+    if (notificationTarget !== "none") {
+      const targetRole: ("parent" | "trainer" | "manager" | "director")[] = [
+        "parent",
+        "trainer",
+        "manager",
+      ];
+      let bodyText = `Новое событие: ${generatedTitle} (${newEventDate} ${newEventTime}) в ${newEventLocation}`;
+      if (notificationTarget === "group" && gObj) {
+        bodyText += `. Для группы ${gObj.name}.`;
       }
 
-      // If regular, we also offer option to add as repeating schedule day to Group config!
-      if (newEventType === "regular" && gObj) {
-        // Find weekday of date, e.g. "Пн"
-        const dateObj = new Date(newEventDate);
-        if (!isNaN(dateObj.getTime())) {
-          const weekdayAbbr = RU_WEEKDAYS[dateObj.getDay()];
-
-          const locPrefix =
-            newEventLocation && newEventLocation !== "Манеж Спартак"
-              ? `${newEventLocation}: `
-              : "";
-          const slotToAdd = `${locPrefix}${weekdayAbbr} ${newEventTime}`;
-
-          if (gObj.scheduleDays && !gObj.scheduleDays.includes(slotToAdd)) {
-            const updatedSlots = [...gObj.scheduleDays, slotToAdd];
-            updateGroup(gObj.id, { scheduleDays: updatedSlots });
-          }
-        }
-      }
-
-      setCustomEvents((prev) => [...prev, newEv]);
-      setShowAddModal(false);
-      alert("Тренировка успешно добавлена в расписание!");
-    } catch (err) {
-      console.error("Error creating event:", err);
-      alert("Произошла ошибка при создании тренировки, но изменения сохранены.");
-      setShowAddModal(false);
+      addNotification({
+        title: "Обновление расписания",
+        body: bodyText,
+        type: "event",
+        targetRole,
+        targetGroupIds: notificationTarget === "group" && gObj ? [gObj.id] : [],
+      });
     }
+
+    // If regular, we also offer option to add as repeating schedule day to Group config!
+    if (newEventType === "regular" && gObj) {
+      // Find weekday of date, e.g. "Пн"
+      const dateObj = new Date(newEventDate);
+      const weekdayAbbr = RU_WEEKDAYS[dateObj.getDay()];
+
+      const locPrefix =
+        newEventLocation && newEventLocation !== "Манеж Спартак"
+          ? `${newEventLocation}: `
+          : "";
+      const slotToAdd = `${locPrefix}${weekdayAbbr} ${newEventTime}`;
+
+      if (!(gObj.scheduleDays || []).includes(slotToAdd)) {
+        const updatedSlots = [...(gObj.scheduleDays || []), slotToAdd];
+        updateGroup(gObj.id, { scheduleDays: updatedSlots });
+      }
+    }
+
+    setCustomEvents((prev) => [...prev, newEv]);
+    setShowAddModal(false);
 
     // Sync feedback
     if (calendarSyncEnabled) {
@@ -587,7 +577,7 @@ export const ScheduleCalendar: React.FC<{
         const dateObj = new Date(dateStr);
         const dayAbbr = RU_WEEKDAYS[dateObj.getDay()];
 
-        const updatedSlots = gObj.scheduleDays.filter((s) => {
+        const updatedSlots = (gObj.scheduleDays || []).filter((s) => {
           const parsed = parseScheduleString(s);
           if (parsed.length === 0) return true;
           const hasMatch = parsed.some(
@@ -635,7 +625,7 @@ export const ScheduleCalendar: React.FC<{
         const dateStr = parts[2];
         const dateObj = new Date(dateStr);
         const dayAbbr = RU_WEEKDAYS[dateObj.getDay()];
-        const updatedSlots = gObj.scheduleDays.filter((s) => {
+        const updatedSlots = (gObj.scheduleDays || []).filter((s) => {
           const parsed = parseScheduleString(s);
           if (parsed.length === 0) return true;
           const hasMatch = parsed.some(

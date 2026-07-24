@@ -125,7 +125,7 @@ export const AttendanceTable: React.FC<AttendanceTableProps> = ({ group, clients
                       // Assume max 1 session per group per day for simplicity of display, 
                       // or take the first record found for this player on this day.
                       const session = daySessions[0];
-                      const record = (session.records || []).find(r => r.clientId === player.id);
+                      const record = session.records.find(r => r.clientId === player.id);
                       
                       totalSessions++;
 

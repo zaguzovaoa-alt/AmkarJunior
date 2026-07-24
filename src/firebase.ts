@@ -5,7 +5,7 @@ import { getMessaging } from 'firebase/messaging';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
-export const db = initializeFirestore(app, { experimentalForceLongPolling: true }, (firebaseConfig as any).firestoreDatabaseId || "(default)"); /* CRITICAL: The app will break without this line */
+export const db = initializeFirestore(app, { experimentalForceLongPolling: true }, (firebaseConfig as any).firestoreDatabaseId); /* CRITICAL: The app will break without this line */
 export const auth = getAuth();
 export const messaging = typeof window !== 'undefined' && 'Notification' in window ? getMessaging(app) : null;
 
@@ -35,26 +35,7 @@ export interface FirestoreErrorInfo {
   }
 }
 
-export function sanitizeForFirestore<T>(obj: T): T {
-  if (obj === null || obj === undefined) {
-    return null as any;
-  }
-  if (Array.isArray(obj)) {
-    return obj.map((item) => sanitizeForFirestore(item)) as any;
-  }
-  if (typeof obj === 'object' && !(obj instanceof Date)) {
-    const cleaned: any = {};
-    for (const [key, value] of Object.entries(obj)) {
-      if (value !== undefined) {
-        cleaned[key] = sanitizeForFirestore(value);
-      }
-    }
-    return cleaned;
-  }
-  return obj;
-}
-
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): void {
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): never {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
@@ -72,4 +53,5 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     path
   };
   console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
 }

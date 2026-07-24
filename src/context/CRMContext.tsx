@@ -13,9 +13,8 @@ import {
   getDocs,
   where,
 } from "firebase/firestore";
-import { db, handleFirestoreError, sanitizeForFirestore, OperationType } from "../firebase";
-import { sendTelegramAlert, escapeTelegramHtml } from "../utils/telegram";
-import { phonesMatch } from "./AuthContext";
+import { db, handleFirestoreError, OperationType } from "../firebase";
+import { sendTelegramAlert } from "../utils/telegram";
 import {
   Lead,
   Client,
@@ -192,8 +191,6 @@ interface CRMContextType {
   deleteFinanceCategory: (id: string) => Promise<void>;
   updateFinancialPlan: (plan: FinancialPlan) => Promise<void>;
   addFinanceRecord: (record: Omit<FinanceRecord, "id">) => Promise<void>;
-  payFinanceRecord: (id: string, accountId: string) => Promise<void>;
-  payBulkFinanceRecords: (ids: string[], accountId: string) => Promise<void>;
   updateClientNotes: (clientId: string, notes: string) => Promise<void>;
   updateClient: (
     clientId: string,
@@ -511,29 +508,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         const clientQ = query(collection(db, 'clients'), where('parentPhone', '==', cand));
         const clientDocs = await getDocs(clientQ);
         clientDocs.forEach(d => matchedDocs.push({ col: 'clients', id: d.id }));
-      }
-
-      if (matchedDocs.length === 0) {
-        const sysDocs = await getDocs(collection(db, 'systemUsers'));
-        sysDocs.forEach(d => {
-          if (phonesMatch(d.data().phone, p)) {
-            matchedDocs.push({ col: 'systemUsers', id: d.id });
-          }
-        });
-
-        const coachDocs = await getDocs(collection(db, 'coaches'));
-        coachDocs.forEach(d => {
-          if (phonesMatch(d.data().phone, p)) {
-            matchedDocs.push({ col: 'coaches', id: d.id });
-          }
-        });
-
-        const clientDocs = await getDocs(collection(db, 'clients'));
-        clientDocs.forEach(d => {
-          if (phonesMatch(d.data().parentPhone, p)) {
-            matchedDocs.push({ col: 'clients', id: d.id });
-          }
-        });
       }
 
       for (const m of matchedDocs) {
@@ -856,7 +830,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
           list.push(doc.data() as TrainingSessionProtocol);
         });
         // Sort newest first
-        list.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+        list.sort((a, b) => b.date.localeCompare(a.date));
         setTrainingSessions(list);
       },
       (err) => handleSnapshotErr(err, "training_sessions"),
@@ -1114,24 +1088,13 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       const configDoc = await getDoc(doc(db, "_config", "initialized"));
       const latestConfig = configDoc.data()?.crmConfig || crmConfig;
       
-      const botToken = latestConfig.telegramBotToken || crmConfig.telegramBotToken;
-      const chatId = latestConfig.telegramGroupChatId || crmConfig.telegramGroupChatId;
-
-      if (latestConfig.telegramAlerts?.newLead !== false && botToken && chatId) {
+      if (latestConfig.telegramAlerts?.newLead !== false && latestConfig.telegramBotToken && latestConfig.telegramGroupChatId) {
         const ageTextTelegram = newLead.childAge > 0 ? ` (${newLead.childAge} лет)` : "";
-        const childFullName = [newLead.childSurname, newLead.childName].filter(Boolean).join(" ");
-        const noteText = (newLead as any).note || (newLead as any).notes || "";
-        
-        const alertRes = await sendTelegramAlert(
-          botToken,
-          chatId,
-          `🚨 <b>НОВАЯ ЗАЯВКА</b>\n<b>Имя ребенка:</b> ${escapeTelegramHtml(childFullName || "—")}${ageTextTelegram}\n<b>Источник:</b> ${escapeTelegramHtml(newLead.source || "Форма")}\n<b>Родитель:</b> ${escapeTelegramHtml(newLead.parentName || "—")}\n<b>Телефон:</b> ${escapeTelegramHtml(newLead.parentPhone || "—")}${noteText ? `\n<b>Детали:</b> ${escapeTelegramHtml(noteText)}` : ""}`
+        sendTelegramAlert(
+          latestConfig.telegramBotToken,
+          latestConfig.telegramGroupChatId,
+          `🚨 <b>НОВАЯ ЗАЯВКА</b>\n<b>Имя:</b> ${newLead.childSurname} ${newLead.childName}${ageTextTelegram}\n<b>Источник:</b> ${newLead.source}\n<b>Родитель:</b> ${newLead.parentName}\n<b>Телефон:</b> ${newLead.parentPhone}`,
         );
-        if (!alertRes.success) {
-          console.warn("Telegram alert for lead return warning:", alertRes.error);
-        }
-      } else {
-        console.warn("Telegram alert skipped for new lead: missing token or chat ID", { botToken, chatId, alerts: latestConfig.telegramAlerts });
       }
     } catch (e) {
       console.warn("Failed to fetch latest config for telegram alert", e);
@@ -1399,12 +1362,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     assistantId?: string,
   ) => {
     const rawClients = clients; // avoid stale state issues in loops
-    const groupObj = groups.find(
-      (g) =>
-        g.id === groupId ||
-        g.name === groupId ||
-        (g.name && g.name.trim().toLowerCase() === groupId.trim().toLowerCase()),
-    );
+    const groupObj = groups.find((g) => g.id === groupId || g.name === groupId);
     const groupName = groupObj?.name || groupId;
     const coachId = groupObj?.coachId || "unknown";
     const coachName = groupObj?.coachName || "Неизвестный тренер";
@@ -1419,7 +1377,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     const absentCount = records.filter((r) => r.status === "absent").length;
     const trialCount = records.filter((r) => r.status === "trial_free").length;
 
-    const newProtocol: TrainingSessionProtocol = sanitizeForFirestore({
+    const newProtocol: TrainingSessionProtocol = {
       id: `ts_${Date.now()}`,
       groupId: groupId,
       groupName: groupName,
@@ -1427,10 +1385,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       dateString: date,
       coachId,
       coachName,
-      assistantId: assistantId || "",
-      assistantName: assistantName || "",
-      photoUrl: mediaFile || null,
-      notes: notes || "",
+      assistantId,
+      assistantName,
+      photoUrl: mediaFile,
+      notes: notes,
       presentCount,
       absentCount,
       sickCount,
@@ -1440,89 +1398,76 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         return {
           clientId: r.clientId,
           clientName: clientObj
-            ? `${clientObj.childSurname} ${clientObj.childName}`.trim()
+            ? `${clientObj.childSurname} ${clientObj.childName}`
             : r.clientId,
           status: r.status,
-          reason: r.reason || "",
+          reason: r.reason,
         };
       }),
-    });
+    };
 
     setTrainingSessions((prev) => [newProtocol, ...prev]);
 
-    const formattedToday = (() => {
+    // Format date string to YYYY-MM-DD
+    const sessionDateISO = (() => {
+      if (date && date.includes(".")) {
+        const parts = date.split(".");
+        if (parts.length === 3) {
+          return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+        }
+      }
+      if (date && date.includes("-")) return date;
       const d = new Date();
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     })();
 
-    // 1. Auto-accrue Venue Rent Expense (Начисление аренды за площадку, выплата 1 раз в месяц)
-    const venueCostToUse =
-      groupObj?.venueCost && groupObj.venueCost > 0
-        ? groupObj.venueCost
-        : 1500; // default 1500 per training session if not explicitly set
+    // Auto-create accrued expense for venue rental (per training session)
+    const venueCostToAccrue =
+      groupObj?.venueCost && groupObj.venueCost > 0 ? groupObj.venueCost : 1500;
 
     addFinanceRecord({
       type: "expense",
       category: "Аренда",
-      amount: venueCostToUse,
-      date: date || formattedToday,
+      amount: venueCostToAccrue,
+      date: sessionDateISO,
       description: `Начисление аренды за тренировку (${groupName})`,
       groupName: groupName,
       isFixed: false,
       counterpartyId: groupObj?.venueId,
-      status: "accrued",
-      paymentStatus: "pending",
-      isAccrual: true,
-      accountId: "",
+      paymentStatus: "accrued",
     });
 
-    // 2. Auto-accrue Head Coach Payroll Expense (Начисление ЗП главного тренера, выплата 2 раза в месяц)
+    // Auto-create accrued payroll expenses
     const headCoachObj = coaches.find((c) => c.id === coachId);
-    const headCoachRate =
-      headCoachObj?.paymentType === "per_session" &&
-      headCoachObj.rate &&
-      headCoachObj.rate > 0
-        ? headCoachObj.rate
-        : headCoachObj?.rate && headCoachObj.rate > 0
-          ? headCoachObj.rate
-          : 1000;
-
-    if (headCoachObj) {
+    if (headCoachObj && headCoachObj.paymentType !== "fixed") {
+      const headRate = headCoachObj.rate && headCoachObj.rate > 0 ? headCoachObj.rate : 1500;
       addFinanceRecord({
         type: "expense",
         category: "Зарплата",
-        amount: headCoachRate,
-        date: date || formattedToday,
+        amount: headRate,
+        date: sessionDateISO,
         description: `Начисление ЗП за тренировку: ${coachName} (${groupName})`,
         groupName: groupName,
         isFixed: false,
-        counterpartyId: headCoachObj.id,
-        status: "accrued",
-        paymentStatus: "pending",
-        isAccrual: true,
-        accountId: "",
+        paymentStatus: "accrued",
+        coachId: headCoachObj.id,
       });
     }
 
-    // 3. Auto-accrue Assistant Coach Payroll Expense (Начисление ЗП ассистента, выплата 2 раза в месяц)
     if (assistantId) {
       const astCoachObj = coaches.find((c) => c.id === assistantId);
-      const astRate =
-        astCoachObj?.rate && astCoachObj.rate > 0 ? astCoachObj.rate : 700;
       if (astCoachObj) {
+        const astRate = astCoachObj.rate && astCoachObj.rate > 0 ? astCoachObj.rate : 1000;
         addFinanceRecord({
           type: "expense",
           category: "Зарплата",
           amount: astRate,
-          date: date || formattedToday,
+          date: sessionDateISO,
           description: `Начисление ЗП (Ассистент): ${astCoachObj.name} (${groupName})`,
           groupName: groupName,
           isFixed: false,
-          counterpartyId: astCoachObj.id,
-          status: "accrued",
-          paymentStatus: "pending",
-          isAccrual: true,
-          accountId: "",
+          paymentStatus: "accrued",
+          coachId: astCoachObj.id,
         });
       }
     }
@@ -1543,7 +1488,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
               ? `${c.notes || ""}\n[Посещаемость ${date}]: Тренер прикрепил фотоотчет.`
               : c.notes,
             attendance: [
-              { date, status: record.status, reason: record.reason || "" },
+              { date, status: record.status, reason: record.reason },
               ...(c.attendance || []),
             ],
           };
@@ -1554,14 +1499,14 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
     const group = groups.find((g) => g.id === groupId);
     const directorTaskId = `t_${Date.now()}_att`;
-    const directorTask: CRMTask = sanitizeForFirestore({
+    const directorTask: CRMTask = {
       id: directorTaskId,
       title: `Отмечена посещаемость в группе: ${group?.name || groupId}`,
       assignedTo: "director",
       status: "new",
       dueDate: new Date().toLocaleDateString("ru-RU"),
       description: `Тренер ${group?.coachName || "Тренер"} утвердил лист посещаемости на ${date}. Присутствовало: ${records.filter((r) => r.status === "present").length} человек.`,
-    });
+    };
 
     setTasks((prev) => [directorTask, ...prev]);
 
@@ -1573,7 +1518,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       batch.set(doc(db, "tasks", directorTaskId), directorTask as any);
 
       records.forEach((record) => {
-        const c = rawClients.find((cl) => cl.id === record.clientId);
+        const c = clients.find((cl) => cl.id === record.clientId);
         if (c) {
           const wasPresent = record.status === "present";
           const isSessionDeducted = wasPresent && c.abonementSessionsLeft > 0;
@@ -1596,26 +1541,23 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
             }
           }
 
-          const clientUpdate = sanitizeForFirestore({
+          batch.update(doc(db, "clients", c.id), {
             abonementSessionsLeft: isSessionDeducted
               ? c.abonementSessionsLeft - 1
               : c.abonementSessionsLeft,
             notes: mediaFile
               ? `${c.notes || ""}\n[Посещаемость ${date}]: Тренер прикрепил фотоотчет.`
-              : c.notes || "",
+              : c.notes,
             attendance: [
-              { date, status: record.status, reason: record.reason || "" },
+              { date, status: record.status, reason: record.reason },
               ...(c.attendance || []),
             ],
           });
-
-          batch.update(doc(db, "clients", c.id), clientUpdate);
         }
       });
 
       await batch.commit();
     } catch (err) {
-      console.warn("Error persisting training session batch to Firestore:", err);
       handleFirestoreError(err, OperationType.WRITE, "training_sessions_batch");
     }
   };
@@ -1632,10 +1574,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     const c = clients.find((cl) => cl.id === clientId);
     if (!c) return;
 
-    const autoAchievements = [...c.achievements];
+    const autoAchievements = [...(c.achievements || [])];
     if (
       metrics.technique >= 4.8 &&
-      !c.achievements.find((a) => a.id === "ac_tech_master")
+      !(c.achievements || []).find((a) => a.id === "ac_tech_master")
     ) {
       autoAchievements.push({
         id: "ac_tech_master",
@@ -1647,7 +1589,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     }
     if (
       metrics.discipline >= 4.7 &&
-      !c.achievements.find((a) => a.id === "ac_dis_master")
+      !(c.achievements || []).find((a) => a.id === "ac_dis_master")
     ) {
       autoAchievements.push({
         id: "ac_dis_master",
@@ -1935,77 +1877,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const addFinanceRecord = async (record: Omit<FinanceRecord, "id">) => {
-    const id = `f_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const status = record.status || "paid";
-    const paymentStatus = record.paymentStatus || (status === "accrued" ? "pending" : "paid");
-    const accountId = status === "accrued" ? (record.accountId || "") : (record.accountId || "acc_cash");
-    
-    const newRecord = sanitizeForFirestore({
-      status,
-      paymentStatus,
-      ...record,
-      accountId,
-      id,
-    });
+    const id = `f_${Date.now()}`;
+    const newRecord = { accountId: "acc_cash", ...record, id };
     setFinances((prev) => [newRecord, ...prev]);
     setDoc(doc(db, "finances", id), newRecord).catch((err) => handleFirestoreError(err, OperationType.WRITE, "update"));
-  };
-
-  const payFinanceRecord = async (id: string, accountId: string) => {
-    const today = (() => {
-      const d = new Date();
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    })();
-    setFinances((prev) =>
-      prev.map((f) =>
-        f.id === id
-          ? {
-              ...f,
-              status: "paid",
-              paymentStatus: "paid",
-              accountId,
-              date: today,
-            }
-          : f,
-      ),
-    );
-    updateDoc(doc(db, "finances", id), {
-      status: "paid",
-      paymentStatus: "paid",
-      accountId,
-      date: today,
-    }).catch((err) => handleFirestoreError(err, OperationType.WRITE, "update"));
-  };
-
-  const payBulkFinanceRecords = async (ids: string[], accountId: string) => {
-    if (!ids || ids.length === 0) return;
-    const today = (() => {
-      const d = new Date();
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    })();
-    setFinances((prev) =>
-      prev.map((f) =>
-        ids.includes(f.id)
-          ? {
-              ...f,
-              status: "paid",
-              paymentStatus: "paid",
-              accountId,
-              date: today,
-            }
-          : f,
-      ),
-    );
-    const batch = writeBatch(db);
-    ids.forEach((id) => {
-      batch.update(doc(db, "finances", id), {
-        status: "paid",
-        paymentStatus: "paid",
-        accountId,
-        date: today,
-      });
-    });
-    batch.commit().catch((err) => handleFirestoreError(err, OperationType.WRITE, "update"));
   };
 
   const updateFinancialPlan = async (plan: FinancialPlan) => {
@@ -2401,7 +2276,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       const hasConflict = groups.some(
         (g) =>
           g.coachId === coachId &&
-          g.scheduleDays.some((day) => scheduleDays.includes(day)),
+          (g.scheduleDays || []).some((day) => scheduleDays.includes(day)),
       );
       if (hasConflict) {
         sendTelegramAlert(
@@ -2457,7 +2332,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         (g) =>
           g.id !== id &&
           g.coachId === newCoachId &&
-          g.scheduleDays.some((day) => newSchedule.includes(day)),
+          (g.scheduleDays || []).some((day) => newSchedule.includes(day)),
       );
       if (hasConflict) {
         sendTelegramAlert(
@@ -2899,8 +2774,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         addFinanceCategory,
         deleteFinanceCategory,
         addFinanceRecord,
-        payFinanceRecord,
-        payBulkFinanceRecords,
         updateFinancialPlan,
         updateClientNotes,
         updateClient,

@@ -25,13 +25,13 @@ export const GroupsModule: React.FC = () => {
     clients,
     trainingSessions,
     finances,
-    counterparties,
     createGroup,
     deleteGroup,
     updateGroup,
     assignClientToGroup,
     assignClientToSelectTeam,
     removeClientFromSelectTeam,
+    counterparties,
   } = useCRM();
 
   // 1. Search and Filtering States
@@ -184,7 +184,7 @@ export const GroupsModule: React.FC = () => {
     setEditGroupBirthYearFrom(group.birthYearFrom || group.year - 1);
     setEditGroupBirthYearTo(group.birthYearTo || group.year + 1);
     setEditSelectedCoachId(group.coachId || "");
-    setEditScheduleInput(group.scheduleDays.join(", "));
+    setEditScheduleInput((group.scheduleDays || []).join(", "));
     setEditIsSelectTeam(group.isSelectTeam || false);
     setEditTargetCompetition(group.targetCompetition || "");
     setEditVenueCost(group.venueCost || 0);
@@ -550,7 +550,7 @@ export const GroupsModule: React.FC = () => {
                           <span className="truncate">
                             Расписание:{" "}
                             <strong className="text-slate-800 font-mono text-[11px]">
-                              {group.scheduleDays.join(", ") || "Гибкое"}
+                              {(group.scheduleDays || []).join(", ") || "Гибкое"}
                             </strong>
                           </span>
                         </div>

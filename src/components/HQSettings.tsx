@@ -25,7 +25,6 @@ import {
 import { CredentialsSettings } from "./CredentialsSettings";
 import { useAuth } from "../context/AuthContext";
 import firebaseConfig from "../../firebase-applet-config.json";
-import { sendTelegramAlert } from "../utils/telegram";
 
 export const HQSettings: React.FC = () => {
   const {
@@ -47,47 +46,7 @@ export const HQSettings: React.FC = () => {
     updateAutoOverdueTasks,
     crmConfig,
     updateCRMConfig,
-    addNotification,
   } = useCRM();
-
-  const [testingTelegram, setTestingTelegram] = useState(false);
-  const [telegramTestStatus, setTelegramTestStatus] = useState<string | null>(null);
-
-  const handleTestTelegram = async () => {
-    if (!telegramBotToken || !telegramGroupChatId) {
-      setTelegramTestStatus("❌ Заполните токен бота и ID группы!");
-      return;
-    }
-    setTestingTelegram(true);
-    setTelegramTestStatus("Отправка тестового сообщения...");
-    try {
-      const res = await sendTelegramAlert(
-        telegramBotToken,
-        telegramGroupChatId,
-        `🔔 <b>ТЕСТ УВЕДОМЛЕНИЙ АМКАР ЮНИОР</b>\nСоединение с группой Telegram успешно установлено! Системные алерты о заявках работают.`
-      );
-      if (res.success) {
-        setTelegramTestStatus("✅ Тестовое сообщение успешно доставлено в Telegram!");
-      } else {
-        setTelegramTestStatus(`❌ Ошибка Telegram: ${res.error || 'Неизвестная ошибка'}`);
-      }
-    } catch (err: any) {
-      setTelegramTestStatus(`❌ Ошибка отправки: ${err.message || String(err)}`);
-    } finally {
-      setTestingTelegram(false);
-    }
-  };
-
-  const handleTestPush = () => {
-    addNotification({
-      title: "Тестовое Push-уведомление",
-      body: "Система Push-уведомлений и звуковых сигналов работает корректно!",
-      type: "system",
-      targetRole: ["director", "admin", "manager"],
-    });
-    setSuccessMsg("Тестовое push-уведомление отправлено!");
-    setTimeout(() => setSuccessMsg(null), 3000);
-  };
 
   const { appUser } = useAuth();
   const [savingSettings, setSavingSettings] = useState(false);
@@ -621,35 +580,6 @@ export const HQSettings: React.FC = () => {
                     <strong className="text-amber-600">Важно:</strong> Не забудьте добавить вашего собственного бота в администраторы группы!
                   </p>
                 </div>
-
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={handleTestTelegram}
-                    disabled={testingTelegram}
-                    className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow transition flex items-center space-x-1.5 disabled:opacity-50"
-                  >
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    <span>{testingTelegram ? "Проверка..." : "Проверить Telegram"}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleTestPush}
-                    className="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl shadow transition flex items-center space-x-1.5"
-                  >
-                    <BellRing className="w-3.5 h-3.5" />
-                    <span>Проверить Push-уведомление</span>
-                  </button>
-                </div>
-
-                {telegramTestStatus && (
-                  <div className={`text-xs p-2.5 rounded-xl border font-medium ${
-                    telegramTestStatus.startsWith("✅") ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-amber-50 text-amber-900 border-amber-200"
-                  }`}>
-                    {telegramTestStatus}
-                  </div>
-                )}
 
                 <div className="pt-2 border-t space-y-3">
                   <h4 className="text-xs font-bold text-slate-800">Активные системные алерты</h4>

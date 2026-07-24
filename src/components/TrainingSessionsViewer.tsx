@@ -97,7 +97,7 @@ export const TrainingSessionsViewer: React.FC = () => {
                     <span className="text-rose-600 font-bold">Пропустили: {selectedSession.absentCount + selectedSession.sickCount}</span>
                  </div>
                  <div className="space-y-1 mt-3">
-                   {(selectedSession.records || []).map(rec => (
+                   {selectedSession.records.map(rec => (
                      <div key={rec.clientId} className="flex justify-between items-center py-1 border-b last:border-0 border-gray-100 text-xs">
                        <span className="font-medium">{rec.clientName}</span>
                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${rec.status === 'present' ? 'bg-emerald-50 text-emerald-700' : rec.status === 'absent_sick' ? 'bg-amber-50 text-amber-700' : rec.status === 'trial_free' ? 'bg-fuchsia-50 text-fuchsia-700' : 'bg-rose-50 text-rose-700'}`}>

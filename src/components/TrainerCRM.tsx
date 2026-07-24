@@ -300,7 +300,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
     }));
   };
 
-  const submitAttendanceToCRM = async () => {
+  const submitAttendanceToCRM = () => {
     if (!selectedGroupForAttendance) return;
     
     if (!uploadedAttendancePhoto || !uploadedAttendancePhoto.startsWith("data:image")) {
@@ -348,26 +348,19 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
       return;
     }
 
-    try {
-      await markAttendance(
-        selectedGroupForAttendance,
-        formattedDate,
-        clientRecords,
-        uploadedAttendancePhoto || "фотоотчет_тренировки_сп.jpg",
-        sessionNotes,
-        selectedAssistantId || undefined
-      );
-      alert(
-        "Ведомость посещаемости успешно сохранена и передана в бухгалтерию администрации!",
-      );
-      setSelectedGroupForAttendance(null);
-      setSelectedAssistantId("");
-    } catch (err: any) {
-      console.error("Ошибка при сохранении ведомости:", err);
-      alert("Произошла ошибка при сохранении ведомости. Все локальные данные сохранены.");
-      setSelectedGroupForAttendance(null);
-      setSelectedAssistantId("");
-    }
+    markAttendance(
+      selectedGroupForAttendance,
+      formattedDate,
+      clientRecords,
+      uploadedAttendancePhoto || "фотоотчет_тренировки_сп.jpg",
+      sessionNotes,
+      selectedAssistantId || undefined
+    );
+    alert(
+      "Ведомость посещаемости успешно сохранена и передана в бухгалтерию администрации!",
+    );
+    setSelectedGroupForAttendance(null);
+    setSelectedAssistantId("");
   };
 
   const submitPlayerRating = () => {
@@ -392,7 +385,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
       let todayTime: string | null = null;
       let todayLocation: string | undefined = undefined;
 
-      const allParsed = g.scheduleDays.flatMap((s) => parseScheduleString(s));
+      const allParsed = (g.scheduleDays || []).flatMap((s) => parseScheduleString(s));
       const todaySlot = allParsed.find((p) => p.day === todayShortDay);
 
       if (todaySlot) {
@@ -1944,7 +1937,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                         <div className="flex justify-between">
                           <span className="text-gray-500">Расписание:</span>
                           <span className="font-bold text-slate-800">
-                            {grp.scheduleDays.join(", ")}
+                            {(grp.scheduleDays || []).join(", ")}
                           </span>
                         </div>
                       </div>

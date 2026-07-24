@@ -1491,7 +1491,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {myClient.attendance.map((att, i) => (
+                    {(myClient.attendance || []).map((att, i) => (
                       <tr key={i} className="hover:bg-slate-50 transition">
                         <td className="p-3 font-mono font-bold">{att.date}</td>
                         <td className="p-3">

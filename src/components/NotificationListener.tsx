@@ -7,31 +7,6 @@ import { getToken, onMessage } from "firebase/messaging";
 
 const pushedNotifsCache = new Set<string>();
 
-const playNotificationSound = () => {
-  try {
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContext) return;
-    const ctx = new AudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-    osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1); // A5
-
-    gain.gain.setValueAtTime(0.15, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start();
-    osc.stop(ctx.currentTime + 0.4);
-  } catch (e) {
-    // Ignore audio restrictions if user hasn't interacted with page
-  }
-};
-
 export const NotificationListener: React.FC = () => {
   const {
     notifications,
@@ -44,17 +19,10 @@ export const NotificationListener: React.FC = () => {
   const [browserPermission, setBrowserPermission] =
     useState<NotificationPermission>("default");
   const [activeToasts, setActiveToasts] = useState<string[]>([]);
+  const pushedNotifsRef = useRef<Set<string>>(new Set());
   const [fcmToken, setFcmToken] = useState<string | null>(null);
-  const initializedRef = useRef(false);
 
   useEffect(() => {
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker
-        .register("/sw.js")
-        .then((reg) => console.log("Service Worker registered successfully"))
-        .catch((err) => console.warn("SW registration error:", err));
-    }
-
     if ("Notification" in window) {
       setBrowserPermission(Notification.permission);
       if (Notification.permission === "default") {
@@ -77,33 +45,22 @@ export const NotificationListener: React.FC = () => {
         .then((token) => {
           if (token) {
             setFcmToken(token);
+            // In a real app we would save this token to Firestore to target messages.
           }
         })
         .catch((err) => {
-          console.warn("FCM Token generation failed:", err);
+          console.warn(
+            "FCM Token generation failed (expected in sandbox without VAPID keys):",
+            err,
+          );
         });
 
       onMessage(messaging, (payload) => {
-        console.log("FCM Message received:", payload);
+        console.log("FCM Message received. ", payload);
+        // Display foreground notification if needed
       });
     }
   }, []);
-
-  // Pre-fill cache on initial load for notifications older than 2 minutes to prevent initial old push flood
-  useEffect(() => {
-    if (!initializedRef.current && notifications.length > 0) {
-      initializedRef.current = true;
-      const now = Date.now();
-      notifications.forEach((n) => {
-        if (n.dateString) {
-          const createdTime = new Date(n.dateString).getTime();
-          if (now - createdTime > 2 * 60 * 1000) {
-            pushedNotifsCache.add(n.id);
-          }
-        }
-      });
-    }
-  }, [notifications]);
 
   useEffect(() => {
     // Determine which ones are relevant for me and unread
@@ -125,6 +82,8 @@ export const NotificationListener: React.FC = () => {
         notif.targetGroupIds &&
         notif.targetGroupIds.length > 0
       ) {
+        // Find if any of parent's children are in these groups
+        // parent is userProfile, they have phone
         const myKids = clients.filter(
           (c) => c.parentPhone === userProfile.phone,
         );
@@ -153,49 +112,24 @@ export const NotificationListener: React.FC = () => {
       (n) => !pushedNotifsCache.has(n.id),
     );
 
-    if (newlyUnread.length > 0) {
-      playNotificationSound();
-    }
-
     newlyUnread.forEach((n) => {
       pushedNotifsCache.add(n.id);
       setActiveToasts((prev) => [...prev, n.id]);
 
       // Hardware Push
-      const isGranted =
-        typeof window !== "undefined" &&
-        "Notification" in window &&
-        Notification.permission === "granted";
-
-      if (isGranted) {
-        const showPush = async () => {
-          try {
-            if ("serviceWorker" in navigator) {
-              const reg = await navigator.serviceWorker.ready;
-              if (reg && reg.showNotification) {
-                await reg.showNotification(n.title, {
-                  body: n.body,
-                  icon: "/favicon.ico",
-                  badge: "/favicon.ico",
-                  tag: n.id,
-                });
-                return;
-              }
-            }
+      if (browserPermission === "granted") {
+        if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.ready.then((registration) => {
+            registration.showNotification(n.title, { body: n.body, icon: "/favicon.ico" });
+          }).catch(() => {
             new Notification(n.title, { body: n.body, icon: "/favicon.ico" });
-          } catch (e) {
-            console.warn("Push notification display fallback error:", e);
-            try {
-              new Notification(n.title, { body: n.body, icon: "/favicon.ico" });
-            } catch (e2) {
-              // Ignore browser restrictions
-            }
-          }
-        };
-        showPush();
+          });
+        } else {
+          new Notification(n.title, { body: n.body, icon: "/favicon.ico" });
+        }
       }
 
-      // Auto-hide toast after 8 seconds
+      // Auto-hide toast after 8 seconds, but keep it in history/unread unless explicitly marked
       setTimeout(() => {
         setActiveToasts((prev) => prev.filter((tid) => tid !== n.id));
       }, 8000);
@@ -204,6 +138,7 @@ export const NotificationListener: React.FC = () => {
     notifications,
     currentRole,
     browserPermission,
+    activeToasts,
     clients,
     userProfile.phone,
     groups,
