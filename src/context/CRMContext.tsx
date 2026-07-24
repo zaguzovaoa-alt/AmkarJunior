@@ -14,7 +14,8 @@ import {
   where,
 } from "firebase/firestore";
 import { db, handleFirestoreError, sanitizeForFirestore, OperationType } from "../firebase";
-import { sendTelegramAlert } from "../utils/telegram";
+import { sendTelegramAlert, escapeTelegramHtml } from "../utils/telegram";
+import { phonesMatch } from "./AuthContext";
 import {
   Lead,
   Client,
@@ -510,6 +511,29 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         const clientQ = query(collection(db, 'clients'), where('parentPhone', '==', cand));
         const clientDocs = await getDocs(clientQ);
         clientDocs.forEach(d => matchedDocs.push({ col: 'clients', id: d.id }));
+      }
+
+      if (matchedDocs.length === 0) {
+        const sysDocs = await getDocs(collection(db, 'systemUsers'));
+        sysDocs.forEach(d => {
+          if (phonesMatch(d.data().phone, p)) {
+            matchedDocs.push({ col: 'systemUsers', id: d.id });
+          }
+        });
+
+        const coachDocs = await getDocs(collection(db, 'coaches'));
+        coachDocs.forEach(d => {
+          if (phonesMatch(d.data().phone, p)) {
+            matchedDocs.push({ col: 'coaches', id: d.id });
+          }
+        });
+
+        const clientDocs = await getDocs(collection(db, 'clients'));
+        clientDocs.forEach(d => {
+          if (phonesMatch(d.data().parentPhone, p)) {
+            matchedDocs.push({ col: 'clients', id: d.id });
+          }
+        });
       }
 
       for (const m of matchedDocs) {
@@ -1090,13 +1114,24 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       const configDoc = await getDoc(doc(db, "_config", "initialized"));
       const latestConfig = configDoc.data()?.crmConfig || crmConfig;
       
-      if (latestConfig.telegramAlerts?.newLead !== false && latestConfig.telegramBotToken && latestConfig.telegramGroupChatId) {
+      const botToken = latestConfig.telegramBotToken || crmConfig.telegramBotToken;
+      const chatId = latestConfig.telegramGroupChatId || crmConfig.telegramGroupChatId;
+
+      if (latestConfig.telegramAlerts?.newLead !== false && botToken && chatId) {
         const ageTextTelegram = newLead.childAge > 0 ? ` (${newLead.childAge} лет)` : "";
-        sendTelegramAlert(
-          latestConfig.telegramBotToken,
-          latestConfig.telegramGroupChatId,
-          `🚨 <b>НОВАЯ ЗАЯВКА</b>\n<b>Имя:</b> ${newLead.childSurname} ${newLead.childName}${ageTextTelegram}\n<b>Источник:</b> ${newLead.source}\n<b>Родитель:</b> ${newLead.parentName}\n<b>Телефон:</b> ${newLead.parentPhone}`,
+        const childFullName = [newLead.childSurname, newLead.childName].filter(Boolean).join(" ");
+        const noteText = (newLead as any).note || (newLead as any).notes || "";
+        
+        const alertRes = await sendTelegramAlert(
+          botToken,
+          chatId,
+          `🚨 <b>НОВАЯ ЗАЯВКА</b>\n<b>Имя ребенка:</b> ${escapeTelegramHtml(childFullName || "—")}${ageTextTelegram}\n<b>Источник:</b> ${escapeTelegramHtml(newLead.source || "Форма")}\n<b>Родитель:</b> ${escapeTelegramHtml(newLead.parentName || "—")}\n<b>Телефон:</b> ${escapeTelegramHtml(newLead.parentPhone || "—")}${noteText ? `\n<b>Детали:</b> ${escapeTelegramHtml(noteText)}` : ""}`
         );
+        if (!alertRes.success) {
+          console.warn("Telegram alert for lead return warning:", alertRes.error);
+        }
+      } else {
+        console.warn("Telegram alert skipped for new lead: missing token or chat ID", { botToken, chatId, alerts: latestConfig.telegramAlerts });
       }
     } catch (e) {
       console.warn("Failed to fetch latest config for telegram alert", e);

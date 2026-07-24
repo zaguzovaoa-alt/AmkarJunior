@@ -3,6 +3,7 @@ import { useCRM } from "../context/CRMContext";
 import { Lock, Phone, Save, AlertCircle, CheckCircle2 } from "lucide-react";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
+import { phonesMatch } from "../context/AuthContext";
 
 interface CredentialsSettingsProps {
   currentPhone: string;
@@ -47,6 +48,28 @@ export function CredentialsSettings({ currentPhone, hasPassword: initialHasPassw
           setHasPassword(!!clientDocs.docs[0].data().password);
           return;
         }
+      }
+
+      // Fallback: search systemUsers, coaches, clients with phonesMatch
+      const sysDocs = await getDocs(collection(db, 'systemUsers'));
+      const sysMatch = sysDocs.docs.find(d => phonesMatch(d.data().phone, currentPhone));
+      if (sysMatch) {
+        setHasPassword(!!sysMatch.data().password);
+        return;
+      }
+
+      const coachDocs = await getDocs(collection(db, 'coaches'));
+      const coachMatch = coachDocs.docs.find(d => phonesMatch(d.data().phone, currentPhone));
+      if (coachMatch) {
+        setHasPassword(!!coachMatch.data().password);
+        return;
+      }
+
+      const clientDocs = await getDocs(collection(db, 'clients'));
+      const clientMatch = clientDocs.docs.find(d => phonesMatch(d.data().parentPhone, currentPhone));
+      if (clientMatch) {
+        setHasPassword(!!clientMatch.data().password);
+        return;
       }
     };
     checkPassword();

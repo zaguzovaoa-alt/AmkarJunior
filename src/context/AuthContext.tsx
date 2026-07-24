@@ -23,6 +23,19 @@ export const normalizePhoneNumber = (phone: string): string => {
   return clean;
 };
 
+export const extractLast10Digits = (phoneStr: string | null | undefined): string => {
+  if (!phoneStr) return "";
+  const digits = String(phoneStr).replace(/\D/g, "");
+  return digits.length >= 10 ? digits.slice(-10) : digits;
+};
+
+export const phonesMatch = (phone1: string | null | undefined, phone2: string | null | undefined): boolean => {
+  if (!phone1 || !phone2) return false;
+  const d1 = extractLast10Digits(phone1);
+  const d2 = extractLast10Digits(phone2);
+  return d1.length === 10 && d1 === d2;
+};
+
 export interface AppUser {
   uid: string;
   email?: string | null;
@@ -255,6 +268,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
 
+        if (!phoneDocs || phoneDocs.empty) {
+          const sysSnap = await getDocs(collection(db, 'systemUsers'));
+          const matched = sysSnap.docs.filter((d) => phonesMatch(d.data().phone, activePhone));
+          if (matched.length > 0) {
+            phoneDocs = { docs: matched, empty: false };
+          }
+        }
+
         if (phoneDocs && !phoneDocs.empty) {
           const sortedDocs = [...phoneDocs.docs].sort((a, b) => {
             const roleA = (a.data().role as string) || 'parent';
@@ -388,7 +409,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPhoneError(null);
     try {
       const cleanPhone = normalizePhoneNumber(phone);
+      const digits10 = extractLast10Digits(phone);
       const isAdmin = cleanPhone === '+79825885477';
+      const isTargetDirector = phonesMatch(cleanPhone, "+79082099991");
 
       let formatted = cleanPhone;
       if (cleanPhone.length === 12 && cleanPhone.startsWith('+7')) {
@@ -401,7 +424,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         phone.replace(/\s+/g, ''),
         cleanPhone.replace('+7', '8'),
         cleanPhone.replace(/^\+7/, ''),
-        formatted
+        formatted,
+        `8 (${cleanPhone.slice(2,5)}) ${cleanPhone.slice(5,8)}-${cleanPhone.slice(8,10)}-${cleanPhone.slice(10,12)}`,
+        `8 ${cleanPhone.slice(2,5)} ${cleanPhone.slice(5,8)}-${cleanPhone.slice(8,10)}-${cleanPhone.slice(10,12)}`,
+        `+7 ${cleanPhone.slice(2,5)} ${cleanPhone.slice(5,8)}-${cleanPhone.slice(8,10)}-${cleanPhone.slice(10,12)}`,
+        `+7 ${cleanPhone.slice(2,5)} ${cleanPhone.slice(5,8)} ${cleanPhone.slice(8,10)} ${cleanPhone.slice(10,12)}`,
+        `8 ${cleanPhone.slice(2,5)} ${cleanPhone.slice(5,8)} ${cleanPhone.slice(8,10)} ${cleanPhone.slice(10,12)}`,
+        `+7${digits10}`,
+        `8${digits10}`,
+        `7${digits10}`,
+        digits10
       ])).filter(Boolean);
 
       let found = false;
@@ -418,7 +450,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const snapSys = await getDocs(qSys);
         if (!snapSys.empty) {
           for (const d of snapSys.docs) {
-             allMatchedDocs.push({ snap: d, collectionName: 'systemUsers', role: d.data().role as UserRole || 'parent', name: d.data().fullName || '' });
+             allMatchedDocs.push({ snap: d, collectionName: 'systemUsers', role: (d.data().role as UserRole) || 'parent', name: d.data().fullName || '' });
           }
         }
 
@@ -439,6 +471,65 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
+      if (allMatchedDocs.length === 0) {
+        // Fallback: search systemUsers, coaches, and clients by comparing digits
+        const sysSnap = await getDocs(collection(db, 'systemUsers'));
+        sysSnap.forEach((d) => {
+          if (phonesMatch(d.data().phone, phone)) {
+            allMatchedDocs.push({
+              snap: d,
+              collectionName: 'systemUsers',
+              role: (d.data().role as UserRole) || (isTargetDirector ? 'director' : 'parent'),
+              name: d.data().fullName || '',
+            });
+          }
+        });
+
+        const coachSnap = await getDocs(collection(db, 'coaches'));
+        coachSnap.forEach((d) => {
+          if (phonesMatch(d.data().phone, phone)) {
+            allMatchedDocs.push({
+              snap: d,
+              collectionName: 'coaches',
+              role: 'trainer',
+              name: d.data().name || '',
+            });
+          }
+        });
+
+        const clientSnap = await getDocs(collection(db, 'clients'));
+        clientSnap.forEach((d) => {
+          if (phonesMatch(d.data().parentPhone, phone)) {
+            allMatchedDocs.push({
+              snap: d,
+              collectionName: 'clients',
+              role: 'parent',
+              name: d.data().parentName || '',
+            });
+          }
+        });
+      }
+
+      // If still not found and it's the target director phone, auto-provision Director user in systemUsers
+      if (allMatchedDocs.length === 0 && isTargetDirector) {
+        const dirDocId = 'dir_9082099991';
+        const dirPayload = {
+          uid: dirDocId,
+          phone: '+79082099991',
+          fullName: 'Директор',
+          role: 'director' as UserRole,
+          createdAt: Date.now(),
+        };
+        await setDoc(doc(db, 'systemUsers', dirDocId), dirPayload, { merge: true });
+        const createdSnap = await getDoc(doc(db, 'systemUsers', dirDocId));
+        allMatchedDocs.push({
+          snap: createdSnap,
+          collectionName: 'systemUsers',
+          role: 'director',
+          name: 'Директор',
+        });
+      }
+
       if (allMatchedDocs.length > 0) {
         found = true;
         
@@ -446,6 +537,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         allMatchedDocs.sort((a, b) => b.snap.id.localeCompare(a.snap.id));
         let targetDoc = allMatchedDocs[0];
         
+        // If it's target director phone, ensure role is director
+        if (isTargetDirector && targetDoc.role !== 'director' && targetDoc.role !== 'admin') {
+          targetDoc.role = 'director';
+          if (targetDoc.snap) {
+            await setDoc(doc(db, targetDoc.collectionName, targetDoc.snap.id), { role: 'director' }, { merge: true });
+          }
+        }
+
         if (!forceSetPassword && password) {
            const docWithMatchingPass = allMatchedDocs.find(d => d.snap.data().password === password);
            if (docWithMatchingPass) {
@@ -454,7 +553,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
              const matchingStaff = allMatchedDocs.find(d => 
                 d.role !== 'parent' && 
                 !d.snap.data().password && 
-                phoneCandidates.includes(password.trim())
+                (phoneCandidates.includes(password.trim()) || phonesMatch(password, phone))
              );
              if (matchingStaff) {
                 targetDoc = matchingStaff;
