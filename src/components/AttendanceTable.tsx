@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Client, TrainingSessionProtocol, TrainingGroup } from '../types';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { parseSessionDate } from '../utils/dateUtils';
 
 interface AttendanceTableProps {
   group: TrainingGroup;
@@ -37,11 +38,11 @@ export const AttendanceTable: React.FC<AttendanceTableProps> = ({ group, clients
 
   const monthSessions = useMemo(() => {
     return trainingSessions.filter(session => {
-      if (session.groupId !== group.id) return false;
-      const sessionDate = new Date(session.dateString || session.date);
+      if (session.groupId !== group.id && session.groupName !== group.name) return false;
+      const sessionDate = parseSessionDate(session.dateString, session.date);
       return sessionDate.getMonth() === month && sessionDate.getFullYear() === year;
     });
-  }, [trainingSessions, group.id, month, year]);
+  }, [trainingSessions, group.id, group.name, month, year]);
 
   const handlePrevMonth = () => {
     setCurrentDate(new Date(year, month - 1, 1));
@@ -83,7 +84,7 @@ export const AttendanceTable: React.FC<AttendanceTableProps> = ({ group, clients
               {daysArray.map(day => {
                 // Determine if there is at least one session on this day
                 const hasSession = monthSessions.some(s => {
-                  const sDate = new Date(s.dateString || s.date);
+                  const sDate = parseSessionDate(s.dateString, s.date);
                   return sDate.getDate() === day;
                 });
                 return (
@@ -114,7 +115,7 @@ export const AttendanceTable: React.FC<AttendanceTableProps> = ({ group, clients
                     </td>
                     {daysArray.map(day => {
                       const daySessions = monthSessions.filter(s => {
-                        const sDate = new Date(s.dateString || s.date);
+                        const sDate = parseSessionDate(s.dateString, s.date);
                         return sDate.getDate() === day;
                       });
 

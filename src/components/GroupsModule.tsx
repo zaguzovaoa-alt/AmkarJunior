@@ -17,6 +17,7 @@ import {
   Trophy,
 } from "lucide-react";
 import { parseScheduleString } from "../utils/scheduleParser";
+import { toISODateString } from "../utils/dateUtils";
 
 export const GroupsModule: React.FC = () => {
   const {
@@ -364,12 +365,16 @@ export const GroupsModule: React.FC = () => {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {groups.map((g) => {
-              const sessions = trainingSessions?.filter(s => 
-                (s.groupId === g.id || s.groupName === g.name) &&
-                s.dateString >= attendanceStartDate &&
-                s.dateString <= attendanceEndDate
-              ) || [];
-              const totalCost = sessions.length * (g.venueCost || 0);
+              const sessions = trainingSessions?.filter(s => {
+                const sIso = toISODateString(s.dateString, s.date);
+                return (s.groupId === g.id || s.groupName === g.name) &&
+                  sIso >= attendanceStartDate &&
+                  sIso <= attendanceEndDate;
+              }) || [];
+              const venueCp = counterparties.find(c => c.id === g.venueId);
+              const totalCost = venueCp?.paymentType === "fixed"
+                ? (venueCp.rate || 0)
+                : sessions.length * (venueCp?.rate || g.venueCost || 0);
               const totalPresent = sessions.reduce((acc, s) => acc + s.presentCount, 0);
               const avgAttendanceCount = sessions.length > 0 ? (totalPresent / sessions.length) : 0;
               const maxCap = g.maxCapacity || g.playersCount || 1;
@@ -1210,11 +1215,12 @@ export const GroupsModule: React.FC = () => {
             
             <div className="p-6">
               {(() => {
-                const sessions = trainingSessions?.filter(s => 
-                  (s.groupId === analyticsGroup.id || s.groupName === analyticsGroup.name) &&
-                  s.dateString >= attendanceStartDate &&
-                  s.dateString <= attendanceEndDate
-                ).sort((a,b) => b.dateString.localeCompare(a.dateString)) || [];
+                const sessions = trainingSessions?.filter(s => {
+                  const sIso = toISODateString(s.dateString, s.date);
+                  return (s.groupId === analyticsGroup.id || s.groupName === analyticsGroup.name) &&
+                    sIso >= attendanceStartDate &&
+                    sIso <= attendanceEndDate;
+                }).sort((a,b) => toISODateString(b.dateString, b.date).localeCompare(toISODateString(a.dateString, a.date))) || [];
 
                 if (sessions.length === 0) {
                   return (

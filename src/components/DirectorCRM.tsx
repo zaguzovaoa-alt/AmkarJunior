@@ -1360,7 +1360,18 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
           <BirthdaysBanner clients={clients} />
 
           {/* Top summary cards exactly like Image 7 header stats row */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden">
+              <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
+                Проведено тренировок
+              </span>
+              <div className="text-3xl font-light text-slate-800 mt-1 tracking-tight">
+                {trainingSessions.length}
+              </div>
+              <div className="text-[10px] text-emerald-600 font-semibold mt-1">
+                Табелей заполнено: {trainingSessions.length}
+              </div>
+            </div>
             <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden">
               <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
                 Деньги на счетах

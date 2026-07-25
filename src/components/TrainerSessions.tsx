@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { Calendar, User, Clock, CheckCircle, Camera, X } from "lucide-react";
 import { TrainingSessionProtocol } from "../types";
 import { HeaderDescription } from "./HeaderDescription";
+import { toYearMonthString } from "../utils/dateUtils";
 
 export const TrainerSessions: React.FC = () => {
   const { trainingSessions, coaches, currentRole } = useCRM();
@@ -29,7 +30,7 @@ export const TrainerSessions: React.FC = () => {
       (isPrivileged || s.coachId === myCoach?.id ||
       s.coachName?.includes(myCoach?.name || "") ||
       s.assistantId === myCoach?.id) &&
-      s.date.substring(0, 7) === filterMonth
+      toYearMonthString(s.dateString, s.date) === filterMonth
   ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const sessionsAsMain = mySessions.filter(s => s.coachId === myCoach?.id || s.coachName?.includes(myCoach?.name || ""));

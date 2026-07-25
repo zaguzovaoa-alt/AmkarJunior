@@ -331,6 +331,33 @@ const INITIAL_ACCOUNTS: Account[] = [
   { id: "acc_bank", name: "Расчетный счет", balance: 0, type: "bank" },
 ];
 
+const INITIAL_COUNTERPARTIES: Counterparty[] = [
+  {
+    id: "cp_school_10",
+    name: "Школа №10 (Малый зал)",
+    type: "school_rent",
+    paymentType: "fixed",
+    rate: 30000,
+    description: "Фиксированная ежемесячная аренда малого зала школы (оплата 1 раз в месяц)",
+  },
+  {
+    id: "cp_hall_arena",
+    name: "Спорткомплекс Арена",
+    type: "hall_rent",
+    paymentType: "per_session",
+    rate: 1500,
+    description: "Почасовая аренда футбольного поля за каждую тренировку группы",
+  },
+  {
+    id: "cp_school_45",
+    name: "Лицей №45",
+    type: "school_rent",
+    paymentType: "per_session",
+    rate: 1200,
+    description: "Аренда зала за каждую проведенную тренировку группы",
+  },
+];
+
 export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
@@ -373,7 +400,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     const cached = localStorage.getItem("amkar_homework_submissions");
     return cached ? JSON.parse(cached) : [];
   });
-  const [counterparties, setCounterparties] = useState<Counterparty[]>([]);
+  const [counterparties, setCounterparties] = useState<Counterparty[]>(INITIAL_COUNTERPARTIES);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [firebaseReady, setFirebaseReady] = useState(false);
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
@@ -890,7 +917,14 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
           list.push(doc.data() as Counterparty);
         });
         list.sort((a, b) => a.name.localeCompare(b.name));
-        setCounterparties(list);
+        if (list.length === 0) {
+          INITIAL_COUNTERPARTIES.forEach((cp) => {
+            setDoc(doc(db, "counterparties", cp.id), cp).catch(() => {});
+          });
+          setCounterparties(INITIAL_COUNTERPARTIES);
+        } else {
+          setCounterparties(list);
+        }
       },
       (err) => handleSnapshotErr(err, "counterparties"),
     );
@@ -1363,12 +1397,13 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   ) => {
     const rawClients = clients; // avoid stale state issues in loops
     const groupObj = groups.find((g) => g.id === groupId || g.name === groupId);
-    const groupName = groupObj?.name || groupId;
+    const resolvedGroupId = groupObj?.id || groupId;
+    const resolvedGroupName = groupObj?.name || groupId;
     const coachId = groupObj?.coachId || "unknown";
     const coachName = groupObj?.coachName || "Неизвестный тренер";
     const assistantName = assistantId
-      ? coaches.find((c) => c.id === assistantId)?.name
-      : undefined;
+      ? coaches.find((c) => c.id === assistantId)?.name || ""
+      : "";
 
     const presentCount = records.filter(
       (r) => r.status === "present" || r.status === "trial_free",
@@ -1376,37 +1411,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     const sickCount = records.filter((r) => r.status === "absent_sick").length;
     const absentCount = records.filter((r) => r.status === "absent").length;
     const trialCount = records.filter((r) => r.status === "trial_free").length;
-
-    const newProtocol: TrainingSessionProtocol = {
-      id: `ts_${Date.now()}`,
-      groupId: groupId,
-      groupName: groupName,
-      date: new Date().toISOString(),
-      dateString: date,
-      coachId,
-      coachName,
-      assistantId,
-      assistantName,
-      photoUrl: mediaFile,
-      notes: notes,
-      presentCount,
-      absentCount,
-      sickCount,
-      trialCount,
-      records: records.map((r) => {
-        const clientObj = rawClients.find((c) => c.id === r.clientId);
-        return {
-          clientId: r.clientId,
-          clientName: clientObj
-            ? `${clientObj.childSurname} ${clientObj.childName}`
-            : r.clientId,
-          status: r.status,
-          reason: r.reason,
-        };
-      }),
-    };
-
-    setTrainingSessions((prev) => [newProtocol, ...prev]);
 
     // Format date string to YYYY-MM-DD
     const sessionDateISO = (() => {
@@ -1420,6 +1424,37 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       const d = new Date();
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     })();
+
+    const newProtocol: TrainingSessionProtocol = {
+      id: `ts_${Date.now()}`,
+      groupId: resolvedGroupId,
+      groupName: resolvedGroupName,
+      date: `${sessionDateISO}T${new Date().toISOString().substring(11)}`,
+      dateString: date,
+      coachId: coachId || "unknown",
+      coachName: coachName || "Неизвестный тренер",
+      assistantId: assistantId || "",
+      assistantName: assistantName || "",
+      photoUrl: mediaFile || "",
+      notes: notes || "",
+      presentCount,
+      absentCount,
+      sickCount,
+      trialCount,
+      records: records.map((r) => {
+        const clientObj = rawClients.find((c) => c.id === r.clientId);
+        return {
+          clientId: r.clientId,
+          clientName: clientObj
+            ? `${clientObj.childSurname} ${clientObj.childName}`
+            : r.clientId,
+          status: r.status,
+          reason: r.reason || "",
+        };
+      }),
+    };
+
+    setTrainingSessions((prev) => [newProtocol, ...prev]);
 
     // Auto-create accrued expense for venue rental (per training session)
     const venueCp = counterparties.find(cp => cp.id === groupObj?.venueId);
@@ -1435,8 +1470,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         category: "Аренда",
         amount: venueCostToAccrue,
         date: sessionDateISO,
-        description: `Начисление аренды за тренировку (${groupName})`,
-        groupName: groupName,
+        description: `Начисление аренды за тренировку (${resolvedGroupName})`,
+        groupName: resolvedGroupName,
         isFixed: false,
         counterpartyId: groupObj?.venueId,
         paymentStatus: "accrued",
@@ -1452,8 +1487,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         category: "Зарплата",
         amount: headRate,
         date: sessionDateISO,
-        description: `Начисление ЗП за тренировку: ${coachName} (${groupName})`,
-        groupName: groupName,
+        description: `Начисление ЗП за тренировку: ${coachName} (${resolvedGroupName})`,
+        groupName: resolvedGroupName,
         isFixed: false,
         paymentStatus: "accrued",
         coachId: headCoachObj.id,
@@ -1469,8 +1504,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
           category: "Зарплата",
           amount: astRate,
           date: sessionDateISO,
-          description: `Начисление ЗП (Ассистент): ${astCoachObj.name} (${groupName})`,
-          groupName: groupName,
+          description: `Начисление ЗП (Ассистент): ${astCoachObj.name} (${resolvedGroupName})`,
+          groupName: resolvedGroupName,
           isFixed: false,
           paymentStatus: "accrued",
           coachId: astCoachObj.id,
@@ -1478,25 +1513,74 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     }
 
+    // Helper for calculating total sessions for abonement
+    const getBaseTotalSessions = (cl: { abonement?: string; abonementTotalSessions?: number }): number => {
+      if (cl.abonementTotalSessions && cl.abonementTotalSessions > 0) return cl.abonementTotalSessions;
+      switch (cl.abonement) {
+        case "12_sessions": return 12;
+        case "8_sessions": return 8;
+        case "4_sessions": return 4;
+        case "1_session": return 1;
+        default: return 0;
+      }
+    };
+
     // Instantly update local clients state so views update immediately
     setClients((prev) =>
       prev.map((c) => {
         const record = records.find((r) => r.clientId === c.id);
         if (record) {
-          const wasPresent = record.status === "present";
-          const isSessionDeducted = wasPresent && c.abonementSessionsLeft > 0;
+          const existingAttIndex = (c.attendance || []).findIndex(
+            (a) => a.date === date || a.date === sessionDateISO
+          );
+          const existingAtt = existingAttIndex >= 0 ? c.attendance[existingAttIndex] : null;
+
+          const wasPreviouslyPresent = existingAtt?.status === "present";
+          const isNowPresent = record.status === "present";
+
+          const baseTotal = getBaseTotalSessions(c);
+          let currentSessionsLeft = c.abonementSessionsLeft;
+          if (currentSessionsLeft === undefined || currentSessionsLeft === null) {
+            currentSessionsLeft = baseTotal;
+          }
+
+          let newSessionsLeft = currentSessionsLeft;
+          let newAbonementStatus = c.abonementStatus;
+
+          if (!wasPreviouslyPresent && isNowPresent) {
+            newSessionsLeft = Math.max(0, currentSessionsLeft - 1);
+            if (newSessionsLeft === 0 && c.abonement && c.abonement !== "none") {
+              newAbonementStatus = "Ожидает оплаты";
+            }
+          } else if (wasPreviouslyPresent && !isNowPresent) {
+            newSessionsLeft = currentSessionsLeft + 1;
+            if (newSessionsLeft > 0 && c.abonementStatus === "Ожидает оплаты") {
+              newAbonementStatus = "Оплачено";
+            }
+          }
+
+          let updatedAttendance = [...(c.attendance || [])];
+          if (existingAttIndex >= 0) {
+            updatedAttendance[existingAttIndex] = {
+              date,
+              status: record.status as any,
+              reason: record.reason || "",
+            };
+          } else {
+            updatedAttendance = [
+              { date, status: record.status as any, reason: record.reason || "" },
+              ...updatedAttendance,
+            ];
+          }
+
           return {
             ...c,
-            abonementSessionsLeft: isSessionDeducted
-              ? c.abonementSessionsLeft - 1
-              : c.abonementSessionsLeft,
+            abonementSessionsLeft: newSessionsLeft,
+            abonementStatus: newAbonementStatus,
             notes: mediaFile
               ? `${c.notes || ""}\n[Посещаемость ${date}]: Тренер прикрепил фотоотчет.`
               : c.notes,
-            attendance: [
-              { date, status: record.status, reason: record.reason },
-              ...(c.attendance || []),
-            ],
+            attendance: updatedAttendance,
           };
         }
         return c;
@@ -1526,12 +1610,52 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       records.forEach((record) => {
         const c = clients.find((cl) => cl.id === record.clientId);
         if (c) {
-          const wasPresent = record.status === "present";
-          const isSessionDeducted = wasPresent && c.abonementSessionsLeft > 0;
+          const existingAttIndex = (c.attendance || []).findIndex(
+            (a) => a.date === date || a.date === sessionDateISO
+          );
+          const existingAtt = existingAttIndex >= 0 ? c.attendance[existingAttIndex] : null;
+
+          const wasPreviouslyPresent = existingAtt?.status === "present";
+          const isNowPresent = record.status === "present";
+
+          const baseTotal = getBaseTotalSessions(c);
+          let currentSessionsLeft = c.abonementSessionsLeft;
+          if (currentSessionsLeft === undefined || currentSessionsLeft === null) {
+            currentSessionsLeft = baseTotal;
+          }
+
+          let newSessionsLeft = currentSessionsLeft;
+          let newAbonementStatus = c.abonementStatus;
+
+          if (!wasPreviouslyPresent && isNowPresent) {
+            newSessionsLeft = Math.max(0, currentSessionsLeft - 1);
+            if (newSessionsLeft === 0 && c.abonement && c.abonement !== "none") {
+              newAbonementStatus = "Ожидает оплаты";
+            }
+          } else if (wasPreviouslyPresent && !isNowPresent) {
+            newSessionsLeft = currentSessionsLeft + 1;
+            if (newSessionsLeft > 0 && c.abonementStatus === "Ожидает оплаты") {
+              newAbonementStatus = "Оплачено";
+            }
+          }
+
+          let updatedAttendance = [...(c.attendance || [])];
+          if (existingAttIndex >= 0) {
+            updatedAttendance[existingAttIndex] = {
+              date,
+              status: record.status as any,
+              reason: record.reason || "",
+            };
+          } else {
+            updatedAttendance = [
+              { date, status: record.status as any, reason: record.reason || "" },
+              ...updatedAttendance,
+            ];
+          }
 
           // TELEGRAM ALERT: check if 2+ absences in a row
           if (
-            !wasPresent &&
+            !isNowPresent &&
             record.status !== "trial_free" &&
             crmConfig.telegramAlerts?.churnRisk !== false
           ) {
@@ -1548,16 +1672,12 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
           }
 
           batch.update(doc(db, "clients", c.id), {
-            abonementSessionsLeft: isSessionDeducted
-              ? c.abonementSessionsLeft - 1
-              : c.abonementSessionsLeft,
+            abonementSessionsLeft: newSessionsLeft,
+            abonementStatus: newAbonementStatus,
             notes: mediaFile
               ? `${c.notes || ""}\n[Посещаемость ${date}]: Тренер прикрепил фотоотчет.`
               : c.notes,
-            attendance: [
-              { date, status: record.status, reason: record.reason },
-              ...(c.attendance || []),
-            ],
+            attendance: updatedAttendance,
           });
         }
       });

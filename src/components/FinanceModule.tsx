@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { HeaderDescription } from "./HeaderDescription";
+import { toYearMonthString } from "../utils/dateUtils";
 import { db } from "../firebase";
 import { setDoc, doc, updateDoc } from "firebase/firestore";
 import { useCRM } from "../context/CRMContext";
@@ -30,6 +31,7 @@ import {
   Phone,
   Bell,
   Upload,
+  Building2,
 } from "lucide-react";
 import {
   LineChart,
@@ -88,6 +90,7 @@ export const FinanceModule: React.FC = () => {
     | "plan"
     | "accounts"
     | "salaries"
+    | "rent"
     | "debts"
     | "counterparties"
     | "client_income"
@@ -231,6 +234,7 @@ export const FinanceModule: React.FC = () => {
 
   // Grid/Cashflow state
   const [gridFilterMonth, setGridFilterMonth] = useState(currentMonthStr);
+  const [rentMonth, setRentMonth] = useState(currentMonthStr);
   const [gridFilterType, setGridFilterType] = useState<
     "all" | "income" | "expense"
   >("all");
@@ -610,6 +614,12 @@ export const FinanceModule: React.FC = () => {
               className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${activeTab === "salaries" ? "bg-white shadow-sm text-emerald-600" : "text-gray-500 hover:text-gray-700"}`}
             >
               Зарплаты
+            </button>
+            <button
+              onClick={() => setActiveTab("rent")}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${activeTab === "rent" ? "bg-white shadow-sm text-emerald-600" : "text-gray-500 hover:text-gray-700"}`}
+            >
+              Аренда
             </button>
             <button
               onClick={() => setActiveTab("counterparties")}
@@ -1276,7 +1286,7 @@ export const FinanceModule: React.FC = () => {
         {activeTab === "cashflow" &&
           (() => {
             const periodFinances = finances.filter(
-              (f) => f.date >= dashStartDate && f.date <= dashEndDate,
+              (f) => f.date >= dashStartDate && f.date <= dashEndDate && f.paymentStatus !== "accrued",
             );
             periodFinances.sort((a, b) => b.date.localeCompare(a.date));
 
@@ -1289,7 +1299,7 @@ export const FinanceModule: React.FC = () => {
             const netFlow = incomes - expenses;
 
             const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
-            const todayFinances = finances.filter((f) => f.date === today);
+            const todayFinances = finances.filter((f) => f.date === today && f.paymentStatus !== "accrued");
             const todayIncomesList = todayFinances.filter(
               (f) => f.type === "income",
             );
@@ -2664,13 +2674,13 @@ export const FinanceModule: React.FC = () => {
               // 2. Проведено тренировок
               const sessionsAsMain = trainingSessions.filter(
                 (ts) =>
-                  ts.date.substring(0, 7) === gridFilterMonth &&
-                  ts.coachId === coach.id,
+                  toYearMonthString(ts.dateString, ts.date) === gridFilterMonth &&
+                  (ts.coachId === coach.id || (ts.coachName && coach.name && ts.coachName.includes(coach.name))),
               ).length;
               const sessionsAsAssistant = trainingSessions.filter(
                 (ts) =>
-                  ts.date.substring(0, 7) === gridFilterMonth &&
-                  ts.assistantId === coach.id,
+                  toYearMonthString(ts.dateString, ts.date) === gridFilterMonth &&
+                  (ts.assistantId === coach.id || (ts.assistantName && coach.name && ts.assistantName.includes(coach.name))),
               ).length;
               const totalSessions = sessionsAsMain + sessionsAsAssistant;
 
@@ -3070,6 +3080,344 @@ export const FinanceModule: React.FC = () => {
               </div>
             );
           })()}
+
+        {activeTab === "rent" && (
+          <div className="space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-6">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-4">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    <Building2 className="w-5 h-5 text-emerald-600" />
+                    Учет и взаиморасчеты по аренде площадок
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Автоматический учет начислений за проведенные тренировки и фактические выплаты
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 flex items-center gap-2 shadow-sm">
+                    <Calendar className="w-4 h-4 text-emerald-600" />
+                    <span>Месяц:</span>
+                    <input
+                      type="month"
+                      value={rentMonth === "all" ? currentMonthStr : rentMonth}
+                      disabled={rentMonth === "all"}
+                      onChange={(e) => setRentMonth(e.target.value)}
+                      className="outline-none bg-transparent font-bold cursor-pointer disabled:opacity-50"
+                    />
+                  </div>
+                  <button
+                    onClick={() => setRentMonth(rentMonth === "all" ? currentMonthStr : "all")}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
+                      rentMonth === "all"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    {rentMonth === "all" ? "За весь период" : "Все месяцы"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setPayoutType("rent");
+                      setPayoutTargetName("Аренда площадок");
+                      setPayoutTargetId("");
+                      setPayoutAmount("");
+                      setPayoutModalOpen(true);
+                    }}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-sm transition flex items-center gap-1.5"
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    + Оплатить аренду
+                  </button>
+                </div>
+              </div>
+
+              {/* Summary Cards */}
+              {(() => {
+                const rentAccruals = finances.filter((f) => {
+                  if (f.type !== "expense" || f.category !== "Аренда") return false;
+                  if (f.description?.toLowerCase().includes("абонемент")) return false;
+                  if (rentMonth !== "all") {
+                    const recordMonth = f.targetMonth || f.date.substring(0, 7);
+                    return recordMonth === rentMonth;
+                  }
+                  return true;
+                });
+
+                const rentCounterpartiesMap = new Map<
+                  string,
+                  { name: string; id: string; accrued: number; paid: number; paymentType: "fixed" | "per_session"; cpObj?: any }
+                >();
+
+                // Pre-populate with all known rent counterparties
+                counterparties
+                  .filter((c) => c.type === "school_rent" || c.type === "hall_rent")
+                  .forEach((cp) => {
+                    rentCounterpartiesMap.set(cp.id, {
+                      name: cp.name,
+                      id: cp.id,
+                      accrued: cp.paymentType === "fixed" ? (cp.rate || 0) : 0,
+                      paid: 0,
+                      paymentType: cp.paymentType || "per_session",
+                      cpObj: cp,
+                    });
+                  });
+
+                // Process actual finance records
+                rentAccruals.forEach((f) => {
+                  let key = f.counterpartyId;
+                  if (!key) {
+                    const matchedCp = counterparties.find(c => (c.type === "school_rent" || c.type === "hall_rent") && (c.id === f.counterpartyId || f.description.includes(c.name)));
+                    key = matchedCp ? matchedCp.id : (f.groupName ? `group_${f.groupName}` : f.description || "Аренда площадки");
+                  }
+
+                  let name = key;
+                  if (key.startsWith("group_")) {
+                    name = `Группа ${f.groupName}`;
+                  } else {
+                    const cp = counterparties.find((c) => c.id === key);
+                    if (cp) name = cp.name;
+                    else if (f.groupName) name = `Группа ${f.groupName}`;
+                  }
+
+                  if (!rentCounterpartiesMap.has(key)) {
+                    rentCounterpartiesMap.set(key, {
+                      name,
+                      id: key,
+                      accrued: 0,
+                      paid: 0,
+                      paymentType: "per_session",
+                    });
+                  }
+
+                  const item = rentCounterpartiesMap.get(key)!;
+                  if (f.paymentStatus === "accrued") {
+                    if (!item.cpObj || item.cpObj.paymentType !== "fixed") {
+                      item.accrued += Number(f.amount || 0);
+                    }
+                  } else {
+                    item.paid += Number(f.amount || 0);
+                  }
+                });
+
+                const list = Array.from(rentCounterpartiesMap.values());
+                const totalAccrued = list.reduce((sum, item) => sum + item.accrued, 0);
+                const totalPaid = list.reduce((sum, item) => sum + item.paid, 0);
+                const currentDebt = Math.max(0, totalAccrued - totalPaid);
+
+                return (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <span className="text-slate-400 font-bold uppercase text-[10px] tracking-wider block">
+                          Начислено за аренду
+                        </span>
+                        <div className="text-xl font-bold text-slate-800 mt-1">
+                          {totalAccrued.toLocaleString("ru-RU")} ₽
+                        </div>
+                        <span className="text-[11px] text-slate-500 mt-1 block">
+                          Фиксированная за месяц + за проведенные тренировки
+                        </span>
+                      </div>
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <span className="text-slate-400 font-bold uppercase text-[10px] tracking-wider block">
+                          Выплачено арендодателям
+                        </span>
+                        <div className="text-xl font-bold text-emerald-600 mt-1">
+                          {totalPaid.toLocaleString("ru-RU")} ₽
+                        </div>
+                        <span className="text-[11px] text-slate-500 mt-1 block">
+                          Фактически выплаченные средства
+                        </span>
+                      </div>
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <span className="text-slate-400 font-bold uppercase text-[10px] tracking-wider block">
+                          Задолженность по аренде
+                        </span>
+                        <div className={`text-xl font-bold mt-1 ${currentDebt > 0 ? "text-red-600" : "text-slate-800"}`}>
+                          {currentDebt.toLocaleString("ru-RU")} ₽
+                        </div>
+                        <span className="text-[11px] text-slate-500 mt-1 block">
+                          К оплате площадкам
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Settlement per Venue Table */}
+                    <div className="space-y-3">
+                      <h3 className="font-bold text-slate-800 text-sm">
+                        Взаиморасчеты по арендным площадкам и объектам
+                      </h3>
+                      <div className="overflow-x-auto border border-slate-100 rounded-xl">
+                        <table className="w-full text-left text-xs whitespace-nowrap">
+                          <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
+                            <tr>
+                              <th className="px-4 py-3">Площадка / Объект</th>
+                              <th className="px-4 py-3">Тип оплаты</th>
+                              <th className="px-4 py-3 text-right">Начислено</th>
+                              <th className="px-4 py-3 text-right">Выплачено</th>
+                              <th className="px-4 py-3 text-right">Долг за аренду</th>
+                              <th className="px-4 py-3 text-right">Действие</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {list.length === 0 ? (
+                              <tr>
+                                <td colSpan={6} className="px-4 py-6 text-center text-slate-400 font-medium">
+                                  Начислений по аренде пока нет
+                                </td>
+                              </tr>
+                            ) : (
+                              list.map((item) => {
+                                const debt = Math.max(0, item.accrued - item.paid);
+                                const isFixed = item.paymentType === "fixed";
+                                return (
+                                  <tr key={item.id} className="hover:bg-slate-50/50 transition">
+                                    <td className="px-4 py-3 font-bold text-slate-800">{item.name}</td>
+                                    <td className="px-4 py-3">
+                                      {isFixed ? (
+                                        <span className="px-2 py-0.5 text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 rounded">
+                                          Фиксированная (1 раз в месяц)
+                                        </span>
+                                      ) : (
+                                        <span className="px-2 py-0.5 text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 rounded">
+                                          За тренировку группы
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-3 text-right font-medium text-slate-700">
+                                      {item.accrued.toLocaleString("ru-RU")} ₽
+                                    </td>
+                                    <td className="px-4 py-3 text-right font-medium text-emerald-600">
+                                      {item.paid.toLocaleString("ru-RU")} ₽
+                                    </td>
+                                    <td className="px-4 py-3 text-right font-bold text-red-600">
+                                      {debt > 0 ? `${debt.toLocaleString("ru-RU")} ₽` : "0 ₽"}
+                                    </td>
+                                    <td className="px-4 py-3 text-right">
+                                      {debt > 0 ? (
+                                        <button
+                                          onClick={() => {
+                                            setPayoutType("rent");
+                                            setPayoutTargetName(item.name);
+                                            setPayoutTargetId(item.id);
+                                            setPayoutAmount(String(debt));
+                                            setPayoutModalOpen(true);
+                                          }}
+                                          className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-sm transition"
+                                        >
+                                          Оплатить аренду
+                                        </button>
+                                      ) : (
+                                        <span className="text-[11px] text-slate-400 font-medium">—</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+
+              {/* Journal of All Rent Finance Records */}
+              <div className="space-y-3 pt-4 border-t border-slate-100">
+                <h3 className="font-bold text-slate-800 text-sm">
+                  Журнал операций и начислений по аренде
+                </h3>
+                <div className="overflow-x-auto border border-slate-100 rounded-xl">
+                  <table className="w-full text-left text-xs whitespace-nowrap">
+                    <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
+                      <tr>
+                        <th className="px-4 py-3">Дата</th>
+                        <th className="px-4 py-3">Объект / Группа</th>
+                        <th className="px-4 py-3">Описание</th>
+                        <th className="px-4 py-3 text-right">Сумма</th>
+                        <th className="px-4 py-3">Статус</th>
+                        <th className="px-4 py-3">Счет</th>
+                        <th className="px-4 py-3 text-center">Действие</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(() => {
+                        const rentRecords = finances
+                          .filter((f) => {
+                            if (f.type !== "expense" || f.category !== "Аренда") return false;
+                            if (f.description?.toLowerCase().includes("абонемент")) return false;
+                            if (rentMonth !== "all") {
+                              const recordMonth = f.targetMonth || f.date.substring(0, 7);
+                              return recordMonth === rentMonth;
+                            }
+                            return true;
+                          })
+                          .sort((a, b) => b.date.localeCompare(a.date));
+
+                        if (rentRecords.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={7} className="px-4 py-6 text-center text-slate-400 font-medium">
+                                Нет записей по аренде
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return rentRecords.map((f) => {
+                          const accObj = accounts.find((a) => a.id === f.accountId);
+                          const isAccrued = f.paymentStatus === "accrued";
+                          return (
+                            <tr key={f.id} className="hover:bg-slate-50/50 transition">
+                              <td className="px-4 py-3 text-slate-500 font-medium">
+                                {new Date(f.date).toLocaleDateString("ru-RU")}
+                              </td>
+                              <td className="px-4 py-3 font-bold text-slate-800">
+                                {f.groupName ? `Группа ${f.groupName}` : f.counterpartyId ? (counterparties.find(c => c.id === f.counterpartyId)?.name || "Площадка") : "Аренда"}
+                              </td>
+                              <td className="px-4 py-3 text-slate-600 max-w-[200px] truncate">
+                                {f.description || "—"}
+                              </td>
+                              <td className="px-4 py-3 text-right font-bold text-slate-900">
+                                {Number(f.amount).toLocaleString("ru-RU")} ₽
+                              </td>
+                              <td className="px-4 py-3">
+                                {isAccrued ? (
+                                  <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 rounded-md inline-block">
+                                    Начислено (К оплате)
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md inline-block">
+                                    Оплачено
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-slate-500 font-medium">
+                                {accObj ? accObj.name : "—"}
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <button
+                                  onClick={() => deleteFinanceRecord(f.id)}
+                                  className="text-slate-400 hover:text-red-500 transition"
+                                >
+                                  <Trash2 className="w-4 h-4 mx-auto" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        )}
 
         {activeTab === "debts" &&
           (() => {
@@ -3875,7 +4223,12 @@ export const FinanceModule: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {(() => {
-                      const rentAccruals = periodFinances.filter((f) => f.category === "Аренда");
+                      const rentAccruals = finances.filter(
+                        (f) =>
+                          f.type === "expense" &&
+                          f.category === "Аренда" &&
+                          !f.description?.toLowerCase().includes("абонемент")
+                      );
 
                       const rentCounterpartiesMap = new Map<
                         string,
