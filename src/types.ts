@@ -222,6 +222,8 @@ export interface Counterparty {
   name: string;
   type: 'school_rent' | 'hall_rent' | 'coach' | 'other';
   description?: string;
+  paymentType?: 'fixed' | 'per_session'; // For rent/salary calculation
+  rate?: number; // Cost per session or fixed monthly amount
 }
 
 export interface FinanceRecord {

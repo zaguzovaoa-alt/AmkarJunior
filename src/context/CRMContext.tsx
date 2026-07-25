@@ -1422,20 +1422,26 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     })();
 
     // Auto-create accrued expense for venue rental (per training session)
-    const venueCostToAccrue =
-      groupObj?.venueCost && groupObj.venueCost > 0 ? groupObj.venueCost : 1500;
+    const venueCp = counterparties.find(cp => cp.id === groupObj?.venueId);
+    
+    // Only accrue per session if the venue is NOT fixed-price per month.
+    if (!venueCp || venueCp.paymentType !== "fixed") {
+      const venueCostToAccrue = venueCp?.rate && venueCp.rate > 0 
+        ? venueCp.rate 
+        : (groupObj?.venueCost && groupObj.venueCost > 0 ? groupObj.venueCost : 1500);
 
-    addFinanceRecord({
-      type: "expense",
-      category: "Аренда",
-      amount: venueCostToAccrue,
-      date: sessionDateISO,
-      description: `Начисление аренды за тренировку (${groupName})`,
-      groupName: groupName,
-      isFixed: false,
-      counterpartyId: groupObj?.venueId,
-      paymentStatus: "accrued",
-    });
+      addFinanceRecord({
+        type: "expense",
+        category: "Аренда",
+        amount: venueCostToAccrue,
+        date: sessionDateISO,
+        description: `Начисление аренды за тренировку (${groupName})`,
+        groupName: groupName,
+        isFixed: false,
+        counterpartyId: groupObj?.venueId,
+        paymentStatus: "accrued",
+      });
+    }
 
     // Auto-create accrued payroll expenses
     const headCoachObj = coaches.find((c) => c.id === coachId);
@@ -1456,7 +1462,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
     if (assistantId) {
       const astCoachObj = coaches.find((c) => c.id === assistantId);
-      if (astCoachObj) {
+      if (astCoachObj && astCoachObj.paymentType !== "fixed") {
         const astRate = astCoachObj.rate && astCoachObj.rate > 0 ? astCoachObj.rate : 1000;
         addFinanceRecord({
           type: "expense",

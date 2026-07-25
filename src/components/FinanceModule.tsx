@@ -119,6 +119,7 @@ export const FinanceModule: React.FC = () => {
     .filter(
       (f) =>
         f.type === "expense" &&
+        f.paymentStatus !== "accrued" &&
         f.date >= dashStartDate &&
         f.date <= dashEndDate,
     )
@@ -261,16 +262,22 @@ export const FinanceModule: React.FC = () => {
   const [newCpName, setNewCpName] = useState("");
   const [newCpType, setNewCpType] = useState<"school_rent" | "hall_rent" | "coach" | "other">("school_rent");
   const [newCpDesc, setNewCpDesc] = useState("");
+  const [newCpPaymentType, setNewCpPaymentType] = useState<"fixed" | "per_session">("per_session");
+  const [newCpRate, setNewCpRate] = useState<number>(0);
 
   const handleAddCounterparty = () => {
     if (!newCpName.trim()) return;
     addCounterparty({
       name: newCpName.trim(),
       type: newCpType,
-      description: newCpDesc.trim()
+      description: newCpDesc.trim(),
+      paymentType: newCpPaymentType,
+      rate: newCpRate,
     });
     setNewCpName("");
     setNewCpDesc("");
+    setNewCpPaymentType("per_session");
+    setNewCpRate(0);
   };
 
   const handleAddAccount = () => {
@@ -294,7 +301,7 @@ export const FinanceModule: React.FC = () => {
       .filter((f) => f.type === "income")
       .reduce((sum, f) => sum + Number(f.amount || 0), 0);
     const accExpenses = accTransactions
-      .filter((f) => f.type === "expense")
+      .filter((f) => f.type === "expense" && f.paymentStatus !== "accrued")
       .reduce((sum, f) => sum + Number(f.amount || 0), 0);
     const incomesMinusExpenses = accIncomes - accExpenses;
 
@@ -426,7 +433,7 @@ export const FinanceModule: React.FC = () => {
       if (f.accountId && calculatedAccountsMap.has(f.accountId)) {
         const acc = calculatedAccountsMap.get(f.accountId)!;
         if (f.type === "income") acc.actualBalance += Number(f.amount || 0);
-        else if (f.type === "expense")
+        else if (f.type === "expense" && f.paymentStatus !== "accrued")
           acc.actualBalance -= Number(f.amount || 0);
       }
     });
@@ -459,7 +466,7 @@ export const FinanceModule: React.FC = () => {
       .filter((f) => f.type === "income")
       .reduce((acc, f) => acc + Number(f.amount || 0), 0);
     const mExpenses = periodData
-      .filter((f) => f.type === "expense")
+      .filter((f) => f.type === "expense" && f.paymentStatus !== "accrued")
       .reduce((acc, f) => acc + Number(f.amount || 0), 0);
     const mProfit = mIncomes - mExpenses;
 
@@ -474,7 +481,7 @@ export const FinanceModule: React.FC = () => {
         monthsMap.set(tm, { name: tm, Доходы: 0, Расходы: 0 });
       const stat = monthsMap.get(tm)!;
       if (f.type === "income") stat.Доходы += Number(f.amount || 0);
-      else stat.Расходы += Number(f.amount || 0);
+      else if (f.type === "expense" && f.paymentStatus !== "accrued") stat.Расходы += Number(f.amount || 0);
     });
 
     // Sort ascending by month string
@@ -504,7 +511,7 @@ export const FinanceModule: React.FC = () => {
     // Pie chart for expenses
     const pieMap = new Map<string, number>();
     periodData
-      .filter((f) => f.type === "expense")
+      .filter((f) => f.type === "expense" && f.paymentStatus !== "accrued")
       .forEach((f) => {
         pieMap.set(
           f.category,
@@ -1730,10 +1737,10 @@ export const FinanceModule: React.FC = () => {
                 (f) => f.type === "income",
               );
               const variableTransactions = mFinances.filter(
-                (f) => f.type === "expense" && !f.isFixed,
+                (f) => f.type === "expense" && !f.isFixed && f.paymentStatus !== "accrued",
               );
               const fixedTransactions = mFinances.filter(
-                (f) => f.type === "expense" && f.isFixed,
+                (f) => f.type === "expense" && f.isFixed && f.paymentStatus !== "accrued",
               );
 
               const income = incomeTransactions.reduce(
@@ -3403,7 +3410,7 @@ export const FinanceModule: React.FC = () => {
                 .filter((f) => f.type === "income")
                 .reduce((sum, f) => sum + f.amount, 0);
               const accExpenses = accTransactions
-                .filter((f) => f.type === "expense")
+                .filter((f) => f.type === "expense" && f.paymentStatus !== "accrued")
                 .reduce((sum, f) => sum + f.amount, 0);
               const actualBalance = acc.balance + accIncomes - accExpenses;
               return { ...acc, actualBalance };
@@ -3746,37 +3753,57 @@ export const FinanceModule: React.FC = () => {
               Справочник: Контрагенты
             </h2>
 
-            <div className="flex flex-col sm:flex-row gap-3 mb-8 bg-slate-50 p-4 rounded-xl border border-gray-100">
-              <input
-                type="text"
-                value={newCpName}
-                onChange={(e) => setNewCpName(e.target.value)}
-                placeholder="Имя / Название..."
-                className="flex-1 p-3 border border-gray-200 outline-none rounded-xl text-sm font-medium focus:ring-1 focus:ring-slate-900"
-              />
-              <select
-                value={newCpType}
-                onChange={(e) => setNewCpType(e.target.value as any)}
-                className="p-3 border border-gray-200 rounded-xl outline-none text-sm font-bold text-slate-700 bg-white min-w-[200px]"
-              >
-                <option value="school_rent">Аренда школы</option>
-                <option value="hall_rent">Аренда зала</option>
-                <option value="coach">Тренер / Ассистент</option>
-                <option value="other">Другое</option>
-              </select>
-              <input
-                type="text"
-                value={newCpDesc}
-                onChange={(e) => setNewCpDesc(e.target.value)}
-                placeholder="Описание (опционально)..."
-                className="flex-1 p-3 border border-gray-200 outline-none rounded-xl text-sm font-medium focus:ring-1 focus:ring-slate-900"
-              />
-              <button
-                onClick={handleAddCounterparty}
-                className="px-6 py-3 bg-slate-900 text-white font-bold rounded-xl text-sm hover:bg-slate-800 transition tracking-wide"
-              >
-                + Создать
-              </button>
+            <div className="flex flex-col gap-3 mb-8 bg-slate-50 p-4 rounded-xl border border-gray-100">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <input
+                  type="text"
+                  value={newCpName}
+                  onChange={(e) => setNewCpName(e.target.value)}
+                  placeholder="Имя / Название..."
+                  className="flex-1 p-3 border border-gray-200 outline-none rounded-xl text-sm font-medium focus:ring-1 focus:ring-slate-900"
+                />
+                <select
+                  value={newCpType}
+                  onChange={(e) => setNewCpType(e.target.value as any)}
+                  className="p-3 border border-gray-200 rounded-xl outline-none text-sm font-bold text-slate-700 bg-white min-w-[200px]"
+                >
+                  <option value="school_rent">Аренда школы</option>
+                  <option value="hall_rent">Аренда зала</option>
+                  <option value="coach">Тренер / Ассистент</option>
+                  <option value="other">Другое</option>
+                </select>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row gap-3">
+                <select
+                  value={newCpPaymentType}
+                  onChange={(e) => setNewCpPaymentType(e.target.value as any)}
+                  className="p-3 border border-gray-200 rounded-xl outline-none text-sm font-bold text-slate-700 bg-white min-w-[200px]"
+                >
+                  <option value="per_session">Оплата за раз (тренировку)</option>
+                  <option value="fixed">Фиксированная (за месяц)</option>
+                </select>
+                <input
+                  type="number"
+                  value={newCpRate || ""}
+                  onChange={(e) => setNewCpRate(Number(e.target.value))}
+                  placeholder="Ставка / Стоимость (₽)"
+                  className="w-[180px] p-3 border border-gray-200 outline-none rounded-xl text-sm font-medium focus:ring-1 focus:ring-slate-900"
+                />
+                <input
+                  type="text"
+                  value={newCpDesc}
+                  onChange={(e) => setNewCpDesc(e.target.value)}
+                  placeholder="Описание (опционально)..."
+                  className="flex-1 p-3 border border-gray-200 outline-none rounded-xl text-sm font-medium focus:ring-1 focus:ring-slate-900"
+                />
+                <button
+                  onClick={handleAddCounterparty}
+                  className="px-6 py-3 bg-slate-900 text-white font-bold rounded-xl text-sm hover:bg-slate-800 transition tracking-wide"
+                >
+                  + Создать
+                </button>
+              </div>
             </div>
 
             <div className="space-y-4">
@@ -3795,9 +3822,16 @@ export const FinanceModule: React.FC = () => {
                       className="flex justify-between items-center px-4 py-3 bg-white border border-gray-100 shadow-sm rounded-xl text-sm group hover:border-slate-300 transition"
                     >
                       <div className="flex flex-col">
-                        <span className="font-bold text-slate-700">
-                          {cp.name}
-                        </span>
+                        <div className="flex items-center gap-3">
+                          <span className="font-bold text-slate-700">
+                            {cp.name}
+                          </span>
+                          {(cp.paymentType || cp.rate) && (
+                            <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-bold">
+                              {cp.paymentType === 'fixed' ? 'В месяц:' : 'За тренировку:'} {cp.rate} ₽
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[10px] text-gray-500 mt-1">
                           {cp.type === 'school_rent' ? 'Аренда школы' : cp.type === 'hall_rent' ? 'Аренда зала' : cp.type === 'coach' ? 'Тренер' : 'Другое'}
                           {cp.description ? ` • ${cp.description}` : ''}
@@ -3841,17 +3875,29 @@ export const FinanceModule: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {(() => {
-                      const rentAccruals = finances.filter((f) => f.category === "Аренда");
+                      const rentAccruals = periodFinances.filter((f) => f.category === "Аренда");
 
                       const rentCounterpartiesMap = new Map<
                         string,
-                        { name: string; id: string; accrued: number; paid: number }
+                        { name: string; id: string; accrued: number; paid: number; cpObj?: any }
                       >();
 
+                      // Pre-populate with all known rent counterparties
+                      counterparties.filter(c => c.type === 'school_rent' || c.type === 'hall_rent').forEach(cp => {
+                        rentCounterpartiesMap.set(cp.id, {
+                          name: cp.name,
+                          id: cp.id,
+                          accrued: cp.paymentType === "fixed" ? (cp.rate || 0) : 0,
+                          paid: 0,
+                          cpObj: cp
+                        });
+                      });
+
+                      // Process actual records for the period
                       rentAccruals.forEach((f) => {
-                        let key =
-                          f.counterpartyId || f.groupName || f.description || "Аренда площадки";
+                        let key = f.counterpartyId || f.groupName || f.description || "Аренда площадки";
                         let name = key;
+                        
                         if (f.counterpartyId) {
                           const cp = counterparties.find((c) => c.id === f.counterpartyId);
                           if (cp) name = cp.name;
@@ -3865,7 +3911,10 @@ export const FinanceModule: React.FC = () => {
 
                         const item = rentCounterpartiesMap.get(key)!;
                         if (f.paymentStatus === "accrued") {
-                          item.accrued += Number(f.amount || 0);
+                          // Only sum accrued records if they are NOT fixed (fixed is already populated)
+                          if (!item.cpObj || item.cpObj.paymentType !== "fixed") {
+                            item.accrued += Number(f.amount || 0);
+                          }
                         } else {
                           item.paid += Number(f.amount || 0);
                         }
