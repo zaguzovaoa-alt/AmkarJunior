@@ -38,6 +38,22 @@ import {
   Counterparty,
 } from "../types";
 
+// Helper to recursively remove undefined properties before writing to Firestore
+function removeUndefined<T>(obj: T): T {
+  if (obj === null || typeof obj !== "object") return obj;
+  if (Array.isArray(obj)) {
+    return obj.map((item) => removeUndefined(item)) as unknown as T;
+  }
+  const clean: any = {};
+  for (const key of Object.keys(obj)) {
+    const val = (obj as any)[key];
+    if (val !== undefined) {
+      clean[key] = typeof val === "object" && val !== null ? removeUndefined(val) : val;
+    }
+  }
+  return clean as T;
+}
+
 // Types for User Profile
 export interface UserProfile {
   name: string;
@@ -145,6 +161,8 @@ interface CRMContextType {
     notes?: string,
     assistantId?: string,
   ) => void;
+  deleteTrainingSession: (sessionId: string) => Promise<void>;
+  updateTrainingSessionProtocol: (session: TrainingSessionProtocol) => Promise<void>;
   ratePlayer: (
     clientId: string,
     metrics: {
@@ -380,7 +398,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   });
   const [trainingSessions, setTrainingSessions] = useState<
     TrainingSessionProtocol[]
-  >([]);
+  >(() => {
+    const cached = localStorage.getItem("amkar_training_sessions");
+    return cached ? JSON.parse(cached) : [];
+  });
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
   const [products, setProducts] = useState<Product[]>(() => {
     const cached = localStorage.getItem("amkar_products");
@@ -968,6 +989,13 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     );
   }, [financialPlans]);
 
+  useEffect(() => {
+    localStorage.setItem(
+      "amkar_training_sessions",
+      JSON.stringify(trainingSessions),
+    );
+  }, [trainingSessions]);
+
   // Hook to poll webhooks periodically
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -1443,18 +1471,27 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       trialCount,
       records: records.map((r) => {
         const clientObj = rawClients.find((c) => c.id === r.clientId);
+        const leadObj = leads.find((l) => l.id === r.clientId);
+        const fullName = clientObj
+          ? `${clientObj.childSurname || ""} ${clientObj.childName || ""}`.trim()
+          : leadObj
+          ? `${leadObj.childSurname || ""} ${leadObj.childName || ""}`.trim()
+          : r.clientId;
         return {
           clientId: r.clientId,
-          clientName: clientObj
-            ? `${clientObj.childSurname} ${clientObj.childName}`
-            : r.clientId,
+          clientName: fullName || r.clientId,
           status: r.status,
           reason: r.reason || "",
         };
       }),
     };
 
-    setTrainingSessions((prev) => [newProtocol, ...prev]);
+    setTrainingSessions((prev) => [newProtocol, ...prev.filter(s => s.id !== newProtocol.id)]);
+
+    // Always persist training_sessions protocol immediately
+    setDoc(doc(db, "training_sessions", newProtocol.id), removeUndefined(newProtocol) as any).catch((err) => {
+      handleFirestoreError(err, OperationType.WRITE, "training_sessions_direct");
+    });
 
     // Auto-create accrued expense for venue rental (per training session)
     const venueCp = counterparties.find(cp => cp.id === groupObj?.venueId);
@@ -1604,8 +1641,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       const batch = writeBatch(db);
       
-      batch.set(doc(db, "training_sessions", newProtocol.id), newProtocol as any);
-      batch.set(doc(db, "tasks", directorTaskId), directorTask as any);
+      batch.set(doc(db, "training_sessions", newProtocol.id), removeUndefined(newProtocol) as any);
+      batch.set(doc(db, "tasks", directorTaskId), removeUndefined(directorTask) as any);
 
       records.forEach((record) => {
         const c = clients.find((cl) => cl.id === record.clientId);
@@ -1625,7 +1662,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
           }
 
           let newSessionsLeft = currentSessionsLeft;
-          let newAbonementStatus = c.abonementStatus;
+          let newAbonementStatus = c.abonementStatus || "Оплачено";
 
           if (!wasPreviouslyPresent && isNowPresent) {
             newSessionsLeft = Math.max(0, currentSessionsLeft - 1);
@@ -1671,20 +1708,66 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
             }
           }
 
-          batch.update(doc(db, "clients", c.id), {
-            abonementSessionsLeft: newSessionsLeft,
-            abonementStatus: newAbonementStatus,
+          batch.set(doc(db, "clients", c.id), removeUndefined({
+            abonementSessionsLeft: newSessionsLeft ?? 0,
+            abonementStatus: newAbonementStatus || "Оплачено",
             notes: mediaFile
               ? `${c.notes || ""}\n[Посещаемость ${date}]: Тренер прикрепил фотоотчет.`
-              : c.notes,
+              : (c.notes || ""),
             attendance: updatedAttendance,
-          });
+          }), { merge: true });
         }
       });
 
       await batch.commit();
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "training_sessions_batch");
+    }
+  };
+
+  const deleteTrainingSession = async (sessionId: string) => {
+    try {
+      await deleteDoc(doc(db, "training_sessions", sessionId));
+      setTrainingSessions((prev) => prev.filter((s) => s.id !== sessionId));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, "delete_training_session");
+      setTrainingSessions((prev) => prev.filter((s) => s.id !== sessionId));
+    }
+  };
+
+  const updateTrainingSessionProtocol = async (updatedSession: TrainingSessionProtocol) => {
+    try {
+      let presentCount = 0;
+      let sickCount = 0;
+      let absentCount = 0;
+      let trialCount = 0;
+
+      (updatedSession.records || []).forEach((r) => {
+        if (r.status === "present") presentCount++;
+        else if (r.status === "absent_sick") sickCount++;
+        else if (r.status === "trial_free") trialCount++;
+        else absentCount++;
+      });
+
+      const sessionToSave: TrainingSessionProtocol = {
+        ...updatedSession,
+        presentCount,
+        sickCount,
+        absentCount,
+        trialCount,
+      };
+
+      setTrainingSessions((prev) =>
+        prev.map((s) => (s.id === sessionToSave.id ? sessionToSave : s))
+      );
+
+      await setDoc(
+        doc(db, "training_sessions", sessionToSave.id),
+        removeUndefined(sessionToSave) as any,
+        { merge: true }
+      );
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, "update_training_session");
     }
   };
 
@@ -2004,7 +2087,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const addFinanceRecord = async (record: Omit<FinanceRecord, "id">) => {
     const id = `f_${Date.now()}`;
-    const newRecord = { accountId: "acc_cash", ...record, id };
+    const newRecord = removeUndefined({ accountId: "acc_cash", ...record, id });
     setFinances((prev) => [newRecord, ...prev]);
     setDoc(doc(db, "finances", id), newRecord).catch((err) => handleFirestoreError(err, OperationType.WRITE, "update"));
   };
@@ -2855,6 +2938,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         uploadDocument,
         deleteDocument,
         markAttendance,
+        deleteTrainingSession,
+        updateTrainingSessionProtocol,
         ratePlayer,
         completeTask,
         updateTask,

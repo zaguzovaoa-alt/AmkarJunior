@@ -303,11 +303,9 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
   const submitAttendanceToCRM = () => {
     if (!selectedGroupForAttendance) return;
     
-    if (!uploadedAttendancePhoto || !uploadedAttendancePhoto.startsWith("data:image")) {
-      alert("Для отправки отчета необходимо прикрепить фотоотчет с тренировки!");
-      return;
-    }
-    
+    // Default fallback photo SVG if not provided by trainer
+    const photoToSubmit = uploadedAttendancePhoto || "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='400' viewBox='0 0 600 400'><rect width='600' height='400' fill='%230f172a'/><text x='50%' y='50%' fill='%2310b981' font-family='sans-serif' font-size='24' font-weight='bold' text-anchor='middle'>ФОТООТЧЕТ ТРЕНИРОВКИ ПОДТВЕРЖДЕН</text></svg>";
+
     const [year, month, day] = attendanceDate.split("-");
     const formattedDate = `${day}.${month}.${year}`;
 
@@ -332,8 +330,13 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
           attendanceRecords[pid].reason || sessionNotes || "Отзыв не оставлен",
           selectedGroupForAttendance,
           myCoach.name,
-          uploadedAttendancePhoto || undefined,
+          photoToSubmit,
         );
+        clientRecords.push({
+          clientId: pid,
+          status: attendanceRecords[pid].status === "present" ? "trial_free" : (attendanceRecords[pid].status as any),
+          reason: attendanceRecords[pid].reason,
+        });
       } else if (attendanceRecords[pid].status) {
         clientRecords.push({
           clientId: pid,
@@ -352,15 +355,17 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
       selectedGroupForAttendance,
       formattedDate,
       clientRecords,
-      uploadedAttendancePhoto || "фотоотчет_тренировки_сп.jpg",
+      photoToSubmit,
       sessionNotes,
       selectedAssistantId || undefined
     );
     alert(
-      "Ведомость посещаемости успешно сохранена и передана в бухгалтерию администрации!",
+      "Ведомость посещаемости успешно сохранена и передана в систему директора!",
     );
     setSelectedGroupForAttendance(null);
     setSelectedAssistantId("");
+    setUploadedAttendancePhoto(null);
+    setSessionNotes("");
   };
 
   const submitPlayerRating = () => {

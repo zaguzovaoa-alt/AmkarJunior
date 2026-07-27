@@ -4,6 +4,7 @@ import { toYearMonthString } from "../utils/dateUtils";
 import { db } from "../firebase";
 import { setDoc, doc, updateDoc } from "firebase/firestore";
 import { useCRM } from "../context/CRMContext";
+import { Counterparty } from "../types";
 import {
   TrendingUp,
   TrendingDown,
@@ -32,6 +33,10 @@ import {
   Bell,
   Upload,
   Building2,
+  X,
+  ChevronRight,
+  Search,
+  Info,
 } from "lucide-react";
 import {
   LineChart,
@@ -97,6 +102,8 @@ export const FinanceModule: React.FC = () => {
   >("dashboard");
 
   const [salaryTab, setSalaryTab] = useState<"staff" | "transactions">("staff");
+  const [selectedCoachIdForDetail, setSelectedCoachIdForDetail] = useState<string | null>(null);
+  const [coachDetailSubTab, setCoachDetailSubTab] = useState<"sessions" | "finances">("sessions");
 
   
   const now = new Date();
@@ -268,6 +275,56 @@ export const FinanceModule: React.FC = () => {
   const [newCpDesc, setNewCpDesc] = useState("");
   const [newCpPaymentType, setNewCpPaymentType] = useState<"fixed" | "per_session">("per_session");
   const [newCpRate, setNewCpRate] = useState<number>(0);
+
+  // Counterparties search, filter, edit & delete states
+  const [cpSearch, setCpSearch] = useState("");
+  const [cpFilterType, setCpFilterType] = useState<"all" | "school_rent" | "hall_rent" | "coach" | "other">("all");
+  const [editingCp, setEditingCp] = useState<Counterparty | null>(null);
+  const [editCpName, setEditCpName] = useState("");
+  const [editCpType, setEditCpType] = useState<"school_rent" | "hall_rent" | "coach" | "other">("school_rent");
+  const [editCpPaymentType, setEditCpPaymentType] = useState<"fixed" | "per_session">("per_session");
+  const [editCpRate, setEditCpRate] = useState<number>(0);
+  const [editCpDesc, setEditCpDesc] = useState("");
+  const [deletingCp, setDeletingCp] = useState<Counterparty | null>(null);
+
+  const handleStartEditCp = (cp: Counterparty) => {
+    setEditingCp(cp);
+    setEditCpName(cp.name);
+    setEditCpType(cp.type || "school_rent");
+    setEditCpPaymentType(cp.paymentType || "per_session");
+    setEditCpRate(cp.rate || 0);
+    setEditCpDesc(cp.description || "");
+  };
+
+  const handleSaveEditCp = async () => {
+    if (!editingCp || !editCpName.trim()) return;
+    await updateCounterparty(editingCp.id, {
+      name: editCpName.trim(),
+      type: editCpType,
+      paymentType: editCpPaymentType,
+      rate: Number(editCpRate) || 0,
+      description: editCpDesc.trim(),
+    });
+    setEditingCp(null);
+  };
+
+  const handleConfirmDeleteCp = async () => {
+    if (!deletingCp) return;
+    await deleteCounterparty(deletingCp.id);
+    setDeletingCp(null);
+  };
+
+  const filteredCounterparties = useMemo(() => {
+    return counterparties.filter((cp) => {
+      const matchesFilter = cpFilterType === "all" || cp.type === cpFilterType;
+      const query = cpSearch.toLowerCase().trim();
+      const matchesSearch =
+        !query ||
+        cp.name.toLowerCase().includes(query) ||
+        (cp.description && cp.description.toLowerCase().includes(query));
+      return matchesFilter && matchesSearch;
+    });
+  }, [counterparties, cpFilterType, cpSearch]);
 
   const handleAddCounterparty = () => {
     if (!newCpName.trim()) return;
@@ -2890,7 +2947,11 @@ export const FinanceModule: React.FC = () => {
                           {coachStats.map((stat, idx) => (
                             <tr
                               key={idx}
-                              className="hover:bg-slate-50 transition group"
+                              onClick={() => {
+                                setSelectedCoachIdForDetail(stat.coach.id);
+                                setCoachDetailSubTab("sessions");
+                              }}
+                              className="hover:bg-slate-50/80 transition group cursor-pointer"
                             >
                               <td className="px-5 py-4">
                                 <div className="flex items-center gap-3">
@@ -2905,9 +2966,17 @@ export const FinanceModule: React.FC = () => {
                                       stat.coach.name.charAt(0)
                                     )}
                                   </div>
-                                  <span className="font-bold text-slate-900">
-                                    {stat.coach.name}
-                                  </span>
+                                  <div>
+                                    <div className="font-bold text-slate-900 group-hover:text-red-600 transition flex items-center gap-1.5">
+                                      <span>{stat.coach.name}</span>
+                                      <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-red-600 group-hover:translate-x-0.5 transition-transform" />
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 font-normal">
+                                      {stat.coach.paymentType === "fixed"
+                                        ? `Оклад ${stat.coach.rate?.toLocaleString("ru-RU") || 0} ₽`
+                                        : `Сдельная ${stat.coach.rate?.toLocaleString("ru-RU") || 1500} ₽/зан.`}
+                                    </div>
+                                  </div>
                                 </div>
                               </td>
                               <td className="px-5 py-4 text-slate-600 font-medium">
@@ -2919,9 +2988,13 @@ export const FinanceModule: React.FC = () => {
                                   : "—"}
                               </td>
                               <td className="px-5 py-4 text-slate-900 font-medium text-center">
-                                {stat.totalSessions > 0
-                                  ? stat.totalSessions
-                                  : "—"}
+                                {stat.totalSessions > 0 ? (
+                                  <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-bold">
+                                    {stat.totalSessions}
+                                  </span>
+                                ) : (
+                                  "—"
+                                )}
                               </td>
                               <td className="px-5 py-4 text-slate-900 font-medium text-right">
                                 {stat.surcharges > 0
@@ -2933,7 +3006,7 @@ export const FinanceModule: React.FC = () => {
                                   ? `${stat.bonuses.toLocaleString("ru-RU")} ₽`
                                   : "—"}
                               </td>
-                              <td className="px-5 py-4 text-slate-900 font-medium text-right">
+                              <td className="px-5 py-4 text-slate-900 font-bold text-right">
                                 {stat.accrued > 0
                                   ? `${stat.accrued.toLocaleString("ru-RU")} ₽`
                                   : "—"}
@@ -2958,7 +3031,8 @@ export const FinanceModule: React.FC = () => {
                               <td className="px-5 py-4 text-right">
                                 {stat.toPay > 0 ? (
                                   <button
-                                    onClick={() => {
+                                    onClick={(e) => {
+                                      e.stopPropagation();
                                       setPayoutType("salary");
                                       setPayoutTargetName(stat.coach.name);
                                       setPayoutTargetId(stat.coach.id);
@@ -4096,104 +4170,252 @@ export const FinanceModule: React.FC = () => {
           </div>
         )}
         {activeTab === "counterparties" && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 max-w-4xl mx-auto">
-            <h2 className="text-lg font-bold mb-6 border-b pb-4 text-slate-800">
-              Справочник: Контрагенты
-            </h2>
-
-            <div className="flex flex-col gap-3 mb-8 bg-slate-50 p-4 rounded-xl border border-gray-100">
-              <div className="flex flex-col sm:flex-row gap-3">
-                <input
-                  type="text"
-                  value={newCpName}
-                  onChange={(e) => setNewCpName(e.target.value)}
-                  placeholder="Имя / Название..."
-                  className="flex-1 p-3 border border-gray-200 outline-none rounded-xl text-sm font-medium focus:ring-1 focus:ring-slate-900"
-                />
-                <select
-                  value={newCpType}
-                  onChange={(e) => setNewCpType(e.target.value as any)}
-                  className="p-3 border border-gray-200 rounded-xl outline-none text-sm font-bold text-slate-700 bg-white min-w-[200px]"
-                >
-                  <option value="school_rent">Аренда школы</option>
-                  <option value="hall_rent">Аренда зала</option>
-                  <option value="coach">Тренер / Ассистент</option>
-                  <option value="other">Другое</option>
-                </select>
+          <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-8">
+            {/* Title Section */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-5">
+              <div>
+                <h2 className="text-xl font-black text-slate-900 tracking-tight">
+                  Справочник контрагентов
+                </h2>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  Управление школами, спортивными залами, тренерами и подрядчиками
+                </p>
               </div>
-              
-              <div className="flex flex-col sm:flex-row gap-3">
-                <select
-                  value={newCpPaymentType}
-                  onChange={(e) => setNewCpPaymentType(e.target.value as any)}
-                  className="p-3 border border-gray-200 rounded-xl outline-none text-sm font-bold text-slate-700 bg-white min-w-[200px]"
-                >
-                  <option value="per_session">Оплата за раз (тренировку)</option>
-                  <option value="fixed">Фиксированная (за месяц)</option>
-                </select>
-                <input
-                  type="number"
-                  value={newCpRate || ""}
-                  onChange={(e) => setNewCpRate(Number(e.target.value))}
-                  placeholder="Ставка / Стоимость (₽)"
-                  className="w-[180px] p-3 border border-gray-200 outline-none rounded-xl text-sm font-medium focus:ring-1 focus:ring-slate-900"
-                />
-                <input
-                  type="text"
-                  value={newCpDesc}
-                  onChange={(e) => setNewCpDesc(e.target.value)}
-                  placeholder="Описание (опционально)..."
-                  className="flex-1 p-3 border border-gray-200 outline-none rounded-xl text-sm font-medium focus:ring-1 focus:ring-slate-900"
-                />
-                <button
-                  onClick={handleAddCounterparty}
-                  className="px-6 py-3 bg-slate-900 text-white font-bold rounded-xl text-sm hover:bg-slate-800 transition tracking-wide"
-                >
-                  + Создать
-                </button>
+              <div className="bg-slate-100/80 px-3.5 py-1.5 rounded-full text-xs font-bold text-slate-700 self-start sm:self-center">
+                Всего: {counterparties.length}
               </div>
             </div>
 
+            {/* Add New Counterparty Form Card */}
+            <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-4 sm:p-5 space-y-4">
+              <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-700">
+                <Plus className="w-4 h-4 text-emerald-600" />
+                <span>Добавить нового контрагента</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3">
+                <div className="lg:col-span-4">
+                  <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
+                    Название / ФИО <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newCpName}
+                    onChange={(e) => setNewCpName(e.target.value)}
+                    placeholder="напр. Школа №12 или ИП Иванов"
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900 transition"
+                  />
+                </div>
+
+                <div className="lg:col-span-3">
+                  <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
+                    Категория
+                  </label>
+                  <select
+                    value={newCpType}
+                    onChange={(e) => setNewCpType(e.target.value as any)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900 transition"
+                  >
+                    <option value="school_rent">Аренда школы</option>
+                    <option value="hall_rent">Аренда зала</option>
+                    <option value="coach">Тренер / Ассистент</option>
+                    <option value="other">Другое</option>
+                  </select>
+                </div>
+
+                <div className="lg:col-span-3">
+                  <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
+                    Условия оплаты
+                  </label>
+                  <select
+                    value={newCpPaymentType}
+                    onChange={(e) => setNewCpPaymentType(e.target.value as any)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900 transition"
+                  >
+                    <option value="per_session">За тренировку (сдельная)</option>
+                    <option value="fixed">За месяц (фикс / оклад)</option>
+                  </select>
+                </div>
+
+                <div className="lg:col-span-2">
+                  <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
+                    Ставка (₽)
+                  </label>
+                  <input
+                    type="number"
+                    value={newCpRate || ""}
+                    onChange={(e) => setNewCpRate(Number(e.target.value))}
+                    placeholder="0"
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900 transition"
+                  />
+                </div>
+
+                <div className="sm:col-span-2 lg:col-span-9">
+                  <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
+                    Описание / Дополнительно (опционально)
+                  </label>
+                  <input
+                    type="text"
+                    value={newCpDesc}
+                    onChange={(e) => setNewCpDesc(e.target.value)}
+                    placeholder="Адрес, телефон, реквизиты договора..."
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900 transition"
+                  />
+                </div>
+
+                <div className="sm:col-span-2 lg:col-span-3 flex items-end">
+                  <button
+                    onClick={handleAddCounterparty}
+                    disabled={!newCpName.trim()}
+                    className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold rounded-xl text-xs shadow-md shadow-slate-900/10 transition flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Создать</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Filter and Search Bar */}
             <div className="space-y-4">
-              <h3 className="font-black text-slate-800 mb-4 uppercase tracking-wider text-xs">
-                Список контрагентов ({counterparties.length})
-              </h3>
-              {counterparties.length === 0 ? (
-                <div className="text-sm text-gray-500 py-4 text-center">
-                  Контрагенты не добавлены.
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                {/* Search Input */}
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={cpSearch}
+                    onChange={(e) => setCpSearch(e.target.value)}
+                    placeholder="Поиск по названию или описанию..."
+                    className="w-full pl-10 pr-8 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-slate-900 transition"
+                  />
+                  {cpSearch && (
+                    <button
+                      onClick={() => setCpSearch("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Filter Pills */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+                  {[
+                    { id: "all", label: "Все", count: counterparties.length },
+                    { id: "school_rent", label: "Школы", count: counterparties.filter(c => c.type === "school_rent").length },
+                    { id: "hall_rent", label: "Залы", count: counterparties.filter(c => c.type === "hall_rent").length },
+                    { id: "coach", label: "Тренеры", count: counterparties.filter(c => c.type === "coach").length },
+                    { id: "other", label: "Другое", count: counterparties.filter(c => c.type === "other").length },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setCpFilterType(tab.id as any)}
+                      className={`px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition flex items-center gap-1.5 ${
+                        cpFilterType === tab.id
+                          ? "bg-slate-900 text-white shadow-sm"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      <span>{tab.label}</span>
+                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                        cpFilterType === tab.id ? "bg-slate-800 text-slate-200" : "bg-slate-200 text-slate-600"
+                      }`}>
+                        {tab.count}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Counterparties Grid/List */}
+              {filteredCounterparties.length === 0 ? (
+                <div className="text-center py-12 px-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                  <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
+                    <Building2 className="w-6 h-6" />
+                  </div>
+                  <div className="text-sm font-bold text-slate-700">Контрагенты не найдены</div>
+                  <p className="text-xs text-slate-400 mt-1">
+                    {cpSearch ? "Попробуйте изменить поисковый запрос или сбросить фильтры" : "Добавьте первого контрагента с помощью формы выше"}
+                  </p>
                 </div>
               ) : (
-                <ul className="space-y-2.5">
-                  {counterparties.map((cp) => (
-                    <li
-                      key={cp.id}
-                      className="flex justify-between items-center px-4 py-3 bg-white border border-gray-100 shadow-sm rounded-xl text-sm group hover:border-slate-300 transition"
-                    >
-                      <div className="flex flex-col">
-                        <div className="flex items-center gap-3">
-                          <span className="font-bold text-slate-700">
-                            {cp.name}
-                          </span>
-                          {(cp.paymentType || cp.rate) && (
-                            <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-bold">
-                              {cp.paymentType === 'fixed' ? 'В месяц:' : 'За тренировку:'} {cp.rate} ₽
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-[10px] text-gray-500 mt-1">
-                          {cp.type === 'school_rent' ? 'Аренда школы' : cp.type === 'hall_rent' ? 'Аренда зала' : cp.type === 'coach' ? 'Тренер' : 'Другое'}
-                          {cp.description ? ` • ${cp.description}` : ''}
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => deleteCounterparty(cp.id)}
-                        className="text-red-500 opacity-0 group-hover:opacity-100 transition p-1 hover:bg-red-50 rounded"
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  {filteredCounterparties.map((cp) => {
+                    const getTypeBadge = (type: string) => {
+                      switch (type) {
+                        case "school_rent":
+                          return { label: "Аренда школы", bg: "bg-blue-50 text-blue-700 border-blue-100", icon: Building2 };
+                        case "hall_rent":
+                          return { label: "Аренда зала", bg: "bg-purple-50 text-purple-700 border-purple-100", icon: Building2 };
+                        case "coach":
+                          return { label: "Тренер", bg: "bg-emerald-50 text-emerald-700 border-emerald-100", icon: User };
+                        default:
+                          return { label: "Другое", bg: "bg-amber-50 text-amber-700 border-amber-100", icon: Wallet };
+                      }
+                    };
+
+                    const badge = getTypeBadge(cp.type);
+                    const IconComp = badge.icon;
+
+                    return (
+                      <div
+                        key={cp.id}
+                        className="bg-white border border-slate-200/90 rounded-2xl p-4 hover:shadow-md transition group flex flex-col justify-between gap-3 relative"
                       >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-3 min-w-0">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${badge.bg}`}>
+                              <IconComp className="w-5 h-5" />
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="font-bold text-sm text-slate-900 truncate group-hover:text-red-600 transition">
+                                {cp.name}
+                              </h4>
+                              <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${badge.bg}`}>
+                                  {badge.label}
+                                </span>
+                                {(cp.rate !== undefined && cp.rate > 0) || cp.paymentType ? (
+                                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700">
+                                    {cp.paymentType === "fixed" ? "Фикс:" : "Сдельная:"}{" "}
+                                    {(cp.rate || 0).toLocaleString("ru-RU")} ₽
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Quick Action Buttons */}
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              onClick={() => handleStartEditCp(cp)}
+                              title="Редактировать контрагента"
+                              className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setDeletingCp(cp)}
+                              title="Удалить контрагента"
+                              className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Description / Info */}
+                        {cp.description ? (
+                          <div className="text-xs text-slate-500 bg-slate-50/80 rounded-xl p-2.5 border border-slate-100 flex items-start gap-2">
+                            <Info className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                            <span className="line-clamp-2 font-medium">{cp.description}</span>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
 
@@ -4583,6 +4805,539 @@ export const FinanceModule: React.FC = () => {
                 className="px-5 py-2.5 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Подтвердить выплату
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Coach Salary Detail Modal */}
+      {selectedCoachIdForDetail && (() => {
+        const coach = coaches.find((c) => c.id === selectedCoachIdForDetail);
+        if (!coach) return null;
+
+        // Find coach sessions for gridFilterMonth
+        const coachSessions = trainingSessions
+          .filter((ts) => {
+            const tsMonth = toYearMonthString(ts.dateString, ts.date);
+            if (tsMonth !== gridFilterMonth) return false;
+
+            const isMain =
+              ts.coachId === coach.id ||
+              (ts.coachName && coach.name && ts.coachName.includes(coach.name));
+            const isAssistant =
+              ts.assistantId === coach.id ||
+              (ts.assistantName && coach.name && ts.assistantName.includes(coach.name));
+
+            return isMain || isAssistant;
+          })
+          .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+
+        // Find coach finance records
+        const periodFinances = finances.filter(
+          (f) => (f.targetMonth || f.date.substring(0, 7)) === gridFilterMonth
+        );
+        const coachFinances = periodFinances
+          .filter((f) => {
+            const matchesCoach =
+              f.coachId === coach.id ||
+              (f.description && coach.name && f.description.includes(coach.name));
+            const isSalaryCat =
+              f.category === "Зарплата" ||
+              f.category === "Зарплаты" ||
+              f.category === "Премии";
+            return matchesCoach && isSalaryCat;
+          })
+          .sort((a, b) => b.date.localeCompare(a.date));
+
+        // Calculate stats
+        const rate = coach.rate || 0;
+        const baseSalary = coach.paymentType === "fixed" ? rate : 0;
+        const totalSessions = coachSessions.length;
+
+        const accruedSessionRecords = periodFinances.filter(
+          (f) =>
+            f.type === "expense" &&
+            f.category === "Зарплата" &&
+            f.paymentStatus === "accrued" &&
+            (f.coachId === coach.id || (f.description && coach.name && f.description.includes(coach.name)))
+        );
+        const accruedFromRecords = accruedSessionRecords.reduce(
+          (sum, f) => sum + Number(f.amount || 0),
+          0
+        );
+
+        const surcharges =
+          accruedFromRecords > 0
+            ? accruedFromRecords
+            : coach.paymentType === "per_session"
+            ? totalSessions * (rate || 1500)
+            : 0;
+
+        const bonuses = periodFinances
+          .filter(
+            (f) =>
+              f.type === "expense" &&
+              f.category === "Премии" &&
+              (f.coachId === coach.id || (f.description && coach.name && f.description.includes(coach.name)))
+          )
+          .reduce((sum, f) => sum + Number(f.amount || 0), 0);
+
+        const accrued = baseSalary + surcharges + bonuses;
+
+        const paid = periodFinances
+          .filter(
+            (f) =>
+              f.type === "expense" &&
+              (f.category === "Зарплата" || f.category === "Зарплаты") &&
+              f.paymentStatus !== "accrued" &&
+              (f.coachId === coach.id || (f.description && coach.name && f.description.includes(coach.name)))
+          )
+          .reduce((sum, f) => sum + Number(f.amount || 0), 0);
+
+        const toPay = Math.max(0, accrued - paid);
+
+        const getMonthName = (monthStr: string) => {
+          const d = new Date(monthStr + "-01");
+          const mName = d.toLocaleString("ru-RU", { month: "long", year: "numeric" });
+          return mName.charAt(0).toUpperCase() + mName.slice(1);
+        };
+
+        return (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-white rounded-3xl p-6 md:p-8 w-full max-w-4xl shadow-2xl animate-in zoom-in-95 duration-200 my-8 max-h-[90vh] flex flex-col">
+              {/* Header */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5 shrink-0">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-red-500 to-rose-400 text-white font-black text-lg flex items-center justify-center shadow-md shadow-red-500/20 overflow-hidden shrink-0">
+                    {coach.avatarUrl ? (
+                      <img src={coach.avatarUrl} alt={coach.name} className="w-full h-full object-cover" />
+                    ) : (
+                      coach.name.charAt(0)
+                    )}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-xl font-black text-slate-900">{coach.name}</h3>
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-600">
+                        {coach.role}
+                      </span>
+                    </div>
+                    <p className="text-xs font-medium text-slate-500 mt-0.5">
+                      Тип оплаты:{" "}
+                      <strong className="text-slate-800">
+                        {coach.paymentType === "fixed"
+                          ? `Оклад (${(coach.rate || 0).toLocaleString("ru-RU")} ₽/мес)`
+                          : `За тренировку (${(coach.rate || 1500).toLocaleString("ru-RU")} ₽/зан)`}
+                      </strong>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-red-600" />
+                    <input
+                      type="month"
+                      value={gridFilterMonth}
+                      onChange={(e) => setGridFilterMonth(e.target.value)}
+                      className="outline-none bg-transparent font-bold cursor-pointer"
+                    />
+                  </div>
+                  <button
+                    onClick={() => setSelectedCoachIdForDetail(null)}
+                    className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 my-5 shrink-0">
+                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3.5">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Проведено
+                  </div>
+                  <div className="text-base md:text-lg font-black text-slate-900">
+                    {totalSessions} <span className="text-xs font-normal text-slate-500">тренировок</span>
+                  </div>
+                </div>
+                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3.5">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Оклад / Сдельная
+                  </div>
+                  <div className="text-base md:text-lg font-black text-slate-900">
+                    {(baseSalary + surcharges).toLocaleString("ru-RU")} ₽
+                  </div>
+                </div>
+                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3.5">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Премии
+                  </div>
+                  <div className="text-base md:text-lg font-black text-slate-900">
+                    {bonuses.toLocaleString("ru-RU")} ₽
+                  </div>
+                </div>
+                <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-3.5">
+                  <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mb-1">
+                    Итого начислено
+                  </div>
+                  <div className="text-base md:text-lg font-black text-emerald-700">
+                    {accrued.toLocaleString("ru-RU")} ₽
+                  </div>
+                </div>
+                <div className="bg-rose-50/60 border border-rose-100 rounded-2xl p-3.5 col-span-2 md:col-span-1">
+                  <div className="text-[10px] font-bold text-rose-600 uppercase tracking-wider mb-1">
+                    К выплате
+                  </div>
+                  <div className="text-base md:text-lg font-black text-rose-700">
+                    {toPay.toLocaleString("ru-RU")} ₽
+                  </div>
+                </div>
+              </div>
+
+              {/* Subtabs inside Modal */}
+              <div className="flex border-b border-slate-100 mb-4 shrink-0">
+                <button
+                  onClick={() => setCoachDetailSubTab("sessions")}
+                  className={`pb-3 px-4 text-xs font-bold border-b-2 transition flex items-center gap-2 ${
+                    coachDetailSubTab === "sessions"
+                      ? "border-red-600 text-red-600"
+                      : "border-transparent text-slate-400 hover:text-slate-600"
+                  }`}
+                >
+                  <Calendar className="w-4 h-4" />
+                  <span>Проведенные тренировки ({coachSessions.length})</span>
+                </button>
+                <button
+                  onClick={() => setCoachDetailSubTab("finances")}
+                  className={`pb-3 px-4 text-xs font-bold border-b-2 transition flex items-center gap-2 ${
+                    coachDetailSubTab === "finances"
+                      ? "border-red-600 text-red-600"
+                      : "border-transparent text-slate-400 hover:text-slate-600"
+                  }`}
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>Начисления и выплаты ({coachFinances.length})</span>
+                </button>
+              </div>
+
+              {/* Table Container */}
+              <div className="overflow-y-auto flex-1 min-h-0 rounded-2xl border border-slate-100">
+                {coachDetailSubTab === "sessions" ? (
+                  coachSessions.length === 0 ? (
+                    <div className="p-10 text-center text-slate-400 text-xs font-medium">
+                      За {getMonthName(gridFilterMonth)} проведенные тренировки для данного сотрудника не найдены.
+                    </div>
+                  ) : (
+                    <table className="w-full text-left text-xs whitespace-nowrap">
+                      <thead className="bg-slate-50 text-slate-400 font-bold text-[10px] uppercase sticky top-0">
+                        <tr>
+                          <th className="px-4 py-3 border-b border-slate-100">Дата</th>
+                          <th className="px-4 py-3 border-b border-slate-100">Группа</th>
+                          <th className="px-4 py-3 border-b border-slate-100">Роль</th>
+                          <th className="px-4 py-3 border-b border-slate-100 text-center">Учеников на занятии</th>
+                          <th className="px-4 py-3 border-b border-slate-100 text-right">Ставка</th>
+                          <th className="px-4 py-3 border-b border-slate-100 text-right">Начисление</th>
+                          <th className="px-4 py-3 border-b border-slate-100 text-center">Протокол</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {coachSessions.map((ts) => {
+                          const isMain =
+                            ts.coachId === coach.id ||
+                            (ts.coachName && coach.name && ts.coachName.includes(coach.name));
+                          const roleLabel = isMain ? "Главный тренер" : "Ассистент";
+                          const perSessionRate = coach.rate || 1500;
+                          const sessionAccrual = coach.paymentType === "per_session" ? perSessionRate : 0;
+
+                          let formattedDate = ts.dateString || ts.date;
+                          if (ts.date && ts.date.includes("-")) {
+                            const [y, m, d] = ts.date.split("-");
+                            formattedDate = `${d}.${m}.${y}`;
+                          }
+
+                          return (
+                            <tr key={ts.id} className="hover:bg-slate-50 transition">
+                              <td className="px-4 py-3 font-bold text-slate-900">{formattedDate}</td>
+                              <td className="px-4 py-3 font-semibold text-slate-800">
+                                <span className="bg-slate-100 text-slate-800 px-2.5 py-1 rounded-lg text-[11px] font-bold">
+                                  {ts.groupName || "Группа"}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <span
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    isMain
+                                      ? "bg-blue-50 text-blue-700"
+                                      : "bg-purple-50 text-purple-700"
+                                  }`}
+                                >
+                                  {roleLabel}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-center font-bold text-emerald-600">
+                                {ts.presentCount || 0} учен.
+                              </td>
+                              <td className="px-4 py-3 text-right text-slate-600 font-medium">
+                                {coach.paymentType === "per_session"
+                                  ? `${perSessionRate.toLocaleString("ru-RU")} ₽`
+                                  : "В окладе"}
+                              </td>
+                              <td className="px-4 py-3 text-right font-bold text-slate-900">
+                                {coach.paymentType === "per_session"
+                                  ? `${sessionAccrual.toLocaleString("ru-RU")} ₽`
+                                  : "—"}
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                {ts.photoUrl ? (
+                                  <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-bold">
+                                    С фотоотчетом
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-medium">
+                                    Заполнено
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )
+                ) : (
+                  coachFinances.length === 0 ? (
+                    <div className="p-10 text-center text-slate-400 text-xs font-medium">
+                      За {getMonthName(gridFilterMonth)} финансовые записи по сотруднику отсутствуют.
+                    </div>
+                  ) : (
+                    <table className="w-full text-left text-xs whitespace-nowrap">
+                      <thead className="bg-slate-50 text-slate-400 font-bold text-[10px] uppercase sticky top-0">
+                        <tr>
+                          <th className="px-4 py-3 border-b border-slate-100">Дата</th>
+                          <th className="px-4 py-3 border-b border-slate-100">Категория / Тип</th>
+                          <th className="px-4 py-3 border-b border-slate-100">Описание</th>
+                          <th className="px-4 py-3 border-b border-slate-100 text-right">Сумма</th>
+                          <th className="px-4 py-3 border-b border-slate-100 text-center">Статус</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {coachFinances.map((f) => {
+                          const isAccrual = f.paymentStatus === "accrued";
+                          return (
+                            <tr key={f.id} className="hover:bg-slate-50 transition">
+                              <td className="px-4 py-3 font-bold text-slate-900">{f.date}</td>
+                              <td className="px-4 py-3 font-semibold text-slate-800">{f.category}</td>
+                              <td className="px-4 py-3 text-slate-600 max-w-xs truncate">{f.description}</td>
+                              <td
+                                className={`px-4 py-3 text-right font-bold ${
+                                  isAccrual ? "text-emerald-600" : "text-slate-900"
+                                }`}
+                              >
+                                {Number(f.amount || 0).toLocaleString("ru-RU")} ₽
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <span
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    isAccrual
+                                      ? "bg-amber-50 text-amber-700"
+                                      : "bg-emerald-50 text-emerald-700"
+                                  }`}
+                                >
+                                  {isAccrual ? "Начисление" : "Выплачено"}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="mt-5 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 shrink-0">
+                <div className="text-xs text-slate-500 font-medium">
+                  Детализация за {getMonthName(gridFilterMonth)}
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setSelectedCoachIdForDetail(null)}
+                    className="px-4 py-2.5 rounded-xl font-bold text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 transition"
+                  >
+                    Закрыть
+                  </button>
+                  {toPay > 0 && (
+                    <button
+                      onClick={() => {
+                        setPayoutType("salary");
+                        setPayoutTargetName(coach.name);
+                        setPayoutTargetId(coach.id);
+                        setPayoutAmount(String(toPay));
+                        setSelectedCoachIdForDetail(null);
+                        setPayoutModalOpen(true);
+                      }}
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-md shadow-emerald-500/20 transition flex items-center gap-2"
+                    >
+                      <CreditCard className="w-4 h-4" />
+                      <span>Выплатить {toPay.toLocaleString("ru-RU")} ₽</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Edit Counterparty Modal */}
+      {editingCp && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 w-full max-w-lg shadow-2xl animate-in zoom-in-95 duration-200 my-8">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
+                  <Edit2 className="w-5 h-5 text-slate-800" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">
+                    Редактирование контрагента
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    Измените параметры и условия работы
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingCp(null)}
+                className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">
+                  Название / ФИО <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editCpName}
+                  onChange={(e) => setEditCpName(e.target.value)}
+                  placeholder="Имя или название контрагента"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900 transition"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">
+                    Категория
+                  </label>
+                  <select
+                    value={editCpType}
+                    onChange={(e) => setEditCpType(e.target.value as any)}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900 transition"
+                  >
+                    <option value="school_rent">Аренда школы</option>
+                    <option value="hall_rent">Аренда зала</option>
+                    <option value="coach">Тренер / Ассистент</option>
+                    <option value="other">Другое</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">
+                    Условия оплаты
+                  </label>
+                  <select
+                    value={editCpPaymentType}
+                    onChange={(e) => setEditCpPaymentType(e.target.value as any)}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900 transition"
+                  >
+                    <option value="per_session">За тренировку (сдельная)</option>
+                    <option value="fixed">За месяц (фикс / оклад)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">
+                  Ставка / Стоимость (₽)
+                </label>
+                <input
+                  type="number"
+                  value={editCpRate || ""}
+                  onChange={(e) => setEditCpRate(Number(e.target.value))}
+                  placeholder="0"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900 transition"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">
+                  Описание / Заметки / Реквизиты
+                </label>
+                <textarea
+                  value={editCpDesc}
+                  onChange={(e) => setEditCpDesc(e.target.value)}
+                  rows={3}
+                  placeholder="Адрес площадки, контакты управляющего, детали договора..."
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900 transition resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setEditingCp(null)}
+                className="px-4 py-2.5 rounded-xl font-bold text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 transition"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={handleSaveEditCp}
+                disabled={!editCpName.trim()}
+                className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold rounded-xl text-xs shadow-md shadow-slate-900/10 transition"
+              >
+                Сохранить изменения
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deletingCp && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-6 h-6" />
+            </div>
+
+            <h3 className="text-lg font-black text-slate-900 text-center mb-1">
+              Удалить контрагента?
+            </h3>
+            <p className="text-xs text-slate-500 font-medium text-center mb-6">
+              Вы уверены, что хотите удалить контрагента <strong className="text-slate-800">«{deletingCp.name}»</strong>? Это действие нельзя отменить.
+            </p>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setDeletingCp(null)}
+                className="flex-1 py-2.5 rounded-xl font-bold text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 transition"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={handleConfirmDeleteCp}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs shadow-md shadow-rose-600/20 transition"
+              >
+                Удалить
               </button>
             </div>
           </div>

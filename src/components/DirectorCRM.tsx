@@ -193,6 +193,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
     coaches,
     groups,
     trainingSessions,
+    deleteTrainingSession,
     completeTask,
     addTask,
     deleteTask,
@@ -2184,7 +2185,22 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                 </div>
 
                 {/* Modal Footer */}
-                <div className="p-4 bg-slate-50 border-t flex justify-end">
+                <div className="p-4 bg-slate-50 border-t flex justify-between items-center">
+                  <button
+                    onClick={async () => {
+                      if (
+                        window.confirm(
+                          `Удалить ведомость по тренировке группы "${selectedSessionDetail.groupName}" от ${selectedSessionDetail.dateString}?`
+                        )
+                      ) {
+                        await deleteTrainingSession(selectedSessionDetail.id);
+                        setSelectedSessionDetail(null);
+                      }
+                    }}
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs transition shadow-sm"
+                  >
+                    Удалить ведомость
+                  </button>
                   <button
                     onClick={() => setSelectedSessionDetail(null)}
                     className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition"
