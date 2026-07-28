@@ -26,12 +26,10 @@ export const JoinPage: React.FC = () => {
   const [submitted, setSubmitted] = useState(false);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
 
-  // Generate Kids Football Image
-  // Placeholders for local files.
-  // User needs to upload them to public/ folder with these names.
-  const gallery1 = "/111.jpg";
-  const gallery2 = "/we.jpg";
-  const gallery3 = "/ball.jpg";
+  // Optimized fast WebP gallery images
+  const gallery1 = "/111.webp";
+  const gallery2 = "/we.webp";
+  const gallery3 = "/ball.webp";
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,10 +95,11 @@ export const JoinPage: React.FC = () => {
         <div className="absolute inset-0 z-0">
           <div className="absolute inset-0 bg-gradient-to-r from-slate-900 via-slate-900/90 to-transparent z-10" />
           <img
-            src={heroImage}
+            src="/hero_bg.webp"
             alt="Футбол Амкар"
             className="w-full h-full object-cover opacity-80"
             fetchPriority="high"
+            loading="eager"
             decoding="async"
           />
         </div>

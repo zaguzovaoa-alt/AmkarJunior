@@ -102,7 +102,7 @@ export const AuthScreen: React.FC = () => {
     <div className="min-h-screen flex flex-col items-center justify-center p-4 font-sans text-slate-800 relative bg-slate-900">
       <div
         className="absolute inset-0 z-0 bg-cover bg-center opacity-40 mix-blend-overlay"
-        style={{ backgroundImage: `url(${heroImage})` }}
+        style={{ backgroundImage: `url('/hero_bg.webp')` }}
       />
 
       <motion.div

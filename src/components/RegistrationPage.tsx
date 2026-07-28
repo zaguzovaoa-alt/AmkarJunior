@@ -189,7 +189,7 @@ export const RegistrationPage: React.FC = () => {
     <div className="min-h-screen font-sans pb-20 relative bg-slate-50">
       <div
         className="fixed inset-0 z-0 bg-cover bg-center opacity-10 mix-blend-overlay"
-        style={{ backgroundImage: `url(${heroImage})` }}
+        style={{ backgroundImage: `url('/hero_bg.webp')` }}
       />
       <div className="relative z-10">
         <header className="bg-white/80 border-b border-white/20 py-4 px-6 fixed top-0 w-full z-40 backdrop-blur-md shadow-sm">
