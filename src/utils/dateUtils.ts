@@ -100,3 +100,12 @@ export function formatSessionDateDisplay(dateISO?: string, dateStr?: string): st
   return dateFormatted;
 }
 
+export function cleanClientNotes(notes?: string): string {
+  if (!notes) return "";
+  return notes
+    .replace(/\[Посещаемость[^\]]*\]:\s*Тренер прикрепил фотоотчет\.?/gi, "")
+    .replace(/^\s*[\r\n]/gm, "")
+    .trim();
+}
+
+

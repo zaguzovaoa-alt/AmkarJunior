@@ -461,7 +461,7 @@ export const HQSettings: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-bold text-slate-600 uppercase">
-                    Название академии / школы
+                    Название школы
                   </label>
                   <div className="relative">
                     <Building className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />

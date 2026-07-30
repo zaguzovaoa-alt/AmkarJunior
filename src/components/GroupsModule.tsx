@@ -9,15 +9,21 @@ import {
   UserMinus,
   Search,
   Calendar,
+  CalendarCheck,
   Plus,
   X,
   GraduationCap,
   Check,
   Edit2,
   Trophy,
+  Table,
+  FileText,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { parseScheduleString } from "../utils/scheduleParser";
-import { toISODateString, formatSessionDateDisplay } from "../utils/dateUtils";
+import { toISODateString, formatSessionDateDisplay, parseSessionDate } from "../utils/dateUtils";
 
 export const GroupsModule: React.FC = () => {
   const {
@@ -106,6 +112,25 @@ export const GroupsModule: React.FC = () => {
   
   // Analytics modal state
   const [analyticsGroup, setAnalyticsGroup] = useState<any | null>(null);
+  const [analyticsModalTab, setAnalyticsModalTab] = useState<"matrix" | "sessions">("matrix");
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
+
+  const handleMonthChange = (monthStr: string) => {
+    setSelectedMonth(monthStr);
+    if (monthStr && /^\d{4}-\d{2}$/.test(monthStr)) {
+      const [yStr, mStr] = monthStr.split("-");
+      const year = parseInt(yStr, 10);
+      const month = parseInt(mStr, 10);
+      const firstDay = `${year}-${String(month).padStart(2, "0")}-01`;
+      const lastDayNum = new Date(year, month, 0).getDate();
+      const lastDay = `${year}-${String(month).padStart(2, "0")}-${String(lastDayNum).padStart(2, "0")}`;
+      setAttendanceStartDate(firstDay);
+      setAttendanceEndDate(lastDay);
+    }
+  };
 
   // 4. Dynamic metrics
   const totalGroupsCount = groups.length;
@@ -520,7 +545,19 @@ export const GroupsModule: React.FC = () => {
                           </h3>
                         </div>
 
-                        <div className="flex items-center space-x-1 shrink-0">
+                        <div className="flex items-center space-x-1.5 shrink-0">
+                          <button
+                            onClick={() => {
+                              setAnalyticsGroup(group);
+                              setAnalyticsModalTab("matrix");
+                            }}
+                            className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold transition flex items-center space-x-1 cursor-pointer shadow-xs"
+                            title="Посещаемость за месяц (табель)"
+                          >
+                            <CalendarCheck className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Посещения</span>
+                          </button>
+
                           <button
                             onClick={() => handleStartEdit(group)}
                             className="p-1.5 hover:bg-neutral-50 text-slate-500 hover:text-red-650 rounded-lg transition cursor-pointer"
@@ -1192,103 +1229,445 @@ export const GroupsModule: React.FC = () => {
           </div>
         </div>
       )}
-      {/* ANALYTICS MODAL */}
+      {/* ANALYTICS & ATTENDANCE MODAL */}
       {analyticsGroup && (
-        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95">
-            <div className="sticky top-0 bg-white border-b border-gray-100 p-6 flex justify-between items-center z-10">
-              <div>
-                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">
-                  Аналитика: {analyticsGroup.name}
-                </h3>
-                <p className="text-xs font-semibold text-gray-500 mt-1">
-                  С {attendanceStartDate} по {attendanceEndDate}
-                </p>
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-3 md:p-6">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95">
+            {/* Modal Header */}
+            <div className="bg-slate-900 text-white p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+                  <CalendarCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-black uppercase tracking-tight text-white">
+                      Табель посещаемости: {analyticsGroup.name}
+                    </h3>
+                    {analyticsGroup.isSelectTeam && (
+                      <span className="px-2 py-0.5 bg-red-500/30 text-red-300 text-[10px] font-bold uppercase rounded border border-red-500/40">
+                        Сборная
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-400 font-medium mt-0.5">
+                    Учет посещаемости тренировок воспитанников группы
+                  </p>
+                </div>
               </div>
-              <button
-                onClick={() => setAnalyticsGroup(null)}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <div className="p-6">
-              {(() => {
-                const sessions = trainingSessions?.filter(s => {
-                  const sIso = toISODateString(s.dateString, s.date);
-                  return (s.groupId === analyticsGroup.id || s.groupName === analyticsGroup.name) &&
-                    sIso >= attendanceStartDate &&
-                    sIso <= attendanceEndDate;
-                }).sort((a,b) => toISODateString(b.dateString, b.date).localeCompare(toISODateString(a.dateString, a.date))) || [];
 
-                if (sessions.length === 0) {
+              <div className="flex items-center space-x-3">
+                {/* Month Picker Control */}
+                <div className="flex items-center space-x-2 bg-slate-800/90 border border-slate-700 rounded-xl px-3 py-1.5">
+                  <Calendar className="w-4 h-4 text-emerald-400" />
+                  <span className="text-xs text-slate-400 font-semibold">Месяц:</span>
+                  <input
+                    type="month"
+                    value={selectedMonth}
+                    onChange={(e) => handleMonthChange(e.target.value)}
+                    className="bg-transparent text-xs font-bold text-white outline-none cursor-pointer"
+                  />
+                </div>
+
+                <button
+                  onClick={() => setAnalyticsGroup(null)}
+                  className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition cursor-pointer"
+                  title="Закрыть"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Sub-header Navigation Tabs */}
+            <div className="bg-slate-50 border-b border-slate-200 px-6 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setAnalyticsModalTab("matrix")}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 cursor-pointer ${
+                    analyticsModalTab === "matrix"
+                      ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
+                      : "bg-white text-slate-700 border hover:bg-slate-100"
+                  }`}
+                >
+                  <Table className="w-4 h-4" />
+                  <span>Табель за месяц (фамилии и даты)</span>
+                </button>
+
+                <button
+                  onClick={() => setAnalyticsModalTab("sessions")}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 cursor-pointer ${
+                    analyticsModalTab === "sessions"
+                      ? "bg-slate-900 text-white shadow-md"
+                      : "bg-white text-slate-700 border hover:bg-slate-100"
+                  }`}
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>Журнал ведомостей</span>
+                </button>
+              </div>
+
+              <div className="text-xs text-slate-500 font-mono font-semibold">
+                Период: <span className="text-slate-900 font-bold">{attendanceStartDate}</span> — <span className="text-slate-900 font-bold">{attendanceEndDate}</span>
+              </div>
+            </div>
+
+            {/* Modal Content Body */}
+            <div className="p-6 overflow-y-auto flex-1 bg-slate-50/50">
+              {(() => {
+                // Filter sessions for this group within the selected period
+                const sessions = (trainingSessions || [])
+                  .filter((s) => {
+                    const sIso = toISODateString(s.dateString, s.date);
+                    return (
+                      (s.groupId === analyticsGroup.id || s.groupName === analyticsGroup.name) &&
+                      sIso >= attendanceStartDate &&
+                      sIso <= attendanceEndDate
+                    );
+                  })
+                  .sort((a, b) =>
+                    toISODateString(a.dateString, a.date).localeCompare(
+                      toISODateString(b.dateString, b.date)
+                    )
+                  );
+
+                // Build full list of group students
+                const groupStudents = (() => {
+                  const list = analyticsGroup.isSelectTeam
+                    ? clients.filter((c) => analyticsGroup.selectedClientIds?.includes(c.id))
+                    : clients.filter(
+                        (c) =>
+                          c.groupId === analyticsGroup.id ||
+                          (c.groupName &&
+                            analyticsGroup.name &&
+                            c.groupName.trim().toLowerCase() === analyticsGroup.name.trim().toLowerCase())
+                      );
+
+                  const existingIds = new Set(list.map((c) => c.id));
+                  sessions.forEach((s) => {
+                    s.records?.forEach((r) => {
+                      if (r.clientId && !existingIds.has(r.clientId)) {
+                        const found = clients.find((c) => c.id === r.clientId);
+                        if (found) {
+                          list.push(found);
+                          existingIds.add(found.id);
+                        }
+                      }
+                    });
+                  });
+
+                  return list.sort((a, b) =>
+                    `${a.childSurname || ""} ${a.childName || ""}`.localeCompare(
+                      `${b.childSurname || ""} ${b.childName || ""}`,
+                      "ru"
+                    )
+                  );
+                })();
+
+                const totalPresentAll = sessions.reduce((acc, s) => acc + s.presentCount, 0);
+                const totalAbsentAll = sessions.reduce((acc, s) => acc + s.absentCount, 0);
+                const totalSickAll = sessions.reduce((acc, s) => acc + s.sickCount, 0);
+
+                if (analyticsModalTab === "sessions") {
                   return (
-                    <div className="p-10 text-center text-gray-500 text-sm font-medium border-2 border-dashed border-gray-200 rounded-xl">
-                      Отсутствуют данные за выбранный период.
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-4 gap-4">
+                        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
+                          <div className="text-[10px] uppercase font-bold text-slate-500">Всего тренировок</div>
+                          <div className="text-2xl font-black text-slate-800 mt-1">{sessions.length}</div>
+                        </div>
+                        <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 shadow-xs">
+                          <div className="text-[10px] uppercase font-bold text-emerald-600">Посещений</div>
+                          <div className="text-2xl font-black text-emerald-700 mt-1">{totalPresentAll}</div>
+                        </div>
+                        <div className="bg-red-50 border border-red-100 rounded-xl p-4 shadow-xs">
+                          <div className="text-[10px] uppercase font-bold text-red-600">Пропусков</div>
+                          <div className="text-2xl font-black text-red-700 mt-1">{totalAbsentAll}</div>
+                        </div>
+                        <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 shadow-xs">
+                          <div className="text-[10px] uppercase font-bold text-amber-600">По болезни</div>
+                          <div className="text-2xl font-black text-amber-700 mt-1">{totalSickAll}</div>
+                        </div>
+                      </div>
+
+                      {sessions.length === 0 ? (
+                        <div className="p-10 text-center text-gray-500 text-sm font-medium border-2 border-dashed border-gray-200 rounded-xl bg-white">
+                          Отсутствуют проведенные тренировки за выбранный период.
+                        </div>
+                      ) : (
+                        <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xs bg-white">
+                          <div className="bg-slate-50 grid grid-cols-12 gap-4 px-4 py-3 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-widest">
+                            <div className="col-span-3">Дата</div>
+                            <div className="col-span-2 text-center">Присутствовали</div>
+                            <div className="col-span-2 text-center">Отсутствовали</div>
+                            <div className="col-span-3">Ассистент</div>
+                            <div className="col-span-2">Тренер</div>
+                          </div>
+                          <div className="max-h-[50vh] overflow-y-auto divide-y divide-slate-100">
+                            {sessions.map((s) => (
+                              <div key={s.id} className="grid grid-cols-12 gap-4 px-4 py-3 hover:bg-slate-50 transition items-center">
+                                <div className="col-span-3 font-mono text-xs font-bold text-slate-800">
+                                  {formatSessionDateDisplay(s.date, s.dateString)}
+                                </div>
+                                <div className="col-span-2 text-center font-bold text-emerald-600 bg-emerald-50 py-1 rounded w-16 mx-auto">
+                                  {s.presentCount}
+                                </div>
+                                <div className="col-span-2 text-center font-bold text-red-500 bg-red-50 py-1 rounded w-16 mx-auto">
+                                  {s.absentCount + s.sickCount}
+                                </div>
+                                <div className="col-span-3 text-xs font-medium text-slate-700 truncate pr-2">
+                                  {s.assistantName ? (
+                                    <span className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded-md font-bold whitespace-nowrap">
+                                      {s.assistantName}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400 italic">Нет</span>
+                                  )}
+                                </div>
+                                <div className="col-span-2 text-xs font-bold text-slate-800 truncate">
+                                  {s.coachName}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 }
 
-                const totalPresent = sessions.reduce((acc, s) => acc + s.presentCount, 0);
-                const totalAbsent = sessions.reduce((acc, s) => acc + s.absentCount, 0);
-                const totalSick = sessions.reduce((acc, s) => acc + s.sickCount, 0);
-                
+                // Default: TAB "matrix" (Full monthly attendance matrix)
+                if (groupStudents.length === 0) {
+                  return (
+                    <div className="p-12 text-center bg-white border border-dashed rounded-2xl space-y-3">
+                      <Users className="w-10 h-10 text-slate-300 mx-auto" />
+                      <div className="text-sm font-bold text-slate-800">В группе пока нет воспитанников</div>
+                      <p className="text-xs text-slate-400">Добавьте учеников в состав группы для формирования табеля посещаемости.</p>
+                    </div>
+                  );
+                }
+
                 return (
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-4 gap-4">
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                        <div className="text-[10px] uppercase font-bold text-slate-500">Всего тренировок</div>
-                        <div className="text-2xl font-black text-slate-800 mt-1">{sessions.length}</div>
+                  <div className="space-y-5">
+                    {/* Summary statistics bar */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+                      <div className="flex items-center space-x-4 text-xs font-semibold">
+                        <div>
+                          <span className="text-slate-400">Учеников в группе:</span>{" "}
+                          <strong className="text-slate-900 font-bold">{groupStudents.length} чел.</strong>
+                        </div>
+                        <div className="h-4 w-px bg-slate-200"></div>
+                        <div>
+                          <span className="text-slate-400">Тренировок за период:</span>{" "}
+                          <strong className="text-slate-900 font-bold">{sessions.length}</strong>
+                        </div>
                       </div>
-                      <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4">
-                        <div className="text-[10px] uppercase font-bold text-emerald-600">Посещений</div>
-                        <div className="text-2xl font-black text-emerald-700 mt-1">{totalPresent}</div>
-                      </div>
-                      <div className="bg-red-50 border border-red-100 rounded-xl p-4">
-                        <div className="text-[10px] uppercase font-bold text-red-600">Пропусков</div>
-                        <div className="text-2xl font-black text-red-700 mt-1">{totalAbsent}</div>
-                      </div>
-                      <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
-                        <div className="text-[10px] uppercase font-bold text-amber-600">По болезни</div>
-                        <div className="text-2xl font-black text-amber-700 mt-1">{totalSick}</div>
+
+                      {/* Legend */}
+                      <div className="flex flex-wrap items-center gap-3 text-[11px] font-medium">
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold">
+                          <span>✓</span> Был
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-red-50 text-red-700 border border-red-200 font-bold">
+                          <span>Н</span> Пропуск
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 font-bold">
+                          <span>Б</span> Болезнь
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200 font-bold">
+                          <span>П</span> Пробное
+                        </span>
+                        <span className="text-slate-400 font-mono">- Не отмечался</span>
                       </div>
                     </div>
 
-                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                      <div className="bg-slate-50 grid grid-cols-12 gap-4 px-4 py-3 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-widest">
-                        <div className="col-span-3">Дата</div>
-                        <div className="col-span-2 text-center">Присутствовали</div>
-                        <div className="col-span-2 text-center">Отсутствовали</div>
-                        <div className="col-span-3">Ассистент</div>
-                        <div className="col-span-2">Тренер</div>
+                    {sessions.length === 0 ? (
+                      <div className="p-10 text-center bg-white border border-dashed border-slate-300 rounded-2xl text-slate-500 text-xs">
+                        <Calendar className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                        <div className="font-bold text-slate-700 text-sm mb-1">За выбранный период нет проведенных тренировок</div>
+                        <p className="text-slate-400">Выберите другой месяц или укажите другой диапазон дат выше.</p>
                       </div>
-                      <div className="max-h-[50vh] overflow-y-auto divide-y divide-slate-100">
-                        {sessions.map(s => (
-                          <div key={s.id} className="grid grid-cols-12 gap-4 px-4 py-3 hover:bg-slate-50 transition items-center">
-                            <div className="col-span-3 font-mono text-xs font-bold text-slate-800">
-                              {formatSessionDateDisplay(s.date, s.dateString)}
-                            </div>
-                            <div className="col-span-2 text-center font-bold text-emerald-600 bg-emerald-50 py-1 rounded w-16 mx-auto">
-                              {s.presentCount}
-                            </div>
-                            <div className="col-span-2 text-center font-bold text-red-500 bg-red-50 py-1 rounded w-16 mx-auto">
-                              {s.absentCount + s.sickCount}
-                            </div>
-                            <div className="col-span-3 text-xs font-medium text-slate-700 truncate pr-2">
-                              {s.assistantName ? (
-                                <span className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded-md font-bold whitespace-nowrap">{s.assistantName}</span>
-                              ) : (
-                                <span className="text-slate-400 italic">Нет</span>
-                              )}
-                            </div>
-                            <div className="col-span-2 text-xs font-bold text-slate-800 truncate">
-                              {s.coachName}
-                            </div>
-                          </div>
-                        ))}
+                    ) : (
+                      /* Matrix Table */
+                      <div className="overflow-x-auto border border-slate-200 rounded-2xl shadow-xs bg-white max-h-[60vh]">
+                        <table className="w-full text-left border-collapse min-w-max">
+                          <thead className="sticky top-0 z-20">
+                            <tr className="bg-slate-100 text-slate-700 text-[11px] font-bold uppercase tracking-wider border-b border-slate-200">
+                              <th className="py-3 px-3 w-10 text-center sticky left-0 bg-slate-100 z-30 border-r border-slate-200">
+                                #
+                              </th>
+                              <th className="py-3 px-4 min-w-[200px] sticky left-10 bg-slate-100 z-30 border-r border-slate-200 shadow-sm">
+                                Воспитанник (ФИО)
+                              </th>
+                              {sessions.map((s) => {
+                                const d = parseSessionDate(s.dateString, s.date);
+                                const dayNum = String(d.getDate()).padStart(2, "0");
+                                const monthNum = String(d.getMonth() + 1).padStart(2, "0");
+                                const dayOfWeek = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"][d.getDay()];
+                                return (
+                                  <th
+                                    key={s.id}
+                                    className="py-2.5 px-2 text-center border-r border-slate-200 min-w-[60px]"
+                                    title={`${formatSessionDateDisplay(s.date, s.dateString)} — Тренер: ${s.coachName}`}
+                                  >
+                                    <div className="font-mono text-xs font-black text-slate-900">
+                                      {dayNum}.{monthNum}
+                                    </div>
+                                    <div className="text-[9px] text-slate-500 font-semibold uppercase">
+                                      {dayOfWeek}
+                                    </div>
+                                  </th>
+                                );
+                              })}
+                              <th className="py-3 px-3 text-center bg-emerald-100/70 text-emerald-900 border-l border-r border-slate-200 min-w-[55px]">
+                                Был
+                              </th>
+                              <th className="py-3 px-3 text-center bg-red-100/70 text-red-900 border-r border-slate-200 min-w-[55px]">
+                                Проп.
+                              </th>
+                              <th className="py-3 px-3 text-center bg-amber-100/70 text-amber-900 border-r border-slate-200 min-w-[55px]">
+                                Больн.
+                              </th>
+                              <th className="py-3 px-3 text-center bg-slate-200/80 text-slate-900 min-w-[65px]">
+                                % Посещ.
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-xs">
+                            {groupStudents.map((client, idx) => {
+                              let pCount = 0;
+                              let aCount = 0;
+                              let sCount = 0;
+
+                              return (
+                                <tr
+                                  key={client.id}
+                                  className={
+                                    idx % 2 === 0
+                                      ? "bg-white hover:bg-slate-50 transition"
+                                      : "bg-slate-50/40 hover:bg-slate-50 transition"
+                                  }
+                                >
+                                  <td className="py-2.5 px-3 text-center text-slate-400 font-mono font-medium sticky left-0 bg-inherit z-10 border-r border-slate-100">
+                                    {idx + 1}
+                                  </td>
+                                  <td className="py-2.5 px-4 font-bold text-slate-900 sticky left-10 bg-inherit z-10 border-r border-slate-100 shadow-sm truncate max-w-[220px]">
+                                    <div className="truncate">
+                                      {client.childSurname} {client.childName}
+                                    </div>
+                                    <div className="text-[9px] text-gray-400 font-normal truncate">
+                                      {client.parentName || client.parentPhone || ""}
+                                    </div>
+                                  </td>
+
+                                  {sessions.map((s) => {
+                                    const sIso = toISODateString(s.dateString, s.date);
+                                    const rec = s.records?.find(
+                                      (r) =>
+                                        r.clientId === client.id ||
+                                        (r.clientName &&
+                                          (r.clientName.toLowerCase() ===
+                                            `${client.childSurname} ${client.childName}`.toLowerCase() ||
+                                            r.clientName.toLowerCase() ===
+                                              `${client.childName} ${client.childSurname}`.toLowerCase()))
+                                    );
+                                    const att = client.attendance?.find((a) => a.date === sIso);
+                                    const status = rec?.status || att?.status;
+
+                                    if (status === "present") {
+                                      pCount++;
+                                      return (
+                                        <td key={s.id} className="py-2 px-1 text-center border-r border-slate-100">
+                                          <span
+                                            className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 font-bold border border-emerald-300 text-xs shadow-2xs mx-auto"
+                                            title="Присутствовал"
+                                          >
+                                            ✓
+                                          </span>
+                                        </td>
+                                      );
+                                    } else if (status === "absent") {
+                                      aCount++;
+                                      return (
+                                        <td key={s.id} className="py-2 px-1 text-center border-r border-slate-100">
+                                          <span
+                                            className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-red-100 text-red-700 font-bold border border-red-300 text-xs shadow-2xs mx-auto"
+                                            title="Пропуск"
+                                          >
+                                            Н
+                                          </span>
+                                        </td>
+                                      );
+                                    } else if (status === "absent_sick") {
+                                      sCount++;
+                                      return (
+                                        <td key={s.id} className="py-2 px-1 text-center border-r border-slate-100">
+                                          <span
+                                            className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-amber-100 text-amber-800 font-bold border border-amber-300 text-xs shadow-2xs mx-auto"
+                                            title="Пропуск по болезни"
+                                          >
+                                            Б
+                                          </span>
+                                        </td>
+                                      );
+                                    } else if (status === "trial_free") {
+                                      pCount++;
+                                      return (
+                                        <td key={s.id} className="py-2 px-1 text-center border-r border-slate-100">
+                                          <span
+                                            className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-blue-100 text-blue-800 font-bold border border-blue-300 text-xs shadow-2xs mx-auto"
+                                            title="Пробное занятие"
+                                          >
+                                            П
+                                          </span>
+                                        </td>
+                                      );
+                                    } else {
+                                      return (
+                                        <td key={s.id} className="py-2 px-1 text-center border-r border-slate-100 text-gray-300 font-mono">
+                                          -
+                                        </td>
+                                      );
+                                    }
+                                  })}
+
+                                  <td className="py-2.5 px-3 text-center font-black text-emerald-700 bg-emerald-50/60 border-l border-r border-slate-100">
+                                    {pCount}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-center font-black text-red-600 bg-red-50/60 border-r border-slate-100">
+                                    {aCount}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-center font-black text-amber-600 bg-amber-50/60 border-r border-slate-100">
+                                    {sCount}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-800 bg-slate-100/50">
+                                    {sessions.length > 0 ? `${Math.round((pCount / sessions.length) * 100)}%` : "0%"}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          <tfoot className="bg-slate-100 font-bold text-xs text-slate-800 border-t-2 border-slate-200 sticky bottom-0 z-20">
+                            <tr>
+                              <td colSpan={2} className="py-2.5 px-4 sticky left-0 bg-slate-100 z-30 border-r border-slate-200 text-right uppercase tracking-wider text-[10px] text-slate-600">
+                                Были на тренировке:
+                              </td>
+                              {sessions.map((s) => (
+                                <td
+                                  key={s.id}
+                                  className="py-2.5 px-1 text-center border-r border-slate-200 font-mono font-bold text-emerald-700 bg-emerald-50/50"
+                                >
+                                  {s.presentCount}
+                                </td>
+                              ))}
+                              <td colSpan={4} className="py-2.5 px-3 bg-slate-100 text-center font-mono text-[11px] text-slate-600">
+                                Тренировок: {sessions.length}
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
                       </div>
-                    </div>
+                    )}
                   </div>
                 );
               })()}

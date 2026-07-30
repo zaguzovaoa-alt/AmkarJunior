@@ -37,7 +37,7 @@ import {
   X,
 } from "lucide-react";
 import { Client, Lead, ClientStatus, CRMTask } from "../types";
-import { calculateAge, isBirthdayToday } from "../utils/dateUtils";
+import { calculateAge, isBirthdayToday, cleanClientNotes } from "../utils/dateUtils";
 import { compressImage } from "../utils/image";
 import { ConfirmModal } from "./ConfirmModal";
 import { BirthdaysBanner } from "./BirthdaysBanner";
@@ -2728,7 +2728,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                   Примечание
                                 </span>
                                 <div className="flex-1 text-right text-gray-900 font-medium">
-                                  {selectedClient.notes || (
+                                  {cleanClientNotes(selectedClient.notes) || (
                                     <span className="text-gray-400 italic">
                                       Нет примечаний.
                                     </span>
@@ -3318,10 +3318,16 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
 
             <div className="bg-white rounded-2xl p-6 border border-gray-105 shadow-sm space-y-4">
               <div className="flex justify-between items-center flex-wrap gap-2">
-                <h3 className="font-extrabold text-slate-900 text-sm text-left">
-                  Учет рисков взаимоотношений и лояльности клиентов
-                </h3>
-                <span className="text-[10px] bg-indigo-50 text-indigo-700 font-bold px-2 py-1 rounded">
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-sm text-left">
+                    Учет рисков взаимоотношений и лояльности клиентов
+                  </h3>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Автоматически отслеживает пропуски 2+ тренировок подряд и сигналы тренера/менеджера.
+                  </p>
+                </div>
+                <span className="text-[10px] bg-amber-100 text-amber-900 border border-amber-200 font-bold px-2.5 py-1 rounded-full flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
                   Контроль оттока
                 </span>
               </div>
@@ -3337,131 +3343,190 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {clients.map((client, idx) => {
-                      const hasActiveRisk =
-                        client.riskType && client.riskType !== "none";
+                    {(() => {
+                      const getEffectiveClientRisk = (c: any) => {
+                        let riskType = c.riskType && c.riskType !== "none" ? c.riskType : null;
+                        let riskUrgency = c.riskUrgency && c.riskUrgency !== "none" ? c.riskUrgency : null;
+                        let riskComment = c.riskComment || "";
 
-                      let riskTypeBadge = (
-                        <span className="text-gray-400">Нет рисков</span>
-                      );
-                      if (client.riskType === "conflict") {
-                        riskTypeBadge = (
-                          <div className="space-y-0.5">
-                            <span className="px-2 py-0.5 bg-rose-50 border border-rose-150 text-rose-800 rounded font-bold text-[10px]">
-                              Конфликт
-                            </span>
-                            {client.riskDetails && (
-                              <div className="text-[11px] font-medium text-slate-600">
-                                С кем: {client.riskDetails}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      } else if (client.riskType === "absences") {
-                        riskTypeBadge = (
-                          <div className="space-y-0.5">
-                            <span className="px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-800 rounded font-bold text-[10px]">
-                              Пропуски (&gt;2)
-                            </span>
-                          </div>
-                        );
-                      }
+                        const att = c.attendance || [];
+                        let consecutiveAbsencesCount = 0;
+                        for (let i = 0; i < att.length; i++) {
+                          if (att[i].status === "absent" || att[i].status === "absent_sick") {
+                            consecutiveAbsencesCount++;
+                          } else {
+                            break;
+                          }
+                        }
 
-                      let urgencyBadge = (
-                        <span className="text-gray-450 text-[11px]">
-                          Низкая
-                        </span>
-                      );
-                      if (client.riskUrgency === "urgent") {
-                        urgencyBadge = (
-                          <span className="px-2 py-0.5 bg-red-500 text-white rounded font-bold text-[9px] uppercase tracking-wide animate-pulse">
-                            СРОЧНО!
+                        if (consecutiveAbsencesCount < 2 && att.length >= 2) {
+                          for (let i = 0; i < att.length - 1; i++) {
+                            if (
+                              (att[i].status === "absent" || att[i].status === "absent_sick") &&
+                              (att[i + 1].status === "absent" || att[i + 1].status === "absent_sick")
+                            ) {
+                              consecutiveAbsencesCount = 2;
+                              break;
+                            }
+                          }
+                        }
+
+                        if (!riskType && (consecutiveAbsencesCount >= 2 || c.relationshipRisk === "high")) {
+                          riskType = "absences";
+                          riskUrgency = riskUrgency || "intervene";
+                          riskComment = riskComment || "Автоматический риск: пропущено 2+ тренировки подряд";
+                        }
+
+                        const hasActiveRisk = Boolean(riskType);
+
+                        return {
+                          hasActiveRisk,
+                          riskType: riskType || "none",
+                          riskUrgency: riskUrgency || (hasActiveRisk ? "intervene" : "none"),
+                          riskComment,
+                        };
+                      };
+
+                      const sortedClients = [...clients].sort((a, b) => {
+                        const riskA = getEffectiveClientRisk(a).hasActiveRisk ? 1 : 0;
+                        const riskB = getEffectiveClientRisk(b).hasActiveRisk ? 1 : 0;
+                        if (riskA !== riskB) return riskB - riskA;
+                        return (a.childSurname || "").localeCompare(b.childSurname || "");
+                      });
+
+                      return sortedClients.map((client, idx) => {
+                        const riskInfo = getEffectiveClientRisk(client);
+                        const hasActiveRisk = riskInfo.hasActiveRisk;
+
+                        let riskTypeBadge = (
+                          <span className="text-gray-400">Нет рисков</span>
+                        );
+                        if (riskInfo.riskType === "conflict") {
+                          riskTypeBadge = (
+                            <div className="space-y-0.5">
+                              <span className="px-2 py-0.5 bg-rose-50 border border-rose-150 text-rose-800 rounded font-bold text-[10px]">
+                                Конфликт
+                              </span>
+                              {client.riskDetails && (
+                                <div className="text-[11px] font-medium text-slate-600">
+                                  С кем: {client.riskDetails}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        } else if (riskInfo.riskType === "absences") {
+                          riskTypeBadge = (
+                            <div className="space-y-0.5">
+                              <span className="px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-800 rounded font-bold text-[10px]">
+                                Пропуски (2+ подряд)
+                              </span>
+                            </div>
+                          );
+                        }
+
+                        let urgencyBadge = (
+                          <span className="text-gray-450 text-[11px]">
+                            Низкая
                           </span>
                         );
-                      } else if (client.riskUrgency === "intervene") {
-                        urgencyBadge = (
-                          <span className="px-2 py-0.5 bg-orange-100 border border-orange-200 text-orange-800 rounded font-bold text-[9px] uppercase tracking-wide">
-                            Вмешаться
-                          </span>
-                        );
-                      }
+                        if (riskInfo.riskUrgency === "urgent") {
+                          urgencyBadge = (
+                            <span className="px-2 py-0.5 bg-red-500 text-white rounded font-bold text-[9px] uppercase tracking-wide animate-pulse">
+                              СРОЧНО!
+                            </span>
+                          );
+                        } else if (riskInfo.riskUrgency === "intervene") {
+                          urgencyBadge = (
+                            <span className="px-2 py-0.5 bg-orange-100 border border-orange-200 text-orange-800 rounded font-bold text-[9px] uppercase tracking-wide">
+                              Вмешаться
+                            </span>
+                          );
+                        }
 
-                      let resolutionBadge = (
-                        <span className="text-slate-400">-</span>
-                      );
-                      if (
-                        client.riskResolution &&
-                        client.riskResolution !== "none"
-                      ) {
-                        const labelsMap: any = {
-                          left: "Уходит отток",
-                          thinking: "Думает / сомнения",
-                          renewed: "Абонемент продлен",
-                          refused: "Отказ от занятий",
-                          resolved: "Решено штатно",
-                          reconciled: "Конфликт исчерпан",
-                        };
-                        const classMap: any = {
-                          left: "bg-red-50 text-red-750 border-red-200",
-                          thinking:
-                            "bg-amber-50 text-amber-700 border-amber-200",
-                          renewed:
-                            "bg-emerald-50 text-emerald-700 border-emerald-150",
-                          refused: "bg-rose-50 text-rose-700 border-rose-200",
-                          resolved:
-                            "bg-indigo-50 text-indigo-700 border-indigo-200",
-                          reconciled:
-                            "bg-teal-50 text-teal-700 border-teal-200",
-                        };
-                        resolutionBadge = (
-                          <span
-                            className={`px-2 py-0.5 border rounded font-bold text-[10px] ${classMap[client.riskResolution] || "bg-slate-100"}`}
+                        let resolutionBadge = (
+                          <span className="text-slate-400">-</span>
+                        );
+                        if (
+                          client.riskResolution &&
+                          client.riskResolution !== "none"
+                        ) {
+                          const labelsMap: any = {
+                            left: "Уходит отток",
+                            thinking: "Думает / сомнения",
+                            renewed: "Абонемент продлен",
+                            refused: "Отказ от занятий",
+                            resolved: "Решено штатно",
+                            reconciled: "Конфликт исчерпан",
+                          };
+                          const classMap: any = {
+                            left: "bg-red-50 text-red-750 border-red-200",
+                            thinking:
+                              "bg-amber-50 text-amber-700 border-amber-200",
+                            renewed:
+                              "bg-emerald-50 text-emerald-700 border-emerald-150",
+                            refused: "bg-rose-50 text-rose-700 border-rose-200",
+                            resolved:
+                              "bg-indigo-50 text-indigo-700 border-indigo-200",
+                            reconciled:
+                              "bg-teal-50 text-teal-700 border-teal-200",
+                          };
+                          resolutionBadge = (
+                            <span
+                              className={`px-2 py-0.5 border rounded font-bold text-[10px] ${classMap[client.riskResolution] || "bg-slate-100"}`}
+                            >
+                              {labelsMap[client.riskResolution] ||
+                                client.riskResolution}
+                            </span>
+                          );
+                        } else if (hasActiveRisk) {
+                          resolutionBadge = (
+                            <span className="px-2 py-0.5 bg-blue-50 border border-blue-200 text-blue-700 rounded font-bold text-[10px]">
+                              В работе
+                            </span>
+                          );
+                        }
+
+                        return (
+                          <tr
+                            key={client.id || idx}
+                            onClick={() => handleStartEditClient(client)}
+                            className={`transition duration-150 cursor-pointer ${
+                              hasActiveRisk
+                                ? "bg-amber-50/40 hover:bg-amber-100/40 border-l-4 border-l-amber-500"
+                                : "hover:bg-slate-50/50"
+                            }`}
                           >
-                            {labelsMap[client.riskResolution] ||
-                              client.riskResolution}
-                          </span>
-                        );
-                      } else if (hasActiveRisk) {
-                        resolutionBadge = (
-                          <span className="px-2 py-0.5 bg-blue-50 border border-blue-200 text-blue-700 rounded font-bold text-[10px]">
-                            В работе
-                          </span>
-                        );
-                      }
-
-                      return (
-                        <tr
-                          key={idx}
-                          onClick={() => handleStartEditClient(client)}
-                          className="hover:bg-slate-50/50 transition duration-150 cursor-pointer"
-                        >
-                          <td className="p-3">
-                            <div className="font-bold text-slate-800">
-                              {client.childSurname} {client.childName}
-                            </div>
-                            <div className="text-[10px] text-gray-500 font-mono mt-0.5">
-                              {client.groupName || "Без группы"} •{" "}
-                              {client.parentName}
-                            </div>
-                          </td>
-                          <td className="p-3">
-                            {riskTypeBadge}
-                            {client.riskComment && (
-                              <div className="mt-1 text-[10px] text-slate-500 italic max-w-[220px] bg-slate-50 p-1.5 rounded border border-slate-100 leading-normal">
-                                {client.riskComment}
+                            <td className="p-3">
+                              <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                                {client.childSurname} {client.childName}
+                                {hasActiveRisk && (
+                                  <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-ping" title="Активный риск оттока" />
+                                )}
                               </div>
-                            )}
-                          </td>
-                          <td className="p-3 font-semibold">{urgencyBadge}</td>
-                          <td className="p-3">{resolutionBadge}</td>
-                          <td className="p-3 font-semibold text-emerald-600">
-                            {client.managerBonusAccrued
-                              ? `+${client.managerBonusAccrued} ₽`
-                              : "-"}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                              <div className="text-[10px] text-gray-500 font-mono mt-0.5">
+                                {client.groupName || "Без группы"} •{" "}
+                                {client.parentName}
+                              </div>
+                            </td>
+                            <td className="p-3">
+                              {riskTypeBadge}
+                              {riskInfo.riskComment && (
+                                <div className="mt-1 text-[10px] text-slate-600 italic max-w-[240px] bg-white/80 p-1.5 rounded border border-slate-200 leading-normal">
+                                  {riskInfo.riskComment}
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-3 font-semibold">{urgencyBadge}</td>
+                            <td className="p-3">{resolutionBadge}</td>
+                            <td className="p-3 font-semibold text-emerald-600">
+                              {client.managerBonusAccrued
+                                ? `+${client.managerBonusAccrued} ₽`
+                                : "-"}
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
                   </tbody>
                 </table>
               </div>

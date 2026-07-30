@@ -1556,10 +1556,22 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       if (date && date.includes(".")) {
         const parts = date.split(".");
         if (parts.length === 3) {
-          return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+          const yearPart = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+          return `${yearPart}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+        }
+        if (parts.length === 2) {
+          const curY = new Date().getFullYear();
+          return `${curY}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
         }
       }
-      if (date && date.includes("-")) return date;
+      if (date && date.includes("-")) {
+        const parts = date.split("-");
+        if (parts.length === 3) {
+          if (parts[0].length === 4) return date; // YYYY-MM-DD
+          const yearPart = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+          return `${yearPart}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+        }
+      }
       const d = new Date();
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     })();
@@ -1606,58 +1618,91 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
     // Auto-create accrued expense for venue rental (per training session)
     const venueCp = counterparties.find(cp => cp.id === groupObj?.venueId);
-    
+
+    // Check if rental record already exists for this group & date to prevent duplicate accrual
+    const existingRentalRecord = finances.find(
+      (f) =>
+        f.category === "Аренда" &&
+        (f.groupName === resolvedGroupName || f.description.includes(resolvedGroupName)) &&
+        f.date === sessionDateISO &&
+        f.paymentStatus === "accrued"
+    );
+
     // Only accrue per session if the venue is NOT fixed-price per month.
     if (!venueCp || venueCp.paymentType !== "fixed") {
       const venueCostToAccrue = venueCp?.rate && venueCp.rate > 0 
         ? venueCp.rate 
         : (groupObj?.venueCost && groupObj.venueCost > 0 ? groupObj.venueCost : 1500);
 
-      addFinanceRecord({
-        type: "expense",
-        category: "Аренда",
-        amount: venueCostToAccrue,
-        date: sessionDateISO,
-        description: `Начисление аренды за тренировку (${resolvedGroupName})`,
-        groupName: resolvedGroupName,
-        isFixed: false,
-        counterpartyId: groupObj?.venueId,
-        paymentStatus: "accrued",
-      });
+      if (!existingRentalRecord) {
+        addFinanceRecord({
+          type: "expense",
+          category: "Аренда",
+          amount: venueCostToAccrue,
+          date: sessionDateISO,
+          description: `Начисление аренды за тренировку (${resolvedGroupName})`,
+          groupName: resolvedGroupName,
+          isFixed: false,
+          counterpartyId: groupObj?.venueId,
+          paymentStatus: "accrued",
+        });
+      }
     }
 
     // Auto-create accrued payroll expenses
     const headCoachObj = coaches.find((c) => c.id === coachId);
     if (headCoachObj && headCoachObj.paymentType !== "fixed") {
       const headRate = headCoachObj.rate && headCoachObj.rate > 0 ? headCoachObj.rate : 1500;
-      addFinanceRecord({
-        type: "expense",
-        category: "Зарплата",
-        amount: headRate,
-        date: sessionDateISO,
-        description: `Начисление ЗП за тренировку: ${coachName} (${resolvedGroupName})`,
-        groupName: resolvedGroupName,
-        isFixed: false,
-        paymentStatus: "accrued",
-        coachId: headCoachObj.id,
-      });
+      const existingSalaryRecord = finances.find(
+        (f) =>
+          f.category === "Зарплата" &&
+          f.coachId === headCoachObj.id &&
+          f.date === sessionDateISO &&
+          f.paymentStatus === "accrued" &&
+          (f.groupName === resolvedGroupName || f.description.includes(resolvedGroupName))
+      );
+
+      if (!existingSalaryRecord) {
+        addFinanceRecord({
+          type: "expense",
+          category: "Зарплата",
+          amount: headRate,
+          date: sessionDateISO,
+          description: `Начисление ЗП за тренировку: ${coachName} (${resolvedGroupName})`,
+          groupName: resolvedGroupName,
+          isFixed: false,
+          paymentStatus: "accrued",
+          coachId: headCoachObj.id,
+        });
+      }
     }
 
     if (assistantId) {
       const astCoachObj = coaches.find((c) => c.id === assistantId);
       if (astCoachObj && astCoachObj.paymentType !== "fixed") {
         const astRate = astCoachObj.rate && astCoachObj.rate > 0 ? astCoachObj.rate : 1000;
-        addFinanceRecord({
-          type: "expense",
-          category: "Зарплата",
-          amount: astRate,
-          date: sessionDateISO,
-          description: `Начисление ЗП (Ассистент): ${astCoachObj.name} (${resolvedGroupName})`,
-          groupName: resolvedGroupName,
-          isFixed: false,
-          paymentStatus: "accrued",
-          coachId: astCoachObj.id,
-        });
+        const existingAssistantSalaryRecord = finances.find(
+          (f) =>
+            f.category === "Зарплата" &&
+            f.coachId === astCoachObj.id &&
+            f.date === sessionDateISO &&
+            f.paymentStatus === "accrued" &&
+            (f.groupName === resolvedGroupName || f.description.includes(resolvedGroupName))
+        );
+
+        if (!existingAssistantSalaryRecord) {
+          addFinanceRecord({
+            type: "expense",
+            category: "Зарплата",
+            amount: astRate,
+            date: sessionDateISO,
+            description: `Начисление ЗП (Ассистент): ${astCoachObj.name} (${resolvedGroupName})`,
+            groupName: resolvedGroupName,
+            isFixed: false,
+            paymentStatus: "accrued",
+            coachId: astCoachObj.id,
+          });
+        }
       }
     }
 
@@ -1725,9 +1770,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
             ...c,
             abonementSessionsLeft: newSessionsLeft,
             abonementStatus: newAbonementStatus,
-            notes: mediaFile
-              ? `${c.notes || ""}\n[Посещаемость ${date}]: Тренер прикрепил фотоотчет.`
-              : c.notes,
+            notes: c.notes || "",
             attendance: updatedAttendance,
           };
         }
@@ -1801,32 +1844,45 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
             ];
           }
 
-          // TELEGRAM ALERT: check if 2+ absences in a row
+          // TELEGRAM ALERT & RISK ENGINE: check if 2+ absences in a row
+          let isChurnRisk = false;
           if (
             !isNowPresent &&
-            record.status !== "trial_free" &&
-            crmConfig.telegramAlerts?.churnRisk !== false
+            record.status !== "trial_free"
           ) {
             const pastAbsences = (c.attendance || [])
               .slice(0, 1)
               .every((a) => a.status === "absent" || a.status === "absent_sick");
             if (pastAbsences) {
-              sendTelegramAlert(
-                crmConfig.telegramBotToken,
-                crmConfig.telegramGroupChatId,
-                `⚠️ <b>РИСК ОТТОКА</b>\n<b>Ученик:</b> ${c.childSurname} ${c.childName}\n<b>Группа:</b> ${c.groupName}\nПропущено 2 и более тренировок подряд.\nТребуется помощь менеджера!`,
-              );
+              isChurnRisk = true;
+              if (crmConfig.telegramAlerts?.churnRisk !== false) {
+                sendTelegramAlert(
+                  crmConfig.telegramBotToken,
+                  crmConfig.telegramGroupChatId,
+                  `⚠️ <b>РИСК ОТТОКА</b>\n<b>Ученик:</b> ${c.childSurname} ${c.childName}\n<b>Группа:</b> ${c.groupName}\nПропущено 2 и более тренировок подряд.\nТребуется помощь менеджера!`,
+                );
+              }
             }
           }
 
-          batch.set(doc(db, "clients", c.id), removeUndefined({
+          const clientPayload: any = {
             abonementSessionsLeft: newSessionsLeft ?? 0,
             abonementStatus: newAbonementStatus || "Оплачено",
-            notes: mediaFile
-              ? `${c.notes || ""}\n[Посещаемость ${date}]: Тренер прикрепил фотоотчет.`
-              : (c.notes || ""),
+            notes: c.notes || "",
             attendance: updatedAttendance,
-          }), { merge: true });
+          };
+
+          if (isChurnRisk) {
+            clientPayload.riskType = "absences";
+            if (!c.riskUrgency || c.riskUrgency === "none") {
+              clientPayload.riskUrgency = "intervene";
+            }
+            if (!c.riskComment) {
+              clientPayload.riskComment = `Автоматический риск оттока: пропущено 2+ тренировок подряд (${date})`;
+            }
+          }
+
+          batch.set(doc(db, "clients", c.id), removeUndefined(clientPayload), { merge: true });
         }
       });
 

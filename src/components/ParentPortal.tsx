@@ -28,6 +28,8 @@ import {
   Tag,
   FileText,
   FileCheck,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import amkarUniform from "../assets/images/amkar_uniform.jpg";
@@ -43,10 +45,48 @@ interface ParentPortalProps {
   setActiveTab: (tab: string) => void;
 }
 
+const RU_MONTHS_NAMES = [
+  "Январь",
+  "Февраль",
+  "Март",
+  "Апрель",
+  "Май",
+  "Июнь",
+  "Июль",
+  "Август",
+  "Сентябрь",
+  "Октябрь",
+  "Ноябрь",
+  "Декабрь",
+];
+
+function parseRecordDate(dateStr: string) {
+  if (!dateStr) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    return { year: y, month: m - 1, day: d };
+  }
+  if (/^\d{2}\.\d{2}\.\d{4}$/.test(dateStr)) {
+    const [d, m, y] = dateStr.split(".").map(Number);
+    return { year: y, month: m - 1, day: d };
+  }
+  if (/^\d{2}\.\d{2}$/.test(dateStr)) {
+    const [d, m] = dateStr.split(".").map(Number);
+    return { year: new Date().getFullYear(), month: m - 1, day: d };
+  }
+  const parsed = new Date(dateStr);
+  if (!isNaN(parsed.getTime())) {
+    return { year: parsed.getFullYear(), month: parsed.getMonth(), day: parsed.getDate() };
+  }
+  return null;
+}
+
 export const ParentPortal: React.FC<ParentPortalProps> = ({
   activeTab,
   setActiveTab,
 }) => {
+  const [attendanceMonthDate, setAttendanceMonthDate] = useState<Date>(new Date());
+  const [attendanceViewScope, setAttendanceViewScope] = useState<"month" | "all">("month");
   const { appUser } = useAuth();
   const {
     clients,
@@ -222,41 +262,82 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
   const endTime =
     endTimeParts.length > 1 ? `${endHour}:${endTimeParts[1]}` : "18:30";
 
-  const currentMonthNum = today.getMonth();
-  const currentYear = today.getFullYear();
+  const selectedYear = attendanceMonthDate.getFullYear();
+  const selectedMonthNum = attendanceMonthDate.getMonth();
+  const isCurrentMonthSelected =
+    selectedYear === today.getFullYear() && selectedMonthNum === today.getMonth();
 
-  // Calculate attendance stats for the current month
-  const attendanceThisMonth = myClient.attendance || [];
-  const presentCount = attendanceThisMonth.filter(
+  const selectedMonthStr = `${RU_MONTHS_NAMES[selectedMonthNum]} ${selectedYear}`;
+
+  const attendanceAll = (myClient.attendance || []) as any[];
+
+  // Calculate attendance records for selected month
+  const attendanceSelectedMonth = attendanceAll.filter((record) => {
+    const parsed = parseRecordDate(record.date);
+    if (!parsed) return true;
+    return parsed.year === selectedYear && parsed.month === selectedMonthNum;
+  });
+
+  const attendanceDisplayed =
+    attendanceViewScope === "all" ? attendanceAll : attendanceSelectedMonth;
+
+  // Calculate attendance stats for the selected month
+  const presentCount = attendanceSelectedMonth.filter(
     (a) => a.status === "present",
   ).length;
-  const absentSickCount = attendanceThisMonth.filter(
+  const absentSickCount = attendanceSelectedMonth.filter(
     (a) => a.status === "absent_sick",
   ).length;
-  const absentCount = attendanceThisMonth.filter(
+  const absentCount = attendanceSelectedMonth.filter(
     (a) => a.status === "absent",
   ).length;
+  const totalSessionsSelectedMonth = attendanceSelectedMonth.length;
+  const attendanceRateSelectedMonth =
+    totalSessionsSelectedMonth > 0
+      ? Math.round((presentCount / totalSessionsSelectedMonth) * 100)
+      : 100;
 
-  // Calendar logic
-  const firstDayOfMonth = new Date(currentYear, currentMonthNum, 1);
-  const lastDayOfMonth = new Date(currentYear, currentMonthNum + 1, 0);
+  // Calendar logic for selected month
+  const firstDayOfMonth = new Date(selectedYear, selectedMonthNum, 1);
+  const lastDayOfMonth = new Date(selectedYear, selectedMonthNum + 1, 0);
   const startDayOfWeek = firstDayOfMonth.getDay(); // 0 is Sunday, 1 is Monday...
   const emptyDaysPre = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1; // Align to Monday
   const daysInMonth = lastDayOfMonth.getDate();
 
-  // Create an array mapping days to their attendance status
+  // Create an array mapping days to their attendance status for selected month
   const attendanceMap = new Map<number, "present" | "absent_sick" | "absent">();
-  attendanceThisMonth.forEach((record) => {
-    // Basic date parser assuming 'DD.MM' or similar local dates
-    const dateParts = record.date.split(".");
-    if (dateParts.length >= 2) {
-      // Very naive matching, assuming dates are valid and for this month for demo
-      const recordDay = parseInt(dateParts[0], 10);
-      if (!isNaN(recordDay)) {
-        attendanceMap.set(recordDay, record.status);
-      }
+  attendanceSelectedMonth.forEach((record) => {
+    const parsed = parseRecordDate(record.date);
+    if (parsed && parsed.year === selectedYear && parsed.month === selectedMonthNum) {
+      attendanceMap.set(parsed.day, record.status);
     }
   });
+
+  const handlePrevAttendanceMonth = () => {
+    setAttendanceMonthDate(new Date(selectedYear, selectedMonthNum - 1, 1));
+  };
+  const handleNextAttendanceMonth = () => {
+    setAttendanceMonthDate(new Date(selectedYear, selectedMonthNum + 1, 1));
+  };
+  const handleResetToCurrentMonth = () => {
+    setAttendanceMonthDate(new Date());
+  };
+
+  const attendanceMonthOptions = React.useMemo(() => {
+    const opts = [];
+    const curY = new Date().getFullYear();
+    for (let y = curY - 2; y <= curY + 1; y++) {
+      for (let m = 0; m < 12; m++) {
+        opts.push({
+          value: `${y}-${m}`,
+          label: `${RU_MONTHS_NAMES[m]} ${y}`,
+          year: y,
+          month: m,
+        });
+      }
+    }
+    return opts;
+  }, []);
 
   const nextThreeDates = React.useMemo(() => {
     const list: Array<{
@@ -1205,7 +1286,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
 
                   {/* Calendar/Attendance Grid */}
                   <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-4">
-                    <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 pb-3">
                       <div>
                         <h3 className="font-bold text-slate-900 text-sm">
                           Посещаемость
@@ -1214,9 +1295,40 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                           Журнал тренировок
                         </p>
                       </div>
-                      <span className="text-xs font-bold font-mono text-gray-600 bg-slate-100 px-2 py-0.5 rounded capitalize">
-                        {currentMonthStr}
-                      </span>
+
+                      {/* Month selector controls */}
+                      <div className="flex items-center space-x-1 border p-1 rounded-xl bg-slate-50 border-slate-200">
+                        <button
+                          type="button"
+                          onClick={handlePrevAttendanceMonth}
+                          className="p-1 hover:bg-white rounded-md hover:shadow-2xs transition text-slate-700 cursor-pointer"
+                          title="Предыдущий месяц"
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                        </button>
+                        <select
+                          value={`${selectedYear}-${selectedMonthNum}`}
+                          onChange={(e) => {
+                            const [y, m] = e.target.value.split("-").map(Number);
+                            setAttendanceMonthDate(new Date(y, m, 1));
+                          }}
+                          className="px-1.5 py-0.5 text-[11px] font-bold font-mono text-slate-800 bg-white hover:bg-slate-100 border border-slate-200 rounded-md outline-none cursor-pointer"
+                        >
+                          {attendanceMonthOptions.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={handleNextAttendanceMonth}
+                          className="p-1 hover:bg-white rounded-md hover:shadow-2xs transition text-slate-700 cursor-pointer"
+                          title="Следующий месяц"
+                        >
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-3 gap-2 px-1 text-center bg-slate-50 p-2.5 rounded-xl border border-gray-100">
@@ -1267,7 +1379,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
 
                       {Array.from({ length: daysInMonth }).map((_, i) => {
                         const dayNumber = i + 1;
-                        const isToday = dayNumber === currentDay;
+                        const isToday = isCurrentMonthSelected && dayNumber === currentDay;
                         const status = attendanceMap.get(dayNumber);
 
                         let baseClass =
@@ -1464,66 +1576,305 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
           {/* 3. ATTENDANCE HISTORIC */}
           {activeTab === "parent_attendance" && (
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm space-y-6"
+              className="space-y-6"
             >
-              <div className="flex justify-between items-center border-b pb-4">
-                <h3 className="text-lg font-bold text-slate-900">
-                  Исторический журнал посещений: {myClient.childName}
-                </h3>
-                <span className="text-xs text-slate-500 font-mono font-bold uppercase tracking-wider">
-                  {myClient?.groupName || "Группа не назначена"}
-                </span>
-              </div>
+              <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm space-y-6">
+                {/* Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900">
+                      Журнал посещений: {myClient.childName}
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium mt-0.5">
+                      Учет присутствия на тренировках и историческая статистика
+                    </p>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs font-bold font-mono text-slate-700 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
+                      {myClient?.groupName || "Группа не назначена"}
+                    </span>
+                  </div>
+                </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-slate-700 border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 text-gray-400 font-semibold uppercase tracking-wider border-b">
-                      <th className="p-3">Дата тренировки</th>
-                      <th className="p-3">Статус присутствия</th>
-                      <th className="p-3">
-                        Причина отсутствия / Примечание тренера
-                      </th>
-                      <th className="p-3">Визуальный фотоотчет</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {(myClient.attendance || []).map((att, i) => (
-                      <tr key={i} className="hover:bg-slate-50 transition">
-                        <td className="p-3 font-mono font-bold">{att.date}</td>
-                        <td className="p-3">
-                          <span
-                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                              att.status === "present"
-                                ? "bg-emerald-100 text-emerald-800"
-                                : att.status === "absent_sick"
-                                  ? "bg-indigo-100 text-indigo-800"
-                                  : "bg-amber-100 text-amber-800"
-                            }`}
-                          >
-                            {att.status === "present"
-                              ? "Присутствовал"
-                              : att.status === "absent_sick"
-                                ? "Уважительная"
-                                : "Прогул"}
-                          </span>
-                        </td>
-                        <td className="p-3 font-medium text-slate-600">
-                          {att.reason ||
-                            "Занятие пройдено успешно, замечаний по поведению нет."}
-                        </td>
-                        <td className="p-3 text-gray-400">
-                          {att.status === "present"
-                            ? "📸 Присутствует в групповом фото"
-                            : "—"}
-                        </td>
-                      </tr>
+                {/* Toolbar for selecting month & view scope */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 bg-slate-50/80 rounded-2xl border border-slate-200/80">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-bold text-slate-600 mr-1">
+                      Выбор месяца:
+                    </span>
+                    <div className="flex items-center space-x-1 border p-1 rounded-xl bg-white border-slate-200 shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={handlePrevAttendanceMonth}
+                        className="p-1.5 hover:bg-slate-100 rounded-lg transition text-slate-700 cursor-pointer"
+                        title="Предыдущий месяц"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      <select
+                        value={`${selectedYear}-${selectedMonthNum}`}
+                        onChange={(e) => {
+                          const [y, m] = e.target.value.split("-").map(Number);
+                          setAttendanceMonthDate(new Date(y, m, 1));
+                        }}
+                        className="px-2.5 py-1 text-xs font-bold font-mono text-slate-900 bg-transparent outline-none cursor-pointer"
+                      >
+                        {attendanceMonthOptions.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={handleNextAttendanceMonth}
+                        className="p-1.5 hover:bg-slate-100 rounded-lg transition text-slate-700 cursor-pointer"
+                        title="Следующий месяц"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {!isCurrentMonthSelected && (
+                      <button
+                        type="button"
+                        onClick={handleResetToCurrentMonth}
+                        className="px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition cursor-pointer"
+                      >
+                        Текущий месяц
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Scope filter */}
+                  <div className="flex items-center space-x-1 bg-slate-200/60 p-1 rounded-xl self-start md:self-auto text-xs font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setAttendanceViewScope("month")}
+                      className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                        attendanceViewScope === "month"
+                          ? "bg-white text-slate-900 shadow-2xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      {selectedMonthStr}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAttendanceViewScope("all")}
+                      className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                        attendanceViewScope === "all"
+                          ? "bg-white text-slate-900 shadow-2xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      Всё время ({attendanceAll.length})
+                    </button>
+                  </div>
+                </div>
+
+                {/* Monthly metric summary cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/70 text-left">
+                    <div className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
+                      Всего занятий
+                    </div>
+                    <div className="text-xl font-black text-slate-900 mt-1 font-mono">
+                      {attendanceViewScope === "month" ? totalSessionsSelectedMonth : attendanceAll.length}
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">
+                      {attendanceViewScope === "month" ? selectedMonthStr : "За весь период"}
+                    </div>
+                  </div>
+
+                  <div className="bg-emerald-50/60 p-4 rounded-xl border border-emerald-200/70 text-left">
+                    <div className="text-[11px] font-medium text-emerald-700 uppercase tracking-wider flex items-center justify-between">
+                      <span>Посещено</span>
+                      {totalSessionsSelectedMonth > 0 && attendanceViewScope === "month" && (
+                        <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
+                          {attendanceRateSelectedMonth}%
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xl font-black text-emerald-700 mt-1 font-mono">
+                      {attendanceViewScope === "month"
+                        ? presentCount
+                        : attendanceAll.filter((a) => a.status === "present").length}
+                    </div>
+                    <div className="text-[10px] text-emerald-600/70 mt-0.5">
+                      Тренировок
+                    </div>
+                  </div>
+
+                  <div className="bg-amber-50/60 p-4 rounded-xl border border-amber-200/70 text-left">
+                    <div className="text-[11px] font-medium text-amber-700 uppercase tracking-wider">
+                      Уважительная
+                    </div>
+                    <div className="text-xl font-black text-amber-700 mt-1 font-mono">
+                      {attendanceViewScope === "month"
+                        ? absentSickCount
+                        : attendanceAll.filter((a) => a.status === "absent_sick").length}
+                    </div>
+                    <div className="text-[10px] text-amber-600/70 mt-0.5">
+                      По болезни / справке
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-100 p-4 rounded-xl border border-slate-200 text-left">
+                    <div className="text-[11px] font-medium text-slate-600 uppercase tracking-wider">
+                      Прогулы
+                    </div>
+                    <div className="text-xl font-black text-slate-700 mt-1 font-mono">
+                      {attendanceViewScope === "month"
+                        ? absentCount
+                        : attendanceAll.filter((a) => a.status === "absent").length}
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">
+                      Без причины
+                    </div>
+                  </div>
+                </div>
+
+                {/* Calendar grid view embedded inside tab */}
+                <div className="p-4 bg-slate-50/60 rounded-2xl border border-slate-200/80 space-y-3">
+                  <div className="flex justify-between items-center text-xs font-bold text-slate-800 border-b pb-2">
+                    <span>Календарь посещаемости: {selectedMonthStr}</span>
+                    <span className="text-slate-400 font-normal hidden sm:inline">
+                      Переключайте месяцы в панели выше
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-7 gap-1.5 text-center text-xs">
+                    {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((d, i) => (
+                      <div key={i} className="text-slate-400 font-bold py-1 text-[11px]">
+                        {d}
+                      </div>
                     ))}
-                  </tbody>
-                </table>
+
+                    {Array.from({ length: emptyDaysPre }).map((_, i) => (
+                      <div key={`empty-tab-${i}`} className="py-2 text-transparent font-mono">
+                        -
+                      </div>
+                    ))}
+
+                    {Array.from({ length: daysInMonth }).map((_, i) => {
+                      const dayNumber = i + 1;
+                      const isToday = isCurrentMonthSelected && dayNumber === currentDay;
+                      const status = attendanceMap.get(dayNumber);
+
+                      let baseClass =
+                        "py-2 font-bold rounded-xl border border-transparent font-mono flex flex-col items-center justify-center transition text-xs ";
+                      if (status === "present") {
+                        baseClass += "bg-emerald-500 text-white shadow-2xs font-black";
+                      } else if (status === "absent_sick") {
+                        baseClass += "bg-amber-100 text-amber-900 border-amber-200 font-bold";
+                      } else if (status === "absent") {
+                        baseClass += "bg-slate-200 text-slate-700 font-bold";
+                      } else {
+                        baseClass += "bg-white text-slate-700 border-slate-100 hover:border-slate-200";
+                      }
+
+                      if (isToday) {
+                        baseClass += " ring-2 ring-emerald-400 ring-offset-1";
+                      }
+
+                      return (
+                        <div key={`day-tab-${dayNumber}`} className={baseClass}>
+                          <span>{dayNumber}</span>
+                          {status && (
+                            <span className="text-[9px] leading-tight font-sans opacity-90">
+                              {status === "present" ? "Был" : status === "absent_sick" ? "Бол." : "Проп."}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Table of records */}
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-slate-900 text-sm">
+                      Список записей {attendanceViewScope === "month" ? `за ${selectedMonthStr}` : "за весь период"}
+                    </h4>
+                    <span className="text-xs text-slate-400 font-mono">
+                      Найдено: <strong>{attendanceDisplayed.length}</strong>
+                    </span>
+                  </div>
+
+                  {attendanceDisplayed.length === 0 ? (
+                    <div className="p-8 text-center bg-slate-50 border border-dashed border-slate-200 rounded-2xl space-y-2">
+                      <Clock className="w-8 h-8 text-slate-300 mx-auto" />
+                      <div className="font-bold text-slate-800 text-xs">
+                        За {selectedMonthStr} нет записей о посещаемости
+                      </div>
+                      <p className="text-[11px] text-slate-400">
+                        Вы можете выбрать другой месяц с помощью переключателя выше или просмотреть всю историю.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setAttendanceViewScope("all")}
+                        className="mt-2 inline-block px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition cursor-pointer"
+                      >
+                        Показать за всё время
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+                      <table className="w-full text-left text-xs text-slate-700 border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 text-slate-400 font-semibold uppercase tracking-wider border-b border-slate-200">
+                            <th className="p-3">Дата тренировки</th>
+                            <th className="p-3">Статус присутствия</th>
+                            <th className="p-3">
+                              Причина отсутствия / Примечание тренера
+                            </th>
+                            <th className="p-3">Визуальный фотоотчет</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {attendanceDisplayed.map((att, i) => (
+                            <tr key={i} className="hover:bg-slate-50/80 transition">
+                              <td className="p-3 font-mono font-bold text-slate-900">
+                                {att.date}
+                              </td>
+                              <td className="p-3">
+                                <span
+                                  className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${
+                                    att.status === "present"
+                                      ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                      : att.status === "absent_sick"
+                                        ? "bg-amber-100 text-amber-800 border border-amber-200"
+                                        : "bg-slate-200 text-slate-700 border border-slate-300"
+                                  }`}
+                                >
+                                  {att.status === "present"
+                                    ? "Присутствовал"
+                                    : att.status === "absent_sick"
+                                      ? "Уважительная"
+                                      : "Прогул"}
+                                </span>
+                              </td>
+                              <td className="p-3 font-medium text-slate-600">
+                                {att.reason ||
+                                  "Занятие пройдено успешно, замечаний по поведению нет."}
+                              </td>
+                              <td className="p-3 text-slate-400 font-medium">
+                                {att.status === "present"
+                                  ? "📸 Присутствует в фотоотчете"
+                                  : "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
               </div>
             </motion.div>
           )}
@@ -1542,7 +1893,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                   <div className="flex items-center space-x-2">
                     <Trophy className="w-5 h-5 text-amber-400" />
                     <span className="text-xs uppercase font-bold text-indigo-300 font-mono tracking-widest">
-                      Академия достижений АМКАР
+                      Школа достижений АМКАР
                     </span>
                   </div>
                   <h3 className="text-xl font-black font-sans leading-tight">
@@ -1614,7 +1965,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                   </div>
                   <div className="space-y-1">
                     <div className="font-extrabold text-gray-400 text-sm">
-                      Снайпер Академии
+                      Снайпер Школы
                     </div>
                     <p className="text-[11px] text-gray-400 leading-normal">
                       Заработайте наивысший бал 4.8+ за точность ударов.

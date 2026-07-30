@@ -477,29 +477,23 @@ export const FinanceModule: React.FC = () => {
     plan.new4Count;
   const avgCheck = planCount > 0 ? planRevenue / planCount : 0;
 
+  // Computed accounts with real liquid balance (incomes - non-accrued expenses)
+  const calculatedAccounts = useMemo(() => {
+    return accounts.map((acc) => {
+      const accTransactions = finances.filter((f) => f.accountId === acc.id);
+      const accIncomes = accTransactions
+        .filter((f) => f.type === "income")
+        .reduce((sum, f) => sum + Number(f.amount || 0), 0);
+      const accExpenses = accTransactions
+        .filter((f) => f.type === "expense" && f.paymentStatus !== "accrued")
+        .reduce((sum, f) => sum + Number(f.amount || 0), 0);
+      const actualBalance = (acc.balance || 0) + accIncomes - accExpenses;
+      return { ...acc, actualBalance };
+    });
+  }, [accounts, finances]);
+
   // New Dashboard calculations
   const dashboardData = useMemo(() => {
-    const calculatedAccountsMap = new Map<
-      string,
-      (typeof accounts)[0] & { actualBalance: number }
-    >();
-    accounts.forEach((acc) =>
-      calculatedAccountsMap.set(acc.id, {
-        ...acc,
-        actualBalance: acc.balance || 0,
-      }),
-    );
-
-    finances.forEach((f) => {
-      if (f.accountId && calculatedAccountsMap.has(f.accountId)) {
-        const acc = calculatedAccountsMap.get(f.accountId)!;
-        if (f.type === "income") acc.actualBalance += Number(f.amount || 0);
-        else if (f.type === "expense" && f.paymentStatus !== "accrued")
-          acc.actualBalance -= Number(f.amount || 0);
-      }
-    });
-
-    const calculatedAccounts = Array.from(calculatedAccountsMap.values());
     const totalBalance = calculatedAccounts.reduce(
       (sum, acc) => sum + acc.actualBalance,
       0,
@@ -1246,9 +1240,9 @@ export const FinanceModule: React.FC = () => {
                     onChange={(e) => setFAccount(e.target.value)}
                     className="w-full p-2.5 bg-slate-50 border border-gray-200 outline-none rounded-xl text-sm font-semibold text-slate-800"
                   >
-                    {accounts.map((a) => (
+                    {calculatedAccounts.map((a) => (
                       <option key={a.id} value={a.id}>
-                        {a.name}
+                        {a.name} (Баланс: {a.actualBalance.toLocaleString("ru-RU")} ₽)
                       </option>
                     ))}
                   </select>
@@ -3824,19 +3818,7 @@ export const FinanceModule: React.FC = () => {
 
         {activeTab === "accounts" &&
           (() => {
-            const processedAccounts = accounts.map((acc) => {
-              const accTransactions = finances.filter(
-                (f) => f.accountId === acc.id,
-              );
-              const accIncomes = accTransactions
-                .filter((f) => f.type === "income")
-                .reduce((sum, f) => sum + f.amount, 0);
-              const accExpenses = accTransactions
-                .filter((f) => f.type === "expense" && f.paymentStatus !== "accrued")
-                .reduce((sum, f) => sum + f.amount, 0);
-              const actualBalance = acc.balance + accIncomes - accExpenses;
-              return { ...acc, actualBalance };
-            });
+            const processedAccounts = calculatedAccounts;
             const totalBalance = processedAccounts.reduce(
               (sum, acc) => sum + acc.actualBalance,
               0,
@@ -4681,11 +4663,11 @@ export const FinanceModule: React.FC = () => {
                   <option value="" disabled>
                     Выберите счет
                   </option>
-                  {accounts
+                  {calculatedAccounts
                     .filter((a) => a.id !== transferFromAcc)
                     .map((acc) => (
                       <option key={acc.id} value={acc.id}>
-                        {acc.name}
+                        {acc.name} (Баланс: {acc.actualBalance.toLocaleString("ru-RU")} ₽)
                       </option>
                     ))}
                 </select>
@@ -4758,9 +4740,9 @@ export const FinanceModule: React.FC = () => {
                   onChange={(e) => setPayoutAccountId(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
                 >
-                  {accounts.map((acc) => (
+                  {calculatedAccounts.map((acc) => (
                     <option key={acc.id} value={acc.id}>
-                      {acc.name} (Баланс: {acc.actualBalance !== undefined ? acc.actualBalance.toLocaleString("ru-RU") : acc.balance.toLocaleString("ru-RU")} ₽)
+                      {acc.name} (Баланс: {acc.actualBalance.toLocaleString("ru-RU")} ₽)
                     </option>
                   ))}
                 </select>
@@ -4777,6 +4759,36 @@ export const FinanceModule: React.FC = () => {
                   onChange={(e) => setPayoutAmount(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
                 />
+                {payoutType === "salary" && (() => {
+                  const targetCoach = coaches.find((c) => c.id === payoutTargetId || c.name === payoutTargetName);
+                  if (!targetCoach || targetCoach.paymentType !== "fixed" || !targetCoach.rate) return null;
+                  const half = Math.round(targetCoach.rate / 2);
+                  return (
+                    <div className="mt-2.5 flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setPayoutAmount(String(half))}
+                        className="px-2.5 py-1 text-[11px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg transition"
+                      >
+                        Аванс (1–15): {half.toLocaleString("ru-RU")} ₽
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPayoutAmount(String(targetCoach.rate! - half))}
+                        className="px-2.5 py-1 text-[11px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg transition"
+                      >
+                        Расчет (16–31): {(targetCoach.rate! - half).toLocaleString("ru-RU")} ₽
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPayoutAmount(String(targetCoach.rate))}
+                        className="px-2.5 py-1 text-[11px] font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg transition"
+                      >
+                        Весь оклад: {targetCoach.rate.toLocaleString("ru-RU")} ₽
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div>
@@ -4903,6 +4915,24 @@ export const FinanceModule: React.FC = () => {
           return mName.charAt(0).toUpperCase() + mName.slice(1);
         };
 
+        // Half-month salary calculations for fixed rate coaches
+        const half1Accrued = coach.paymentType === "fixed" ? Math.round((coach.rate || 0) / 2) : 0;
+        const half2Accrued = coach.paymentType === "fixed" ? (coach.rate || 0) - half1Accrued : 0;
+
+        const paidHalf1 = coachFinances
+          .filter(
+            (f) =>
+              f.paymentStatus !== "accrued" &&
+              ((parseInt(f.date.split("-")[2] || "0", 10) <= 16) ||
+                f.description?.toLowerCase().includes("1-15") ||
+                f.description?.toLowerCase().includes("аванс"))
+          )
+          .reduce((sum, f) => sum + Number(f.amount || 0), 0);
+
+        const paidHalf2 = Math.max(0, paid - paidHalf1);
+        const toPayHalf1 = Math.max(0, half1Accrued - paidHalf1);
+        const toPayHalf2 = Math.max(0, half2Accrued - paidHalf2);
+
         return (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
             <div className="bg-white rounded-3xl p-6 md:p-8 w-full max-w-4xl shadow-2xl animate-in zoom-in-95 duration-200 my-8 max-h-[90vh] flex flex-col">
@@ -4996,6 +5026,70 @@ export const FinanceModule: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Fixed Salary Semi-Monthly Schedule Breakdown */}
+              {coach.paymentType === "fixed" && (
+                <div className="mb-5 p-4 bg-slate-50/80 border border-slate-200/80 rounded-2xl shrink-0">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <Calendar className="w-4 h-4 text-emerald-600" />
+                      График выплат оклада по полумесяцам (50% / 50%)
+                    </span>
+                    <span className="text-[11px] font-semibold text-slate-500">
+                      Оклад: <strong className="text-slate-900 font-bold">{coach.rate?.toLocaleString("ru-RU")} ₽/мес</strong>
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {/* Period 1: 1-15 */}
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-bold text-slate-800">1-я половина (1–15 число)</span>
+                          <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded">
+                            Выплата 16-го числа
+                          </span>
+                        </div>
+                        <div className="text-sm font-black text-slate-900 mt-1">
+                          Начислено: {half1Accrued.toLocaleString("ru-RU")} ₽
+                        </div>
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          Выплачено: <span className="font-bold text-slate-700">{paidHalf1.toLocaleString("ru-RU")} ₽</span>
+                        </div>
+                      </div>
+                      <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
+                        <span className="text-xs text-slate-500 font-medium">Остаток к выплате 16-го:</span>
+                        <span className={`text-xs font-black ${toPayHalf1 > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                          {toPayHalf1 > 0 ? `${toPayHalf1.toLocaleString("ru-RU")} ₽` : "Оплачено"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Period 2: 16-31 */}
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-bold text-slate-800">2-я половина (16–31 число)</span>
+                          <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">
+                            Выплата 1-го числа
+                          </span>
+                        </div>
+                        <div className="text-sm font-black text-slate-900 mt-1">
+                          Начислено: {half2Accrued.toLocaleString("ru-RU")} ₽
+                        </div>
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          Выплачено: <span className="font-bold text-slate-700">{paidHalf2.toLocaleString("ru-RU")} ₽</span>
+                        </div>
+                      </div>
+                      <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
+                        <span className="text-xs text-slate-500 font-medium">Остаток к выплате 1-го:</span>
+                        <span className={`text-xs font-black ${toPayHalf2 > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                          {toPayHalf2 > 0 ? `${toPayHalf2.toLocaleString("ru-RU")} ₽` : "Оплачено"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Subtabs inside Modal */}
               <div className="flex border-b border-slate-100 mb-4 shrink-0">

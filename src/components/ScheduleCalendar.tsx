@@ -78,8 +78,8 @@ export const ScheduleCalendar: React.FC<{
     addNotification,
   } = useCRM();
 
-  // Active view: 'month' | 'week' | 'list'
-  const [view, setView] = useState<"month" | "week" | "list">("month");
+  // Active view: 'today' | 'week' | 'month' | 'list'
+  const [view, setView] = useState<"today" | "week" | "month" | "list">("today");
 
   // Date state
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
@@ -353,31 +353,40 @@ export const ScheduleCalendar: React.FC<{
 
   // Navigation handlers
   const handlePrev = () => {
-    if (view === "month" || view === "list") {
-      setCurrentDate(
-        new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1),
-      );
+    if (view === "today") {
+      const d = new Date(currentDate);
+      d.setDate(d.getDate() - 1);
+      setCurrentDate(d);
     } else if (view === "week") {
       const d = new Date(currentDate);
       d.setDate(d.getDate() - 7);
       setCurrentDate(d);
+    } else {
+      setCurrentDate(
+        new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1),
+      );
     }
   };
 
   const handleNext = () => {
-    if (view === "month" || view === "list") {
-      setCurrentDate(
-        new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1),
-      );
+    if (view === "today") {
+      const d = new Date(currentDate);
+      d.setDate(d.getDate() + 1);
+      setCurrentDate(d);
     } else if (view === "week") {
       const d = new Date(currentDate);
       d.setDate(d.getDate() + 7);
       setCurrentDate(d);
+    } else {
+      setCurrentDate(
+        new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1),
+      );
     }
   };
 
   const handleToday = () => {
     setCurrentDate(new Date());
+    setView("today");
   };
 
   // Build grid of days for the Month view
@@ -704,7 +713,7 @@ export const ScheduleCalendar: React.FC<{
             <span>Google Sync Live</span>
           </div>
           <div className="flex items-center"><h1 className="text-2xl font-bold tracking-tight text-slate-950 font-sans">
-            Интерактивное расписание академии
+            Интерактивное расписание школы
           </h1><HeaderDescription text={<>Удобное составление, перенос и отмена тренировок футбольных групп с
             синхронной автовыгрузкой в Google-календари.</>} /></div>
         </div>
@@ -742,17 +751,28 @@ export const ScheduleCalendar: React.FC<{
           </button>
 
           <div className="flex bg-slate-100 p-1.5 rounded-xl border border-slate-200 gap-1 select-none">
-            {(["month", "week", "list"] as const).map((v) => (
+            {(["today", "week", "month", "list"] as const).map((v) => (
               <button
                 key={v}
-                onClick={() => setView(v)}
-                className={`px-3 py-1 text-xs font-bold rounded-lg transition uppercase font-mono ${
+                onClick={() => {
+                  setView(v);
+                  if (v === "today") {
+                    setCurrentDate(new Date());
+                  }
+                }}
+                className={`px-3 py-1 text-xs font-bold rounded-lg transition uppercase font-mono cursor-pointer ${
                   view === v
                     ? "bg-white text-slate-900 shadow-xs"
                     : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                {v === "month" ? "Месяц" : v === "week" ? "Неделя" : "Список"}
+                {v === "today"
+                  ? "Сегодня"
+                  : v === "week"
+                    ? "Неделя"
+                    : v === "month"
+                      ? "Месяц"
+                      : "Список"}
               </button>
             ))}
           </div>
@@ -880,31 +900,60 @@ export const ScheduleCalendar: React.FC<{
         <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4 bg-white p-4 rounded-2xl border border-slate-100 shadow-xs">
           {/* Navigator */}
           <div className="flex items-center justify-between lg:justify-start gap-4 select-none">
-            <div className="flex items-center space-x-1 border p-1 rounded-xl bg-slate-50">
+            <div className="flex items-center space-x-1.5 border p-1 rounded-xl bg-slate-50">
               <button
                 onClick={handlePrev}
                 className="p-1.5 hover:bg-white rounded-lg hover:shadow-xs transition text-slate-700 cursor-pointer"
+                title="Предыдущий период / день"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
 
-              <button
-                onClick={handleToday}
-                className="px-3 py-1 text-xs font-bold font-mono text-slate-800 hover:bg-white rounded-lg hover:shadow-xs transition"
-              >
-                СЕГОДНЯ
-              </button>
+              {/* Window view selector */}
+              <div className="relative">
+                <select
+                  value={view}
+                  onChange={(e) => {
+                    const selected = e.target.value as "today" | "week" | "month" | "list";
+                    setView(selected);
+                    if (selected === "today") {
+                      setCurrentDate(new Date());
+                    }
+                  }}
+                  className="px-2.5 py-1 text-xs font-bold font-mono text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg shadow-2xs outline-none cursor-pointer uppercase tracking-tight"
+                  title="Выберите вариант (Сегодня, Неделя, Месяц)"
+                >
+                  <option value="today">Сегодня</option>
+                  <option value="week">Неделя</option>
+                  <option value="month">Месяц</option>
+                  <option value="list">Список</option>
+                </select>
+              </div>
 
               <button
                 onClick={handleNext}
                 className="p-1.5 hover:bg-white rounded-lg hover:shadow-xs transition text-slate-700 cursor-pointer"
+                title="Следующий период / день"
               >
                 <ChevronRight className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={handleToday}
+                className="px-2.5 py-1 text-[11px] font-bold font-mono text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition cursor-pointer"
+                title="Перейти к сегодняшнему дню"
+              >
+                Текущий день
               </button>
             </div>
 
             <h2 className="text-base font-extrabold text-slate-900 tracking-tight font-sans">
-              {view === "week" && weekDays.length > 0 ? (
+              {view === "today" ? (
+                <>
+                  {currentDate.toLocaleDateString("en-CA") === new Date().toLocaleDateString("en-CA") ? "Сегодня, " : ""}
+                  {currentDate.getDate()} {RU_MONTHS[currentDate.getMonth()]} {currentDate.getFullYear()} г. ({RU_WEEKDAYS[currentDate.getDay()]})
+                </>
+              ) : view === "week" && weekDays.length > 0 ? (
                 <>
                   {weekDays[0].dayNum} {RU_MONTHS[(new Date(weekDays[0].dateStr)).getMonth()].slice(0, 3)} - {weekDays[6].dayNum} {RU_MONTHS[(new Date(weekDays[6].dateStr)).getMonth()].slice(0, 3)} {currentDate.getFullYear()} г.
                 </>
@@ -970,6 +1019,176 @@ export const ScheduleCalendar: React.FC<{
             </div>
           </div>
         </div>
+
+        {/* TODAY VIEW */}
+        {view === "today" && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm text-left space-y-5">
+            {(() => {
+              const year = currentDate.getFullYear();
+              const month = String(currentDate.getMonth() + 1).padStart(2, "0");
+              const day = String(currentDate.getDate()).padStart(2, "0");
+              const todayDateStr = `${year}-${month}-${day}`;
+              const dayEvents = filteredEvents
+                .filter((ev) => ev.date === todayDateStr)
+                .sort((a, b) => a.time.localeCompare(b.time));
+              const isActualToday =
+                todayDateStr === new Date().toLocaleDateString("en-CA");
+
+              return (
+                <>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <h3 className="font-extrabold text-slate-950 text-base">
+                          {isActualToday
+                            ? "Расписание на сегодня"
+                            : "Расписание на выбранный день"}
+                        </h3>
+                        {isActualToday && (
+                          <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-extrabold uppercase rounded border border-emerald-200">
+                            Сегодня
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5 font-medium">
+                        {currentDate.getDate()}{" "}
+                        {RU_MONTHS[currentDate.getMonth()]}{" "}
+                        {currentDate.getFullYear()} г.,{" "}
+                        {RU_WEEKDAYS[currentDate.getDay()]}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center space-x-3">
+                      <span className="text-xs font-bold font-mono text-slate-600 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
+                        Событий: <strong>{dayEvents.length}</strong>
+                      </span>
+                      <button
+                        onClick={() => handleOpenAddModal(todayDateStr)}
+                        className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs uppercase rounded-xl flex items-center space-x-1.5 transition shadow-xs cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Добавить</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {dayEvents.length === 0 ? (
+                    <div className="p-12 text-center bg-slate-50/60 border-2 border-dashed border-slate-200 rounded-2xl space-y-3">
+                      <Clock className="w-10 h-10 text-slate-300 mx-auto" />
+                      <div className="font-bold text-slate-800 text-sm">
+                        На эту дату тренировок и событий не запланировано
+                      </div>
+                      <p className="text-xs text-slate-400 max-w-md mx-auto">
+                        В расписании вашей школы нет занятий или
+                        соревнований на этот день. Вы можете добавить новое
+                        событие вручную.
+                      </p>
+                      <button
+                        onClick={() => handleOpenAddModal(todayDateStr)}
+                        className="mt-2 inline-flex items-center space-x-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition cursor-pointer shadow-xs"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Создать событие на этот день</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {dayEvents.map((ev) => {
+                        const isSelected = selectedEventIds.includes(ev.id);
+                        return (
+                          <div
+                            key={ev.id}
+                            onClick={() => {
+                              if (isDeleteModeActive) {
+                                toggleEventSelection(ev.id);
+                              } else {
+                                setShowEventDetailsModal(ev);
+                              }
+                            }}
+                            className={`p-4 border border-slate-200 rounded-xl hover:border-slate-300 hover:shadow-md transition bg-white flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer relative group ${
+                              isDeleteModeActive && isSelected
+                                ? "bg-red-50/80 border-red-300 ring-2 ring-red-400"
+                                : ""
+                            }`}
+                          >
+                            <div className="flex items-start space-x-4">
+                              {isDeleteModeActive && (
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    toggleEventSelection(ev.id);
+                                  }}
+                                  className="w-4 h-4 mt-1 rounded text-red-600 focus:ring-red-500 cursor-pointer shrink-0"
+                                />
+                              )}
+                              <div className="w-24 shrink-0 bg-slate-100 p-2.5 rounded-xl border border-slate-200 text-center">
+                                <div className="text-sm font-black font-mono text-slate-900">
+                                  {ev.time}
+                                </div>
+                                <div className="text-[10px] text-slate-500 font-semibold mt-0.5">
+                                  Время
+                                </div>
+                              </div>
+
+                              <div className="space-y-1 text-left">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <h4 className="font-extrabold text-slate-900 text-sm">
+                                    {ev.title.replace(
+                                      "Регулярная тренировка: ",
+                                      "",
+                                    )}
+                                  </h4>
+                                  {renderTypeBadge(ev.type)}
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600 pt-1">
+                                  {ev.groupName && (
+                                    <span className="flex items-center gap-1 font-semibold text-slate-800">
+                                      <Users className="w-3.5 h-3.5 text-slate-400" />
+                                      {ev.groupName}
+                                    </span>
+                                  )}
+                                  {ev.coachName && (
+                                    <span className="flex items-center gap-1 text-slate-600">
+                                      <User className="w-3.5 h-3.5 text-red-500" />
+                                      {ev.coachName}
+                                    </span>
+                                  )}
+                                  {ev.location && (
+                                    <span className="flex items-center gap-1 text-slate-500">
+                                      <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                                      {ev.location}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center space-x-2 self-end md:self-center shrink-0">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteEvent(ev.id);
+                                }}
+                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                                title="Удалить занятие"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        )}
 
         {/* MONTH VIEW CALENDAR GRID */}
         {view === "month" && (

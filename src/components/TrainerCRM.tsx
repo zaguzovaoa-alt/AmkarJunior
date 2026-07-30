@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { compressImage } from "../utils/image";
-import { calculateAge } from "../utils/dateUtils";
+import { calculateAge, cleanClientNotes } from "../utils/dateUtils";
 import { BirthdaysBanner } from "./BirthdaysBanner";
 import { CredentialsSettings } from "./CredentialsSettings";
 import { TrainerSessions } from "./TrainerSessions";
@@ -2020,7 +2020,17 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                       </div>
                     </div>
 
-                    <div className="space-y-3">
+                    {/* Attendance Table moved above student list */}
+                    <div className="py-2">
+                      <AttendanceTable group={grp} clients={clients} trainingSessions={trainingSessions || []} />
+                    </div>
+
+                    <div className="pt-4 border-t space-y-3">
+                      <div className="flex justify-between items-center">
+                        <h4 className="font-extrabold text-slate-900 text-sm tracking-tight uppercase font-mono">
+                          Состав группы ({groupPlayers.length})
+                        </h4>
+                      </div>
                       {groupPlayers.length === 0 ? (
                         <div className="p-6 text-center text-gray-500 text-xs bg-slate-50 border rounded-2xl">
                           В этой группе пока нет учеников.
@@ -2133,18 +2143,18 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                                 <div className="text-xs text-gray-600 bg-slate-50 hover:bg-slate-100/50 p-2.5 rounded-xl border flex justify-between items-start min-h-[60px] cursor-text">
                                   <span
                                     className={
-                                      player.notes
+                                      cleanClientNotes(player.notes)
                                         ? "leading-relaxed"
                                         : "text-gray-400 italic"
                                     }
                                   >
-                                    {player.notes ||
+                                    {cleanClientNotes(player.notes) ||
                                       "Нет заметок по ученику. Нажмите, чтобы добавить."}
                                   </span>
                                   <button
                                     onClick={() => {
                                       setEditingPlayerId(player.id);
-                                      setEditPlayerNotes(player.notes || "");
+                                      setEditPlayerNotes(cleanClientNotes(player.notes));
                                     }}
                                     className="p-1 text-gray-400 hover:text-emerald-600 transition flex-shrink-0"
                                     title="Редактировать заметки"
@@ -2157,10 +2167,6 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                           ))}
                         </div>
                       )}
-                    </div>
-                    
-                    <div className="pt-6 border-t mt-6">
-                      <AttendanceTable group={grp} clients={clients} trainingSessions={trainingSessions || []} />
                     </div>
                   </div>
                 );
