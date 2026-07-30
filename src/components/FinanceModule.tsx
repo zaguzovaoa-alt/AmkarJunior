@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { HeaderDescription } from "./HeaderDescription";
-import { toYearMonthString } from "../utils/dateUtils";
+import { toYearMonthString, formatSessionDateDisplay } from "../utils/dateUtils";
 import { db } from "../firebase";
 import { setDoc, doc, updateDoc } from "firebase/firestore";
 import { useCRM } from "../context/CRMContext";
@@ -5052,11 +5052,7 @@ export const FinanceModule: React.FC = () => {
                           const perSessionRate = coach.rate || 1500;
                           const sessionAccrual = coach.paymentType === "per_session" ? perSessionRate : 0;
 
-                          let formattedDate = ts.dateString || ts.date;
-                          if (ts.date && ts.date.includes("-")) {
-                            const [y, m, d] = ts.date.split("-");
-                            formattedDate = `${d}.${m}.${y}`;
-                          }
+                          const formattedDate = formatSessionDateDisplay(ts.date, ts.dateString);
 
                           return (
                             <tr key={ts.id} className="hover:bg-slate-50 transition">

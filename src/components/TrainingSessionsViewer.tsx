@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useCRM } from '../context/CRMContext';
 import { Camera, Calendar, User, Users, MapPin, X } from 'lucide-react';
 import { TrainingSessionProtocol } from '../types';
+import { formatSessionDateDisplay } from '../utils/dateUtils';
 
 export const TrainingSessionsViewer: React.FC = () => {
   const { trainingSessions } = useCRM();
@@ -17,7 +18,7 @@ export const TrainingSessionsViewer: React.FC = () => {
                 <h4 className="font-bold text-slate-800 text-sm">{session.groupName}</h4>
                 <div className="text-xs text-gray-500 flex items-center space-x-1 mt-1">
                   <Calendar className="w-3 h-3" />
-                  <span>{session.date} • {session.dateString}</span>
+                  <span>{formatSessionDateDisplay(session.date, session.dateString)}</span>
                 </div>
               </div>
               {session.photoUrl && (
@@ -60,7 +61,7 @@ export const TrainingSessionsViewer: React.FC = () => {
                 <div className="rounded-xl overflow-hidden border border-gray-200">
                   <img src={selectedSession.photoUrl} alt="Фотоотчет" className="w-full object-contain max-h-[40vh]" />
                   <div className="p-3 bg-slate-50 text-xs text-gray-500 flex justify-between items-center">
-                     <span>Фото загружено: {selectedSession.dateString}</span>
+                     <span>Фото загружено: {formatSessionDateDisplay(selectedSession.date, selectedSession.dateString)}</span>
                      <span>Автор: {selectedSession.coachName}</span>
                   </div>
                 </div>
@@ -78,7 +79,7 @@ export const TrainingSessionsViewer: React.FC = () => {
                 </div>
                 <div className="p-3 bg-slate-50 rounded-xl">
                    <div className="text-[10px] uppercase font-bold text-slate-500 mb-1">Дата и время проведения</div>
-                   <div className="font-bold text-sm text-slate-900">{selectedSession.date} • {selectedSession.dateString}</div>
+                   <div className="font-bold text-sm text-slate-900">{formatSessionDateDisplay(selectedSession.date, selectedSession.dateString)}</div>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-xl">
                    <div className="text-[10px] uppercase font-bold text-slate-500 mb-1">Тренер</div>

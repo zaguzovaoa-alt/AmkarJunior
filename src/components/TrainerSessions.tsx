@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { TrainingSessionProtocol } from "../types";
 import { HeaderDescription } from "./HeaderDescription";
-import { toYearMonthString } from "../utils/dateUtils";
+import { toYearMonthString, formatSessionDateDisplay } from "../utils/dateUtils";
 import { compressImage } from "../utils/image";
 
 export const TrainerSessions: React.FC = () => {
@@ -198,8 +198,8 @@ export const TrainerSessions: React.FC = () => {
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-slate-800">{session.groupName}</span>
-                    <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
-                      {session.date}
+                    <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500 px-2.5 py-0.5 rounded-full">
+                      {formatSessionDateDisplay(session.date, session.dateString)}
                     </span>
                   </div>
                   <div className="text-sm text-slate-500 flex items-center gap-1.5">
@@ -354,7 +354,7 @@ export const TrainerSessions: React.FC = () => {
                         Дата и время
                       </div>
                       <div className="font-bold text-sm text-slate-900">
-                        {selectedSession.date} • {selectedSession.dateString}
+                        {formatSessionDateDisplay(selectedSession.date, selectedSession.dateString)}
                       </div>
                     </div>
                     <div className="p-3 bg-slate-50 rounded-xl">

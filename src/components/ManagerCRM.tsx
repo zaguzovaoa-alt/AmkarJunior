@@ -41,6 +41,7 @@ import { calculateAge, isBirthdayToday } from "../utils/dateUtils";
 import { compressImage } from "../utils/image";
 import { ConfirmModal } from "./ConfirmModal";
 import { BirthdaysBanner } from "./BirthdaysBanner";
+import { ProcessPaymentModal } from "./ProcessPaymentModal";
 
 const formatBirthDate = (dateString?: string, fallbackYear?: number) => {
   if (!dateString) return fallbackYear ? `${fallbackYear} г.р.` : "";
@@ -90,7 +91,12 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
     addFinanceRecord,
     accounts,
     finances,
+    convertLeadToClient,
+    ensureClientFromLead,
   } = useCRM();
+
+  const [paymentModalClient, setPaymentModalClient] = useState<Client | null>(null);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState<boolean>(false);
 
   const totalBalance = useMemo(() => {
     const calculatedAccountsMap = new Map<
@@ -1115,9 +1121,19 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                               Пригласить на пробную
                             </button>
                           ) : lead.status === "trial_completed" ? (
-                            <span className="text-[11px] text-emerald-600 font-bold">
-                              Ожидает покупки
-                            </span>
+                            <button
+                              onClick={async () => {
+                                const cl = await convertLeadToClient(lead.id);
+                                if (cl) {
+                                  setPaymentModalClient(cl);
+                                  setIsPaymentModalOpen(true);
+                                }
+                              }}
+                              className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-extrabold text-[10px] transition shadow-xs flex items-center gap-1"
+                            >
+                              <CreditCard className="w-3.5 h-3.5" />
+                              <span>Оформить (Не оплачено)</span>
+                            </button>
                           ) : (
                             <span className="text-[11px] text-emerald-600 font-bold">
                               ✓ Отработан успешно
@@ -1846,15 +1862,20 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                 )}
                               </td>
                               <td className="p-2 md:p-3 hidden sm:table-cell align-middle">
-                                <span
-                                  className={`text-[10px] ${
-                                    client.abonementStatus === "Оплачено"
-                                      ? "text-emerald-500 font-medium"
-                                      : "text-amber-500 font-medium"
-                                  }`}
-                                >
-                                  {client.abonementStatus || "Не оплачено"}
-                                </span>
+                                {client.abonementStatus === "Оплачено" ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                    ✓ Оплачено
+                                  </span>
+                                ) : (client.attendance && client.attendance.some((a) => a.status === "present")) ||
+                                  (client.notes && client.notes.includes("отработано")) ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-200">
+                                    Не оплачено (после пробной)
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-200">
+                                    Не оплачено (без пробной)
+                                  </span>
+                                )}
                                 <div className="text-[9px] text-gray-400 mt-0.5">
                                   {client.abonementSessionsLeft !==
                                   undefined ? (
@@ -1926,7 +1947,21 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                   )}
                                 </div>
                               </td>
-                              <td className="p-2 md:p-3 align-middle flex justify-end space-x-1">
+                              <td className="p-2 md:p-3 align-middle flex justify-end space-x-1 items-center">
+                                {client.abonementStatus !== "Оплачено" && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setPaymentModalClient(client);
+                                      setIsPaymentModalOpen(true);
+                                    }}
+                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[10px] rounded-lg shadow-xs transition flex items-center gap-1 mr-1"
+                                    title="Принять оплату и указать абонемент"
+                                  >
+                                    <CreditCard className="w-3 h-3" />
+                                    <span>Оплатить</span>
+                                  </button>
+                                )}
                                 <button
                                   className="text-gray-400 hover:text-black p-1 hover:bg-gray-100 rounded transition-colors"
                                   title="Редактировать карточку"
@@ -4658,6 +4693,15 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
         title="Удалить ученика?"
         message={`⚠️ ВНИМАНИЕ: Вы действительно хотите окончательно УДАЛИТЬ ученика "${deleteClientModal?.clientName || ""}" из базы данных школы? Это действие необратимо и удалит всю связанную историю, абонементы и платежи.`}
         confirmText="Удалить ученика"
+      />
+
+      <ProcessPaymentModal
+        client={paymentModalClient}
+        isOpen={isPaymentModalOpen}
+        onClose={() => {
+          setIsPaymentModalOpen(false);
+          setPaymentModalClient(null);
+        }}
       />
     </div>
   );

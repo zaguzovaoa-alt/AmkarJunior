@@ -17,7 +17,7 @@ import {
   Trophy,
 } from "lucide-react";
 import { parseScheduleString } from "../utils/scheduleParser";
-import { toISODateString } from "../utils/dateUtils";
+import { toISODateString, formatSessionDateDisplay } from "../utils/dateUtils";
 
 export const GroupsModule: React.FC = () => {
   const {
@@ -1267,7 +1267,7 @@ export const GroupsModule: React.FC = () => {
                         {sessions.map(s => (
                           <div key={s.id} className="grid grid-cols-12 gap-4 px-4 py-3 hover:bg-slate-50 transition items-center">
                             <div className="col-span-3 font-mono text-xs font-bold text-slate-800">
-                              {new Date(s.date).toLocaleDateString('ru-RU')} <span className="text-slate-400 font-medium">{new Date(s.date).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span>
+                              {formatSessionDateDisplay(s.date, s.dateString)}
                             </div>
                             <div className="col-span-2 text-center font-bold text-emerald-600 bg-emerald-50 py-1 rounded w-16 mx-auto">
                               {s.presentCount}

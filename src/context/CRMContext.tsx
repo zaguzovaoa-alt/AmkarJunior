@@ -128,6 +128,8 @@ interface CRMContextType {
     >,
   ) => void;
   updateLeadStatus: (id: string, status: Lead["status"]) => void;
+  ensureClientFromLead: (lead: Lead, trialGroupName?: string) => Promise<Client>;
+  convertLeadToClient: (leadId: string, initialGroup?: string) => Promise<Client | undefined>;
   bookTrial: (
     leadId: string,
     coachId: string,
@@ -1244,6 +1246,111 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     });
   };
 
+  const ensureClientFromLead = async (
+    lead: Lead,
+    trialGroupName?: string,
+  ): Promise<Client> => {
+    const leadPhoneClean = (lead.parentPhone || "").replace(/\D/g, "");
+    const existing = clients.find(
+      (c) =>
+        (c.parentPhone &&
+          leadPhoneClean &&
+          c.parentPhone.replace(/\D/g, "") === leadPhoneClean) &&
+        c.childName.toLowerCase() === lead.childName.toLowerCase(),
+    );
+    if (existing) {
+      return existing;
+    }
+
+    const clientId = `cl_lead_${lead.id}`;
+    const group = trialGroupName
+      ? groups.find((g) => g.name === trialGroupName)
+      : lead.trialGroupId
+      ? groups.find((g) => g.id === lead.trialGroupId)
+      : null;
+
+    const hasCompletedTrial =
+      lead.status === "trial_completed" || Boolean(lead.trainerFeedback);
+
+    const newClient: Client = {
+      id: clientId,
+      parentName: lead.parentName || "Не указано",
+      parentPhone: lead.parentPhone || "",
+      parentEmail: lead.parentEmail || "",
+      childName: lead.childName,
+      childSurname: lead.childSurname,
+      childBirthYear: lead.childBirthYear || new Date().getFullYear(),
+      childBirthDate:
+        lead.childBirthDate ||
+        `${lead.childBirthYear || new Date().getFullYear()}-01-01`,
+      childAge: lead.childAge || 7,
+      status: "trial",
+      abonement: "none",
+      abonementStatus: "Не оплачено",
+      abonementSessionsLeft: 0,
+      abonementTotalSessions: 0,
+      groupName: group?.name || trialGroupName || null,
+      coachId: group?.coachId || lead.trialCoachId || null,
+      coachName: group?.coachName || null,
+      medicalCertificateUrl: null,
+      insuranceUrl: null,
+      payments: [],
+      attendance: hasCompletedTrial
+        ? [
+            {
+              date: lead.trialDate || new Date().toISOString().split("T")[0],
+              status: "present",
+              reason: "Пробное занятие",
+            },
+          ]
+        : [],
+      progress: {
+        technique: 4.0,
+        tactics: 4.0,
+        physical: 4.0,
+        discipline: 4.0,
+      },
+      achievements: [],
+      notes: hasCompletedTrial
+        ? `Клиент поступил по заявке (${lead.source || "Сайт"}). Пробное занятие отработано. Ожидает оплаты абонемента.`
+        : `Клиент поступил по заявке (${lead.source || "Сайт"}). Пробное занятие еще не проходил / ожидает записи.`,
+    };
+
+    setClients((prev) => {
+      if (prev.some((c) => c.id === clientId)) return prev;
+      return [newClient, ...prev];
+    });
+
+    try {
+      await setDoc(doc(db, "clients", clientId), newClient, { merge: true });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, "clients");
+    }
+
+    return newClient;
+  };
+
+  const convertLeadToClient = async (
+    leadId: string,
+    initialGroup?: string,
+  ): Promise<Client | undefined> => {
+    const lead = leads.find((l) => l.id === leadId);
+    if (!lead) return undefined;
+
+    const client = await ensureClientFromLead(lead, initialGroup);
+
+    const updatedLead: Lead = {
+      ...lead,
+      status: "converted",
+    };
+    setLeads((prev) => prev.map((l) => (l.id === leadId ? updatedLead : l)));
+    updateDoc(doc(db, "leads", leadId), updatedLead as any).catch((err) => {
+      handleFirestoreError(err, OperationType.WRITE, "update");
+    });
+
+    return client;
+  };
+
   const bookTrial = async (
     leadId: string,
     coachId: string,
@@ -1345,6 +1452,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     setTasks((prev) => [managerTask, directorTask, ...prev]);
 
     // Safe background sync without blocking UI execution
+    ensureClientFromLead(updatedLead, groupName).catch((err) => {
+      console.warn("Failed to create client from lead:", err);
+    });
+
     updateDoc(doc(db, "leads", leadId), updatedLead as any).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn("Failed to sync attendance in Firestore:", err);
     });
@@ -2933,6 +3044,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         addLead,
         addClient,
         updateLeadStatus,
+        ensureClientFromLead,
+        convertLeadToClient,
         bookTrial,
         completeTrialAndMarkAttendance,
         uploadDocument,

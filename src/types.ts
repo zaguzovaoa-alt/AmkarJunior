@@ -106,7 +106,7 @@ export interface Client {
   childAge: number;
   status: ClientStatus;
   abonement: 'none' | '12_sessions' | '8_sessions' | '4_sessions' | '1_session';
-  abonementStatus: 'Оплачено' | 'Ожидает оплаты' | 'Нет абонемента';
+  abonementStatus: 'Оплачено' | 'Ожидает оплаты' | 'Нет абонемента' | 'Не оплачено';
   abonementExpirationDate?: string;
   abonementTotalSessions?: number;
   abonementSessionsLeft: number;

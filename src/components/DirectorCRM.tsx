@@ -36,7 +36,7 @@ import {
 } from "lucide-react";
 import { motion } from "motion/react";
 import { BirthdaysBanner } from "./BirthdaysBanner";
-import { calculateAge } from "../utils/dateUtils";
+import { calculateAge, formatSessionDateDisplay } from "../utils/dateUtils";
 
 // CRM Schema Definitions for Field Mapping
 const FIELD_DEFINITIONS = {
@@ -1898,8 +1898,8 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                             <span className="font-extrabold text-slate-900 group-hover:text-emerald-600 transition text-[13px]">
                               {session.groupName}
                             </span>
-                            <span className="px-2 py-0.5 rounded-full bg-slate-200 text-slate-800 text-[9px] font-bold font-mono">
-                              {session.dateString}
+                            <span className="px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-800 text-[10px] font-bold font-mono">
+                              {formatSessionDateDisplay(session.date, session.dateString)}
                             </span>
                           </div>
                           <p className="text-[11px] text-slate-500 font-medium">
@@ -2073,7 +2073,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                       {selectedSessionDetail.groupName}
                     </h3>
                     <p className="text-[10px] text-emerald-400 font-semibold font-mono">
-                      Протокол тренировки от {selectedSessionDetail.dateString}
+                      Протокол тренировки от {formatSessionDateDisplay(selectedSessionDetail.date, selectedSessionDetail.dateString)}
                     </p>
                   </div>
                   <button
@@ -2190,7 +2190,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                     onClick={async () => {
                       if (
                         window.confirm(
-                          `Удалить ведомость по тренировке группы "${selectedSessionDetail.groupName}" от ${selectedSessionDetail.dateString}?`
+                          `Удалить ведомость по тренировке группы "${selectedSessionDetail.groupName}" от ${formatSessionDateDisplay(selectedSessionDetail.date, selectedSessionDetail.dateString)}?`
                         )
                       ) {
                         await deleteTrainingSession(selectedSessionDetail.id);

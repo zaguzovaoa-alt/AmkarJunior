@@ -65,3 +65,38 @@ export function isBirthdayToday(birthDate: string | undefined): boolean {
   const today = new Date();
   return today.getDate() === birth.getDate() && today.getMonth() === birth.getMonth();
 }
+
+export function formatSessionDateDisplay(dateISO?: string, dateStr?: string): string {
+  let d: Date | null = null;
+  
+  if (dateISO) {
+    const parsed = new Date(dateISO);
+    if (!isNaN(parsed.getTime())) {
+      d = parsed;
+    }
+  }
+
+  if (!d && dateStr) {
+    d = parseSessionDate(dateStr, dateISO);
+  }
+
+  if (!d || isNaN(d.getTime())) {
+    return dateStr || dateISO || "";
+  }
+
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  const dateFormatted = `${day}.${month}.${year}`;
+
+  if (dateISO && dateISO.includes("T")) {
+    const hours = String(d.getHours()).padStart(2, "0");
+    const minutes = String(d.getMinutes()).padStart(2, "0");
+    if (!(hours === "00" && minutes === "00")) {
+      return `${dateFormatted} в ${hours}:${minutes}`;
+    }
+  }
+
+  return dateFormatted;
+}
+
