@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { AmkarLogo } from "./AmkarLogo";
 
-import heroImage from "../assets/images/kids_soccer_background_1780828846133.png";
+import heroImage from "../assets/images/kids_soccer_background_1780828846133.jpg";
 
 export const JoinPage: React.FC = () => {
   const { schoolName, addLead, crmConfig } = useCRM();

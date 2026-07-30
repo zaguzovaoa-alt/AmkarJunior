@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { motion, AnimatePresence } from "motion/react";
-import { Shield, Smartphone, Loader2, Info } from "lucide-react";
+import { Shield, Smartphone, Loader2, Info, Download } from "lucide-react";
 import { AmkarLogo } from "./AmkarLogo";
 
-import heroImage from "../assets/images/kids_soccer_background_1780828846133.png";
+import heroImage from "../assets/images/kids_soccer_background_1780828846133.jpg";
 
 export const AuthScreen: React.FC = () => {
   const {
@@ -258,7 +258,15 @@ export const AuthScreen: React.FC = () => {
           </span>
         </div>
       </motion.div>
-      <div className="mt-8 flex flex-col items-center gap-2">
+      <div className="mt-8 flex flex-col items-center gap-2 relative z-10">
+        <a
+          href={heroImage}
+          download="amkar_kids_soccer_hero.jpg"
+          className="inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 transition-colors uppercase tracking-wider font-bold bg-slate-800/80 px-3 py-1.5 rounded-lg border border-emerald-500/30 mb-1"
+        >
+          <Download className="w-3.5 h-3.5" />
+          <span>Скачать фоновое изображение главной</span>
+        </a>
         <a
           href="/privacy"
           target="_blank"
