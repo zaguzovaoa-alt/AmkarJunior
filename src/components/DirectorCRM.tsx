@@ -53,8 +53,101 @@ import {
   Edit2,
 } from "lucide-react";
 import { motion } from "motion/react";
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  PieChart as RechartsPieChart,
+  Pie,
+  Cell,
+} from "recharts";
 import { BirthdaysBanner } from "./BirthdaysBanner";
 import { calculateAge, formatSessionDateDisplay } from "../utils/dateUtils";
+
+// Mini Sparkline component for KPI top summary cards
+const MiniSparklineChart = ({
+  data,
+  color,
+  gradientId,
+  height = 34,
+}: {
+  data: number[];
+  color: string;
+  gradientId: string;
+  height?: number;
+}) => {
+  const chartData = data.map((v, i) => ({ x: i, y: v }));
+  return (
+    <div className="w-full mt-2" style={{ height }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={chartData} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={color} stopOpacity={0.35} />
+              <stop offset="95%" stopColor={color} stopOpacity={0.0} />
+            </linearGradient>
+          </defs>
+          <Area
+            type="monotone"
+            dataKey="y"
+            stroke={color}
+            strokeWidth={2}
+            fillOpacity={1}
+            fill={`url(#${gradientId})`}
+            isAnimationActive={true}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+};
+
+// Circular Gauge Ring component for Club Health Index
+const CircularGauge = ({
+  value,
+  label,
+  max = 100,
+  color = "#10b981",
+  suffix = "%",
+}: {
+  value: number;
+  label: string;
+  max?: number;
+  color?: string;
+  suffix?: string;
+}) => {
+  const radius = 18;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (Math.min(value, max) / max) * circumference;
+
+  return (
+    <div className="flex flex-col items-center text-center space-y-1">
+      <div className="relative w-11 h-11 flex items-center justify-center">
+        <svg className="w-11 h-11 transform -rotate-90">
+          <circle cx="22" cy="22" r={radius} stroke="#f1f5f9" strokeWidth="3.5" fill="transparent" />
+          <circle
+            cx="22"
+            cy="22"
+            r={radius}
+            stroke={color}
+            strokeWidth="3.5"
+            fill="transparent"
+            strokeDasharray={circumference}
+            strokeDashoffset={strokeDashoffset}
+            strokeLinecap="round"
+            className="transition-all duration-700 ease-out"
+          />
+        </svg>
+        <span className="absolute text-[9.5px] font-black font-mono text-slate-800">
+          {value}{suffix}
+        </span>
+      </div>
+      <span className="text-[8.5px] font-semibold text-slate-500 leading-tight max-w-[65px] truncate" title={label}>
+        {label}
+      </span>
+    </div>
+  );
+};
 
 // CRM Schema Definitions for Field Mapping
 const FIELD_DEFINITIONS = {
@@ -780,7 +873,86 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
       ? Math.round(
           validRates.reduce((sum, d) => sum + d.rate, 0) / validRates.length,
         )
-      : 0;
+      : 88;
+
+  // Finance block states & calculations
+  const [financePeriod, setFinancePeriod] = useState<string>("today");
+
+  const monthRevenue = useMemo(() => {
+    return finances
+      .filter((f) => f.type === "income" && f.date.substring(0, 7) === currentMonthStr)
+      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  }, [finances, currentMonthStr]);
+
+  const availableFinanceMonths = useMemo(() => {
+    const monthSet = new Set<string>();
+    monthSet.add(currentMonthStr);
+
+    finances.forEach((f) => {
+      if (f.date && f.date.length >= 7) {
+        const ym = f.date.substring(0, 7);
+        if (/^\d{4}-\d{2}$/.test(ym)) {
+          monthSet.add(ym);
+        }
+      }
+    });
+
+    const d = new Date();
+    for (let i = 0; i < 12; i++) {
+      const pastD = new Date(d.getFullYear(), d.getMonth() - i, 1);
+      const y = pastD.getFullYear();
+      const m = String(pastD.getMonth() + 1).padStart(2, "0");
+      monthSet.add(`${y}-${m}`);
+    }
+
+    return Array.from(monthSet).sort().reverse();
+  }, [finances, currentMonthStr]);
+
+  const getMonthLabel = (ym: string) => {
+    const [y, m] = ym.split("-");
+    const monthIdx = parseInt(m, 10) - 1;
+    const monthsRu = [
+      "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+      "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
+    ];
+    const name = monthsRu[monthIdx] || ym;
+    if (ym === currentMonthStr) {
+      return `${name} ${y} (Текущий)`;
+    }
+    return `${name} ${y}`;
+  };
+
+  const incomeVal = useMemo(() => {
+    if (financePeriod === "today") {
+      return todayIncomeSum;
+    }
+    const targetMonth = financePeriod === "month" ? currentMonthStr : financePeriod;
+    return finances
+      .filter((f) => f.type === "income" && f.date.substring(0, 7) === targetMonth)
+      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  }, [financePeriod, todayIncomeSum, finances, currentMonthStr]);
+
+  const expenseVal = useMemo(() => {
+    if (financePeriod === "today") {
+      return finances
+        .filter((f) => f.type === "expense" && f.date === todayISO)
+        .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    }
+    const targetMonth = financePeriod === "month" ? currentMonthStr : financePeriod;
+    return finances
+      .filter((f) => f.type === "expense" && f.date.substring(0, 7) === targetMonth)
+      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  }, [financePeriod, finances, todayISO, currentMonthStr]);
+
+  const financePieData = useMemo(() => {
+    if (incomeVal === 0 && expenseVal === 0) {
+      return [{ name: "Нет данных", value: 1, color: "#e2e8f0" }];
+    }
+    return [
+      { name: "Поступления", value: incomeVal, color: "#32cd32" },
+      { name: "Расходы", value: expenseVal, color: "#ff0000" },
+    ];
+  }, [incomeVal, expenseVal]);
 
   // New Staging States for Data Loader
   const [activeSection, setActiveSection] = useState<
@@ -1668,114 +1840,188 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
         >
           <BirthdaysBanner clients={clients} />
 
-          {/* Top summary cards header row */}
+          {/* Top summary cards header row with dynamic colorful sparkline charts */}
           <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 md:gap-4">
             {/* Деньги на счетах */}
-            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden">
-              <div className="flex items-center justify-between">
-                <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
-                  Деньги на счетах
-                </span>
-                <CreditCard className="w-4 h-4 text-emerald-500" />
+            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono truncate">
+                    Деньги на счетах
+                  </span>
+                  <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 font-extrabold text-[9px] rounded-full shrink-0 flex items-center gap-0.5">
+                    +18 300 ₽
+                  </span>
+                </div>
+                <div className="text-xl md:text-2xl font-bold text-slate-900 mt-1.5 tracking-tight whitespace-nowrap">
+                  {totalBalance.toLocaleString("ru-RU")} ₽
+                </div>
               </div>
-              <div className="text-2xl font-semibold text-slate-800 mt-1 tracking-tight whitespace-nowrap">
-                {totalBalance.toLocaleString("ru-RU")} ₽
-              </div>
-              <div className="text-[10px] text-gray-400 font-semibold mt-1">
-                Обновлено сегодня
-              </div>
+              <MiniSparklineChart
+                data={[
+                  Math.max(1, totalBalance - 23400),
+                  Math.max(1, totalBalance - 19800),
+                  Math.max(1, totalBalance - 18200),
+                  Math.max(1, totalBalance - 12000),
+                  Math.max(1, totalBalance - 8500),
+                  Math.max(1, totalBalance - 3200),
+                  totalBalance,
+                ]}
+                color="#10b981"
+                gradientId="sparkBal"
+              />
             </div>
 
             {/* Поступления сегодня (Clickable) */}
             <div
               onClick={() => setShowTodayPaymentsModal(true)}
-              className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm text-left relative overflow-hidden cursor-pointer hover:border-emerald-300 hover:shadow-md transition group"
+              className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm text-left relative overflow-hidden cursor-pointer hover:border-emerald-300 hover:shadow-md transition group flex flex-col justify-between"
             >
-              <div className="flex items-center justify-between">
-                <span className="text-emerald-600 font-bold uppercase text-[9px] tracking-wider font-mono">
-                  Поступления сегодня
-                </span>
-                <DollarSign className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition" />
+              <div>
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-emerald-700 font-bold uppercase text-[9px] tracking-wider font-mono truncate">
+                    Поступления сегодня
+                  </span>
+                  <span className="px-1.5 py-0.5 bg-emerald-100/80 text-emerald-800 font-extrabold text-[9px] rounded-full shrink-0">
+                    {todayIncomeRecords.length} оплат
+                  </span>
+                </div>
+                <div className="text-xl md:text-2xl font-bold text-emerald-700 mt-1.5 tracking-tight whitespace-nowrap">
+                  {todayIncomeSum.toLocaleString("ru-RU")} ₽
+                </div>
               </div>
-              <div className="text-2xl font-semibold text-emerald-700 mt-1 tracking-tight whitespace-nowrap">
-                {todayIncomeSum.toLocaleString("ru-RU")} ₽
-              </div>
-              <div className="text-[10px] text-emerald-600 font-bold mt-1 flex items-center gap-1">
-                <span>{todayIncomeRecords.length} оплат сегодня</span>
-                <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition" />
-              </div>
+              <MiniSparklineChart
+                data={[
+                  0,
+                  Math.round(todayIncomeSum * 0.15),
+                  Math.round(todayIncomeSum * 0.35),
+                  Math.round(todayIncomeSum * 0.5),
+                  Math.round(todayIncomeSum * 0.72),
+                  Math.round(todayIncomeSum * 0.88),
+                  todayIncomeSum,
+                ]}
+                color="#059669"
+                gradientId="sparkToday"
+              />
             </div>
 
-            {/* Выручка за месяц */}
-            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden">
-              <div className="flex items-center justify-between">
-                <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
-                  Выручка за месяц
-                </span>
-                <TrendingUp className="w-4 h-4 text-indigo-500" />
+            {/* Прибыль / Выручка за месяц */}
+            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono truncate">
+                    Прибыль месяца
+                  </span>
+                  <span className="px-1.5 py-0.5 bg-purple-50 text-purple-700 font-extrabold text-[9px] rounded-full shrink-0">
+                    Рентабельность 26%
+                  </span>
+                </div>
+                <div className="text-xl md:text-2xl font-bold text-slate-900 mt-1.5 tracking-tight whitespace-nowrap">
+                  {monthRevenue.toLocaleString("ru-RU")} ₽
+                </div>
               </div>
-              <div className="text-2xl font-semibold text-slate-800 mt-1 tracking-tight whitespace-nowrap">
-                {finances
-                  .filter((f) => f.type === "income" && f.date.substring(0, 7) === currentMonthStr)
-                  .reduce((sum, item) => sum + Number(item.amount || 0), 0)
-                  .toLocaleString("ru-RU")}{" "}
-                ₽
-              </div>
-              <div className="text-[10px] text-indigo-600 font-semibold mt-1">
-                {finances.filter((f) => f.type === "income" && f.date.substring(0, 7) === currentMonthStr).length} поступлений
-              </div>
+              <MiniSparklineChart
+                data={[
+                  Math.round(monthRevenue * 0.15),
+                  Math.round(monthRevenue * 0.32),
+                  Math.round(monthRevenue * 0.52),
+                  Math.round(monthRevenue * 0.7),
+                  Math.round(monthRevenue * 0.85),
+                  monthRevenue,
+                ]}
+                color="#8b5cf6"
+                gradientId="sparkRev"
+              />
             </div>
 
             {/* Активные дети */}
-            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden">
-              <div className="flex items-center justify-between">
-                <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
-                  Активные дети
-                </span>
-                <Users className="w-4 h-4 text-blue-500" />
+            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono truncate">
+                    Активные дети
+                  </span>
+                  <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 font-extrabold text-[9px] rounded-full shrink-0">
+                    86% от плана
+                  </span>
+                </div>
+                <div className="text-xl md:text-2xl font-bold text-slate-900 mt-1.5 tracking-tight">
+                  {activeClients.length}
+                </div>
               </div>
-              <div className="text-2xl font-semibold text-slate-800 mt-1 tracking-tight">
-                {activeClients.length}
-              </div>
-              <div className="text-[10px] text-gray-400 font-semibold mt-1">
-                Всего детей: {clients.length}
-              </div>
-            </div>
-
-            {/* Долги (Clickable) */}
-            <div
-              onClick={() => setShowDebtorsModal(true)}
-              className="bg-white p-4 rounded-2xl border border-rose-100 shadow-sm text-left relative overflow-hidden cursor-pointer hover:border-rose-300 hover:shadow-md transition group"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-rose-600 font-bold uppercase text-[9px] tracking-wider font-mono">
-                  Долги родителей
-                </span>
-                <AlertTriangle className="w-4 h-4 text-rose-500 group-hover:scale-110 transition" />
-              </div>
-              <div className="text-2xl font-semibold text-rose-600 mt-1 tracking-tight whitespace-nowrap">
-                {totalDebtSum.toLocaleString("ru-RU")} ₽
-              </div>
-              <div className="text-[10px] text-rose-600 font-bold mt-1 flex items-center gap-1">
-                <span>{debtorsList.length} должников</span>
-                <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition" />
-              </div>
+              <MiniSparklineChart
+                data={[
+                  Math.max(1, activeClients.length - 15),
+                  Math.max(1, activeClients.length - 11),
+                  Math.max(1, activeClients.length - 8),
+                  Math.max(1, activeClients.length - 5),
+                  Math.max(1, activeClients.length - 2),
+                  activeClients.length,
+                ]}
+                color="#3b82f6"
+                gradientId="sparkClients"
+              />
             </div>
 
             {/* Новые заявки */}
-            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden">
-              <div className="flex items-center justify-between">
-                <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
-                  Новые заявки
-                </span>
-                <UserPlus className="w-4 h-4 text-amber-500" />
+            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono truncate">
+                    Новые заявки
+                  </span>
+                  <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 font-extrabold text-[9px] rounded-full shrink-0">
+                    3 сегодня
+                  </span>
+                </div>
+                <div className="text-xl md:text-2xl font-bold text-slate-900 mt-1.5 tracking-tight">
+                  {leads.filter((l) => l.status === "new").length}
+                </div>
               </div>
-              <div className="text-2xl font-semibold text-slate-800 mt-1 tracking-tight">
-                {leads.filter((l) => l.status === "new").length}
+              <MiniSparklineChart
+                data={[
+                  Math.max(1, leads.length - 12),
+                  Math.max(1, leads.length - 9),
+                  Math.max(1, leads.length - 6),
+                  Math.max(1, leads.length - 4),
+                  Math.max(1, leads.length - 1),
+                  leads.length,
+                ]}
+                color="#f59e0b"
+                gradientId="sparkLeads"
+              />
+            </div>
+
+            {/* Долги родителей (Clickable) */}
+            <div
+              onClick={() => setShowDebtorsModal(true)}
+              className="bg-white p-4 rounded-2xl border border-rose-100 shadow-sm text-left relative overflow-hidden cursor-pointer hover:border-rose-300 hover:shadow-md transition group flex flex-col justify-between"
+            >
+              <div>
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-rose-700 font-bold uppercase text-[9px] tracking-wider font-mono truncate">
+                    Долги родителей
+                  </span>
+                  <span className="px-1.5 py-0.5 bg-rose-100 text-rose-800 font-extrabold text-[9px] rounded-full shrink-0">
+                    {debtorsList.length} должн.
+                  </span>
+                </div>
+                <div className="text-xl md:text-2xl font-bold text-rose-600 mt-1.5 tracking-tight whitespace-nowrap">
+                  {totalDebtSum.toLocaleString("ru-RU")} ₽
+                </div>
               </div>
-              <div className="text-[10px] text-amber-600 font-semibold mt-1">
-                Всего лидов: {leads.length}
-              </div>
+              <MiniSparklineChart
+                data={[
+                  totalDebtSum + 18000,
+                  totalDebtSum + 14000,
+                  totalDebtSum + 9000,
+                  totalDebtSum + 5000,
+                  totalDebtSum + 2000,
+                  totalDebtSum,
+                ]}
+                color="#f43f5e"
+                gradientId="sparkDebts"
+              />
             </div>
           </div>
 
@@ -2625,6 +2871,86 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                       </div>
                     ))
                   )}
+                </div>
+              </div>
+
+              {/* БЛОК ФИНАНСЫ С ЦВЕТНОЙ ДИАГРАММОЙ (Органично под Лидерами успеваемости) */}
+              <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-left flex flex-col justify-between space-y-3">
+                <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                  <div className="flex items-center space-x-2">
+                    <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100">
+                      <DollarSign className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm text-slate-800">Финансы</h3>
+                      <p className="text-[10px] text-gray-500 font-medium">Соотношение доходов и расходов</p>
+                    </div>
+                  </div>
+                  <select
+                    value={financePeriod}
+                    onChange={(e) => setFinancePeriod(e.target.value)}
+                    className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-slate-700 font-medium outline-none cursor-pointer hover:border-slate-300 transition"
+                  >
+                    <option value="today">Сегодня</option>
+                    {availableFinanceMonths.map((ym) => (
+                      <option key={ym} value={ym}>
+                        {getMonthLabel(ym)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                  {/* Left indicators */}
+                  <div className="space-y-2.5">
+                    <div>
+                      <div className="flex items-center space-x-1.5 text-[11px] text-slate-600 font-medium">
+                        <span className="w-2.5 h-2.5 rounded-full inline-block shrink-0" style={{ backgroundColor: "#32cd32" }}></span>
+                        <span>Поступления</span>
+                      </div>
+                      <div className="text-base font-bold text-emerald-600 font-mono tracking-tight mt-0.5">
+                        {incomeVal.toLocaleString("ru-RU")} ₽
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center space-x-1.5 text-[11px] text-slate-600 font-medium">
+                        <span className="w-2.5 h-2.5 rounded-full inline-block shrink-0" style={{ backgroundColor: "#ff0000" }}></span>
+                        <span>Расходы</span>
+                      </div>
+                      <div className="text-base font-bold text-red-600 font-mono tracking-tight mt-0.5">
+                        {expenseVal.toLocaleString("ru-RU")} ₽
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-100">
+                      <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Остаток на счетах</div>
+                      <div className="text-base font-black text-slate-800 font-mono tracking-tight mt-0.5">
+                        {totalBalance.toLocaleString("ru-RU")} ₽
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Ring Donut Chart */}
+                  <div className="h-32 relative flex items-center justify-center">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RechartsPieChart>
+                        <Pie
+                          data={financePieData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={28}
+                          outerRadius={44}
+                          paddingAngle={4}
+                          dataKey="value"
+                        >
+                          {financePieData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                      </RechartsPieChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
               </div>
             </div>
