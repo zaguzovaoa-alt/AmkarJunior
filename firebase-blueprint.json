@@ -192,6 +192,14 @@
     "training_sessions": {
       "schema": "TrainingSession",
       "description": "Session reports with notes, photos and attendance protocols"
+    },
+    "products": {
+      "schema": "Product",
+      "description": "Catalog of sports equipment and accessories available in the store"
+    },
+    "store_orders": {
+      "schema": "StoreOrder",
+      "description": "Orders placed for store equipment"
     }
   }
 }

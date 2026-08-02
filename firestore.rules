@@ -167,6 +167,30 @@ service cloud.firestore {
       allow read, write: if isSignedIn();
     }
 
+    match /products/{productId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /store_orders/{orderId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /orders/{orderId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /homeworks/{homeworkId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /homework_submissions/{submissionId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /cancelled_sessions/{sessionId} {
+      allow read, write: if isSignedIn();
+    }
+
     match /test/{testId} {
       allow read, write: if isSignedIn();
     }

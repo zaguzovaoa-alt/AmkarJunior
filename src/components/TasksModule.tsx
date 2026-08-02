@@ -75,6 +75,7 @@ export const TasksModule: React.FC = () => {
   };
 
   const filteredTasks = tasks.filter(t => {
+    if (t.id.includes("_att") || t.title.toLowerCase().includes("посещаемост") || t.description?.toLowerCase().includes("посещаемост")) return false;
     if (activeTab === "my" && t.assignedTo !== currentRole && currentRole !== 'director') return false;
     if (searchQuery && !t.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;

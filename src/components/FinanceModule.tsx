@@ -242,6 +242,9 @@ export const FinanceModule: React.FC = () => {
   // Grid/Cashflow state
   const [gridFilterMonth, setGridFilterMonth] = useState(currentMonthStr);
   const [rentMonth, setRentMonth] = useState(currentMonthStr);
+  const [rentDateMode, setRentDateMode] = useState<"month" | "half1" | "half2" | "period">("month");
+  const [rentStartDate, setRentStartDate] = useState<string>(`${currentMonthStr}-01`);
+  const [rentEndDate, setRentEndDate] = useState<string>(`${currentMonthStr}-15`);
   const [gridFilterType, setGridFilterType] = useState<
     "all" | "income" | "expense"
   >("all");
@@ -3152,39 +3155,18 @@ export const FinanceModule: React.FC = () => {
         {activeTab === "rent" && (
           <div className="space-y-6 animate-in fade-in zoom-in-95 duration-200">
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-6">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-4">
-                <div>
-                  <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                    <Building2 className="w-5 h-5 text-emerald-600" />
-                    Учет и взаиморасчеты по аренде площадок
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Автоматический учет начислений за проведенные тренировки и фактические выплаты
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 flex items-center gap-2 shadow-sm">
-                    <Calendar className="w-4 h-4 text-emerald-600" />
-                    <span>Месяц:</span>
-                    <input
-                      type="month"
-                      value={rentMonth === "all" ? currentMonthStr : rentMonth}
-                      disabled={rentMonth === "all"}
-                      onChange={(e) => setRentMonth(e.target.value)}
-                      className="outline-none bg-transparent font-bold cursor-pointer disabled:opacity-50"
-                    />
+              <div className="flex flex-col gap-4 border-b border-slate-100 pb-4">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                      <Building2 className="w-5 h-5 text-emerald-600" />
+                      Учет и взаиморасчеты по аренде площадок
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Автоматический учет начислений за проведенные тренировки и фактические выплаты
+                    </p>
                   </div>
-                  <button
-                    onClick={() => setRentMonth(rentMonth === "all" ? currentMonthStr : "all")}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
-                      rentMonth === "all"
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                    }`}
-                  >
-                    {rentMonth === "all" ? "За весь период" : "Все месяцы"}
-                  </button>
+
                   <button
                     onClick={() => {
                       setPayoutType("rent");
@@ -3193,25 +3175,173 @@ export const FinanceModule: React.FC = () => {
                       setPayoutAmount("");
                       setPayoutModalOpen(true);
                     }}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-sm transition flex items-center gap-1.5"
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-sm transition flex items-center gap-1.5 shrink-0"
                   >
                     <CreditCard className="w-4 h-4" />
                     + Оплатить аренду
                   </button>
                 </div>
+
+                {/* Date Filter Toolbar */}
+                <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                  {/* Month Selector */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 flex items-center gap-2 shadow-sm">
+                    <Calendar className="w-4 h-4 text-emerald-600" />
+                    <span>Месяц:</span>
+                    <input
+                      type="month"
+                      value={rentMonth === "all" ? currentMonthStr : rentMonth}
+                      disabled={rentMonth === "all"}
+                      onChange={(e) => {
+                        setRentMonth(e.target.value);
+                        if (rentDateMode === "period") {
+                          setRentStartDate(`${e.target.value}-01`);
+                          setRentEndDate(`${e.target.value}-15`);
+                        }
+                      }}
+                      className="outline-none bg-transparent font-bold cursor-pointer disabled:opacity-50"
+                    />
+                  </div>
+
+                  {/* Mode Buttons */}
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setRentDateMode("month")}
+                      disabled={rentMonth === "all"}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
+                        rentDateMode === "month" && rentMonth !== "all"
+                          ? "bg-white text-slate-900 shadow-sm"
+                          : "text-slate-600 hover:text-slate-900 disabled:opacity-50"
+                      }`}
+                    >
+                      Весь месяц
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRentDateMode("half1");
+                        const activeM = rentMonth === "all" ? currentMonthStr : rentMonth;
+                        setRentStartDate(`${activeM}-01`);
+                        setRentEndDate(`${activeM}-15`);
+                      }}
+                      disabled={rentMonth === "all"}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
+                        rentDateMode === "half1" && rentMonth !== "all"
+                          ? "bg-white text-emerald-700 shadow-sm"
+                          : "text-slate-600 hover:text-slate-900 disabled:opacity-50"
+                      }`}
+                    >
+                      1–15 число
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRentDateMode("half2");
+                        const activeM = rentMonth === "all" ? currentMonthStr : rentMonth;
+                        setRentStartDate(`${activeM}-16`);
+                        setRentEndDate(`${activeM}-31`);
+                      }}
+                      disabled={rentMonth === "all"}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
+                        rentDateMode === "half2" && rentMonth !== "all"
+                          ? "bg-white text-indigo-700 shadow-sm"
+                          : "text-slate-600 hover:text-slate-900 disabled:opacity-50"
+                      }`}
+                    >
+                      16–31 число
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRentDateMode("period");
+                        const activeM = rentMonth === "all" ? currentMonthStr : rentMonth;
+                        setRentStartDate(`${activeM}-01`);
+                        setRentEndDate(`${activeM}-15`);
+                      }}
+                      disabled={rentMonth === "all"}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
+                        rentDateMode === "period" && rentMonth !== "all"
+                          ? "bg-white text-blue-700 shadow-sm"
+                          : "text-slate-600 hover:text-slate-900 disabled:opacity-50"
+                      }`}
+                    >
+                      Точные даты
+                    </button>
+                  </div>
+
+                  {/* All Time Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (rentMonth === "all") {
+                        setRentMonth(currentMonthStr);
+                        setRentDateMode("month");
+                      } else {
+                        setRentMonth("all");
+                        setRentDateMode("month");
+                      }
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
+                      rentMonth === "all"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    {rentMonth === "all" ? "За весь период" : "Все месяцы"}
+                  </button>
+
+                  {/* Custom Date Pickers when rentDateMode === 'period' */}
+                  {rentDateMode === "period" && rentMonth !== "all" && (
+                    <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1 text-xs font-bold text-slate-700 shadow-sm">
+                      <span className="text-slate-500 font-semibold">С:</span>
+                      <input
+                        type="date"
+                        value={rentStartDate}
+                        onChange={(e) => setRentStartDate(e.target.value)}
+                        className="bg-transparent font-bold outline-none cursor-pointer text-slate-900"
+                      />
+                      <span className="text-slate-500 font-semibold">По:</span>
+                      <input
+                        type="date"
+                        value={rentEndDate}
+                        onChange={(e) => setRentEndDate(e.target.value)}
+                        className="bg-transparent font-bold outline-none cursor-pointer text-slate-900"
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Summary Cards */}
+              {/* Summary Cards & Venue Calculations */}
               {(() => {
-                const rentAccruals = finances.filter((f) => {
+                const isRecordInRentPeriod = (f: any) => {
                   if (f.type !== "expense" || f.category !== "Аренда") return false;
                   if (f.description?.toLowerCase().includes("абонемент")) return false;
-                  if (rentMonth !== "all") {
-                    const recordMonth = f.targetMonth || f.date.substring(0, 7);
-                    return recordMonth === rentMonth;
+
+                  if (rentMonth === "all") return true;
+
+                  if (rentDateMode === "period") {
+                    if (rentStartDate && f.date < rentStartDate) return false;
+                    if (rentEndDate && f.date > rentEndDate) return false;
+                    return true;
                   }
-                  return true;
-                });
+
+                  if (rentDateMode === "half1") {
+                    const activeM = rentMonth === "all" ? currentMonthStr : rentMonth;
+                    return f.date >= `${activeM}-01` && f.date <= `${activeM}-15`;
+                  }
+
+                  if (rentDateMode === "half2") {
+                    const activeM = rentMonth === "all" ? currentMonthStr : rentMonth;
+                    return f.date >= `${activeM}-16` && f.date <= `${activeM}-31`;
+                  }
+
+                  const recordMonth = f.targetMonth || f.date.substring(0, 7);
+                  return recordMonth === rentMonth;
+                };
+
+                const rentAccruals = finances.filter(isRecordInRentPeriod);
 
                 const rentCounterpartiesMap = new Map<
                   string,
@@ -3222,10 +3352,17 @@ export const FinanceModule: React.FC = () => {
                 counterparties
                   .filter((c) => c.type === "school_rent" || c.type === "hall_rent")
                   .forEach((cp) => {
+                    let baseAccrued = 0;
+                    if (cp.paymentType === "fixed") {
+                      baseAccrued = cp.rate || 0;
+                      if (rentDateMode === "half1" || rentDateMode === "half2") {
+                        baseAccrued = Math.round(baseAccrued / 2);
+                      }
+                    }
                     rentCounterpartiesMap.set(cp.id, {
                       name: cp.name,
                       id: cp.id,
-                      accrued: cp.paymentType === "fixed" ? (cp.rate || 0) : 0,
+                      accrued: baseAccrued,
                       paid: 0,
                       paymentType: cp.paymentType || "per_session",
                       cpObj: cp,
@@ -3417,11 +3554,27 @@ export const FinanceModule: React.FC = () => {
                           .filter((f) => {
                             if (f.type !== "expense" || f.category !== "Аренда") return false;
                             if (f.description?.toLowerCase().includes("абонемент")) return false;
-                            if (rentMonth !== "all") {
-                              const recordMonth = f.targetMonth || f.date.substring(0, 7);
-                              return recordMonth === rentMonth;
+
+                            if (rentMonth === "all") return true;
+
+                            if (rentDateMode === "period") {
+                              if (rentStartDate && f.date < rentStartDate) return false;
+                              if (rentEndDate && f.date > rentEndDate) return false;
+                              return true;
                             }
-                            return true;
+
+                            if (rentDateMode === "half1") {
+                              const activeM = rentMonth === "all" ? currentMonthStr : rentMonth;
+                              return f.date >= `${activeM}-01` && f.date <= `${activeM}-15`;
+                            }
+
+                            if (rentDateMode === "half2") {
+                              const activeM = rentMonth === "all" ? currentMonthStr : rentMonth;
+                              return f.date >= `${activeM}-16` && f.date <= `${activeM}-31`;
+                            }
+
+                            const recordMonth = f.targetMonth || f.date.substring(0, 7);
+                            return recordMonth === rentMonth;
                           })
                           .sort((a, b) => b.date.localeCompare(a.date));
 

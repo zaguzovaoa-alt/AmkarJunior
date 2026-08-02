@@ -33,6 +33,24 @@ import {
   Crown,
   Flag,
   MessageCircle,
+  GripVertical,
+  ChevronUp,
+  ChevronDown,
+  DollarSign,
+  AlertTriangle,
+  XCircle,
+  Ban,
+  Building,
+  Phone,
+  Clock,
+  Receipt,
+  ChevronRight,
+  PieChart,
+  Filter,
+  CheckCircle,
+  UserX,
+  HelpCircle,
+  Edit2,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { BirthdaysBanner } from "./BirthdaysBanner";
@@ -197,6 +215,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
     completeTask,
     addTask,
     deleteTask,
+    reorderTasks,
     overwriteClients,
     overwriteLeads,
     overwriteFinances,
@@ -207,11 +226,256 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
     appendCoaches,
     currentRole,
     accounts,
+    counterparties,
+    cancelledSessions,
+    addCancelledSession,
+    deleteCancelledSession,
   } = useCRM();
   const now = new Date();
   const yyyy = now.getFullYear();
   const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
   const currentMonthStr = `${yyyy}-${mm}`;
+  const todayISO = `${yyyy}-${mm}-${dd}`;
+
+  // Interactive Modals State
+  const [showTodayPaymentsModal, setShowTodayPaymentsModal] = useState(false);
+  const [showDebtorsModal, setShowDebtorsModal] = useState(false);
+  const [showAddCancellationModal, setShowAddCancellationModal] = useState(false);
+  const [cancellationScope, setCancellationScope] = useState<"month" | "all">("month");
+
+  // Goals State
+  const [targetChildrenGoal, setTargetChildrenGoal] = useState<number>(() => {
+    return Number(localStorage.getItem("amkar_target_children_goal")) || 120;
+  });
+  const [targetRevenueGoal, setTargetRevenueGoal] = useState<number>(() => {
+    return Number(localStorage.getItem("amkar_target_revenue_goal")) || 600000;
+  });
+  const [isEditingGoals, setIsEditingGoals] = useState(false);
+  const [tempChildrenGoal, setTempChildrenGoal] = useState(targetChildrenGoal);
+  const [tempRevenueGoal, setTempRevenueGoal] = useState(targetRevenueGoal);
+
+  // New Cancel Form State
+  const [newCancelGroup, setNewCancelGroup] = useState("");
+  const [newCancelDate, setNewCancelDate] = useState(todayISO);
+  const [newCancelReason, setNewCancelReason] = useState<
+    "Болезнь тренера" | "Занятость зала" | "Погодные условия" | "Мало участников" | "Праздничный день" | "Другое"
+  >("Болезнь тренера");
+  const [newCancelNotes, setNewCancelNotes] = useState("");
+  const [newCancelCoach, setNewCancelCoach] = useState("");
+
+  const handleSaveGoals = () => {
+    setTargetChildrenGoal(tempChildrenGoal);
+    setTargetRevenueGoal(tempRevenueGoal);
+    localStorage.setItem("amkar_target_children_goal", String(tempChildrenGoal));
+    localStorage.setItem("amkar_target_revenue_goal", String(tempRevenueGoal));
+    setIsEditingGoals(false);
+  };
+
+  const handleAddCancellationSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCancelGroup) {
+      alert("Пожалуйста, выберите или укажите группу");
+      return;
+    }
+    await addCancelledSession({
+      groupName: newCancelGroup,
+      date: newCancelDate,
+      reason: newCancelReason,
+      notes: newCancelNotes,
+      coachName: newCancelCoach,
+    });
+    setShowAddCancellationModal(false);
+    setNewCancelNotes("");
+  };
+
+  // Today Income Records & Sum
+  const todayIncomeRecords = useMemo(() => {
+    return finances.filter((f) => f.type === "income" && f.date === todayISO);
+  }, [finances, todayISO]);
+
+  const todayIncomeSum = useMemo(() => {
+    return todayIncomeRecords.reduce((sum, f) => sum + Number(f.amount || 0), 0);
+  }, [todayIncomeRecords]);
+
+  // Debts / Debtors list
+  const debtorsList = useMemo(() => {
+    return clients.filter(
+      (c) =>
+        c.abonementStatus === "Не оплачено" ||
+        c.abonementStatus === "Ожидает оплаты" ||
+        (c.bonusBalance && c.bonusBalance < 0) ||
+        ((c as any).debtAmount && (c as any).debtAmount > 0)
+    );
+  }, [clients]);
+
+  const totalDebtSum = useMemo(() => {
+    return debtorsList.reduce((sum, c) => {
+      const explicitDebt = (c as any).debtAmount || 0;
+      if (explicitDebt > 0) return sum + explicitDebt;
+      const abCost =
+        c.abonement === "12_sessions"
+          ? 12000
+          : c.abonement === "8_sessions"
+            ? 8000
+            : c.abonement === "4_sessions"
+              ? 4500
+              : 3500;
+      return sum + abCost;
+    }, 0);
+  }, [debtorsList]);
+
+  // Accrued Rent for current month
+  const monthlyRentRecords = useMemo(() => {
+    return finances.filter(
+      (f) =>
+        f.category === "Аренда" &&
+        f.type === "expense" &&
+        (f.targetMonth === currentMonthStr || f.date.substring(0, 7) === currentMonthStr)
+    );
+  }, [finances, currentMonthStr]);
+
+  const monthlyRentSum = useMemo(() => {
+    return monthlyRentRecords.reduce((sum, f) => sum + Number(f.amount || 0), 0);
+  }, [monthlyRentRecords]);
+
+  // Accrued Salaries for current month
+  const monthlySalaryRecords = useMemo(() => {
+    return finances.filter(
+      (f) =>
+        f.category === "Зарплата" &&
+        f.type === "expense" &&
+        (f.targetMonth === currentMonthStr || f.date.substring(0, 7) === currentMonthStr)
+    );
+  }, [finances, currentMonthStr]);
+
+  const monthlySalarySum = useMemo(() => {
+    return monthlySalaryRecords.reduce((sum, f) => sum + Number(f.amount || 0), 0);
+  }, [monthlySalaryRecords]);
+
+  // Expiring Subscriptions (1 or 2 sessions left)
+  const expiringSubscriptionClients = useMemo(() => {
+    return clients.filter(
+      (c) =>
+        c.status === "active" &&
+        typeof c.abonementSessionsLeft === "number" &&
+        c.abonementSessionsLeft <= 2
+    );
+  }, [clients]);
+
+  // Scheduled sessions without trainer report
+  const missingTrainerReports = useMemo(() => {
+    const missing: Array<{
+      id: string;
+      groupName: string;
+      coachName: string;
+      dateStr: string;
+      slot: string;
+    }> = [];
+    const checkDays = 7;
+    for (let i = 1; i <= checkDays; i++) {
+      const pDate = new Date();
+      pDate.setDate(pDate.getDate() - i);
+      const dateStr = pDate.toISOString().substring(0, 10);
+      const dayNames = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
+      const dayAbbr = dayNames[pDate.getDay()];
+
+      groups.forEach((g) => {
+        const hasSlot = (g.scheduleDays || []).some((s) => s.startsWith(dayAbbr));
+        if (hasSlot) {
+          const hasReport = trainingSessions.some(
+            (ts) =>
+              ts.groupId === g.id &&
+              (ts.date === dateStr || ts.dateString?.includes(dateStr))
+          );
+          if (!hasReport) {
+            const slot =
+              (g.scheduleDays || []).find((s) => s.startsWith(dayAbbr)) ||
+              `${dayAbbr} 18:00`;
+            missing.push({
+              id: `${g.id}_${dateStr}`,
+              groupName: g.name,
+              coachName: g.coachName || "Тренер не назначен",
+              dateStr,
+              slot,
+            });
+          }
+        }
+      });
+    }
+    return missing.slice(0, 6);
+  }, [groups, trainingSessions]);
+
+  // Filtered Cancelled Sessions
+  const filteredCancelledSessions = useMemo(() => {
+    if (cancellationScope === "month") {
+      return cancelledSessions.filter(
+        (cs) => cs.date.substring(0, 7) === currentMonthStr
+      );
+    }
+    return cancelledSessions;
+  }, [cancelledSessions, cancellationScope, currentMonthStr]);
+
+  const cancelledByReason = useMemo(() => {
+    const counts: Record<string, number> = {
+      "Болезнь тренера": 0,
+      "Занятость зала": 0,
+      "Погодные условия": 0,
+      "Мало участников": 0,
+      "Праздничный день": 0,
+      "Другое": 0,
+    };
+    filteredCancelledSessions.forEach((cs) => {
+      counts[cs.reason] = (counts[cs.reason] || 0) + 1;
+    });
+    return counts;
+  }, [filteredCancelledSessions]);
+
+  // Venue / Site Rating Breakdown
+  const venueRatings = useMemo(() => {
+    const venueMap: Record<
+      string,
+      { name: string; childrenCount: number; groupsCount: number; rentAccrued: number }
+    > = {};
+
+    groups.forEach((g) => {
+      const venueName = g.venueId
+        ? counterparties.find((cp) => cp.id === g.venueId)?.name ||
+          g.name.split("(")[1]?.replace(")", "") ||
+          "Зал школы"
+        : g.name.split("(")[1]?.replace(")", "") || "Манеж / Школа";
+      if (!venueMap[venueName]) {
+        venueMap[venueName] = {
+          name: venueName,
+          childrenCount: 0,
+          groupsCount: 0,
+          rentAccrued: 0,
+        };
+      }
+      venueMap[venueName].groupsCount += 1;
+      const grpClients = clients.filter((c) => c.groupName === g.name);
+      venueMap[venueName].childrenCount += grpClients.length;
+    });
+
+    finances.forEach((f) => {
+      if (f.category === "Аренда" && f.groupName) {
+        const matchingVenue = Object.keys(venueMap).find((vKey) =>
+          f.groupName?.includes(vKey)
+        );
+        if (matchingVenue) {
+          venueMap[matchingVenue].rentAccrued += Number(f.amount || 0);
+        }
+      }
+    });
+
+    const totalChildren = clients.length || 1;
+    return Object.values(venueMap)
+      .map((v) => ({
+        ...v,
+        percent: Math.round((v.childrenCount / totalChildren) * 100),
+      }))
+      .sort((a, b) => b.childrenCount - a.childrenCount);
+  }, [groups, clients, counterparties, finances]);
 
 
   const totalBalance = useMemo(() => {
@@ -241,7 +505,51 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
 
   const activeClients = clients.filter((c) => c.status === "active");
   const trialClients = clients.filter((c) => c.status === "trial");
-  const directorTasks = tasks.filter((t) => t.assignedTo === "director");
+  const directorTasks = tasks.filter(
+    (t) =>
+      t.assignedTo === "director" &&
+      !t.title.toLowerCase().includes("посещаемост") &&
+      !t.description?.toLowerCase().includes("посещаемост") &&
+      !t.id.includes("_att")
+  );
+
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+
+  const reorderDirectorTasks = (draggedId: string, targetId: string) => {
+    const currentDirectorIds = directorTasks.map((t) => t.id);
+    const draggedIndex = currentDirectorIds.indexOf(draggedId);
+    const targetIndex = currentDirectorIds.indexOf(targetId);
+    if (draggedIndex === -1 || targetIndex === -1 || draggedIndex === targetIndex) return;
+
+    const newDirectorTasks = [...directorTasks];
+    const [removed] = newDirectorTasks.splice(draggedIndex, 1);
+    newDirectorTasks.splice(targetIndex, 0, removed);
+
+    const newDirectorTaskIds = new Set(newDirectorTasks.map((t) => t.id));
+    const newTasks = [];
+    let directorPtr = 0;
+
+    for (const t of tasks) {
+      if (newDirectorTaskIds.has(t.id)) {
+        if (directorPtr < newDirectorTasks.length) {
+          newTasks.push(newDirectorTasks[directorPtr++]);
+        }
+      } else {
+        newTasks.push(t);
+      }
+    }
+    reorderTasks(newTasks);
+  };
+
+  const moveDirectorTask = (id: string, direction: "up" | "down") => {
+    const currentIndex = directorTasks.findIndex((t) => t.id === id);
+    if (currentIndex === -1) return;
+    const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= directorTasks.length) return;
+
+    const targetId = directorTasks[targetIndex].id;
+    reorderDirectorTasks(id, targetId);
+  };
 
   // Dynamic statistics calculations
   const leaderboardToDisplay = [...clients]
@@ -1360,90 +1668,441 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
         >
           <BirthdaysBanner clients={clients} />
 
-          {/* Top summary cards exactly like Image 7 header stats row */}
-          <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
-            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden">
-              <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
-                Проведено тренировок
-              </span>
-              <div className="text-3xl font-light text-slate-800 mt-1 tracking-tight">
-                {trainingSessions.length}
+          {/* Top summary cards header row */}
+          <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 md:gap-4">
+            {/* Деньги на счетах */}
+            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
+                  Деньги на счетах
+                </span>
+                <CreditCard className="w-4 h-4 text-emerald-500" />
               </div>
-              <div className="text-[10px] text-emerald-600 font-semibold mt-1">
-                Табелей заполнено: {trainingSessions.length}
-              </div>
-            </div>
-            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden">
-              <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
-                Деньги на счетах
-              </span>
-              <div className="text-3xl font-light text-slate-800 mt-1 tracking-tight whitespace-nowrap">
+              <div className="text-2xl font-semibold text-slate-800 mt-1 tracking-tight whitespace-nowrap">
                 {totalBalance.toLocaleString("ru-RU")} ₽
               </div>
               <div className="text-[10px] text-gray-400 font-semibold mt-1">
-                Обновлено сегодня,{" "}
-                {new Date().toLocaleTimeString("ru-RU", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
+                Обновлено сегодня
               </div>
             </div>
-            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden">
-              <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
-                Клиенты
-              </span>
-              <div className="text-3xl font-light text-slate-800 mt-1 tracking-tight">
-                {clients.length}
+
+            {/* Поступления сегодня (Clickable) */}
+            <div
+              onClick={() => setShowTodayPaymentsModal(true)}
+              className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm text-left relative overflow-hidden cursor-pointer hover:border-emerald-300 hover:shadow-md transition group"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-emerald-600 font-bold uppercase text-[9px] tracking-wider font-mono">
+                  Поступления сегодня
+                </span>
+                <DollarSign className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition" />
               </div>
-              <div className="text-[10px] text-gray-400 font-semibold mt-1">
-                Всего в базе
+              <div className="text-2xl font-semibold text-emerald-700 mt-1 tracking-tight whitespace-nowrap">
+                {todayIncomeSum.toLocaleString("ru-RU")} ₽
               </div>
-            </div>
-            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden">
-              <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
-                Активные абонементы
-              </span>
-              <div className="text-3xl font-light text-slate-800 mt-1 tracking-tight">
-                {activeClients.length}
-              </div>
-              <div className="text-[10px] text-emerald-600 font-semibold mt-1">
-                ↑ {activeClients.length} активных
+              <div className="text-[10px] text-emerald-600 font-bold mt-1 flex items-center gap-1">
+                <span>{todayIncomeRecords.length} оплат сегодня</span>
+                <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition" />
               </div>
             </div>
-            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden">
-              <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
-                Всего заявок
-              </span>
-              <div className="text-3xl font-light text-slate-800 mt-1 tracking-tight">
-                {leads.length}
+
+            {/* Выручка за месяц */}
+            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
+                  Выручка за месяц
+                </span>
+                <TrendingUp className="w-4 h-4 text-indigo-500" />
               </div>
-              <div className="text-[10px] text-amber-600 font-semibold mt-1">
-                {leads.filter((l) => l.status === "new").length} новых
-              </div>
-            </div>
-            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden">
-              <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
-                Выручка за месяц
-              </span>
-              <div className="text-3xl font-light text-slate-800 mt-1 tracking-tight">
+              <div className="text-2xl font-semibold text-slate-800 mt-1 tracking-tight whitespace-nowrap">
                 {finances
                   .filter((f) => f.type === "income" && f.date.substring(0, 7) === currentMonthStr)
-                  .reduce((sum, item) => sum + item.amount, 0)
+                  .reduce((sum, item) => sum + Number(item.amount || 0), 0)
                   .toLocaleString("ru-RU")}{" "}
                 ₽
               </div>
-              <div className="text-[10px] text-emerald-600 font-semibold mt-1">
-                Всего платежей за месяц: {" "}
-                {finances.filter((f) => f.type === "income" && f.date.substring(0, 7) === currentMonthStr).length}
+              <div className="text-[10px] text-indigo-600 font-semibold mt-1">
+                {finances.filter((f) => f.type === "income" && f.date.substring(0, 7) === currentMonthStr).length} поступлений
+              </div>
+            </div>
+
+            {/* Активные дети */}
+            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
+                  Активные дети
+                </span>
+                <Users className="w-4 h-4 text-blue-500" />
+              </div>
+              <div className="text-2xl font-semibold text-slate-800 mt-1 tracking-tight">
+                {activeClients.length}
+              </div>
+              <div className="text-[10px] text-gray-400 font-semibold mt-1">
+                Всего детей: {clients.length}
+              </div>
+            </div>
+
+            {/* Долги (Clickable) */}
+            <div
+              onClick={() => setShowDebtorsModal(true)}
+              className="bg-white p-4 rounded-2xl border border-rose-100 shadow-sm text-left relative overflow-hidden cursor-pointer hover:border-rose-300 hover:shadow-md transition group"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-rose-600 font-bold uppercase text-[9px] tracking-wider font-mono">
+                  Долги родителей
+                </span>
+                <AlertTriangle className="w-4 h-4 text-rose-500 group-hover:scale-110 transition" />
+              </div>
+              <div className="text-2xl font-semibold text-rose-600 mt-1 tracking-tight whitespace-nowrap">
+                {totalDebtSum.toLocaleString("ru-RU")} ₽
+              </div>
+              <div className="text-[10px] text-rose-600 font-bold mt-1 flex items-center gap-1">
+                <span>{debtorsList.length} должников</span>
+                <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition" />
+              </div>
+            </div>
+
+            {/* Новые заявки */}
+            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono">
+                  Новые заявки
+                </span>
+                <UserPlus className="w-4 h-4 text-amber-500" />
+              </div>
+              <div className="text-2xl font-semibold text-slate-800 mt-1 tracking-tight">
+                {leads.filter((l) => l.status === "new").length}
+              </div>
+              <div className="text-[10px] text-amber-600 font-semibold mt-1">
+                Всего лидов: {leads.length}
               </div>
             </div>
           </div>
 
+          {/* Блок "Требует внимания" */}
+          <div className="bg-amber-50/60 border border-amber-200/80 rounded-2xl p-5 shadow-2xs text-left space-y-4">
+            <div className="flex items-center justify-between border-b border-amber-200/60 pb-3">
+              <div className="flex items-center space-x-2">
+                <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+                <div>
+                  <h3 className="font-extrabold text-amber-950 text-sm">
+                    Требует внимания управляющего директора
+                  </h3>
+                  <p className="text-[11px] text-amber-800/80">
+                    Оперативные риски: окончания абонементов, долги, отсутствие отчетов тренеров
+                  </p>
+                </div>
+              </div>
+              <span className="bg-amber-200/80 text-amber-900 font-extrabold text-xs px-2.5 py-1 rounded-lg font-mono">
+                {expiringSubscriptionClients.length + debtorsList.length + missingTrainerReports.length} задач
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Card 1: Заканчивается абонемент */}
+              <div className="bg-white p-4 rounded-xl border border-amber-200/80 shadow-2xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-amber-900 flex items-center gap-1.5">
+                    <Clock className="w-4 h-4 text-amber-600" />
+                    Заканчивается абонемент (1-2 зан.)
+                  </span>
+                  <span className="bg-amber-100 text-amber-800 font-bold text-xs px-2 py-0.5 rounded-full">
+                    {expiringSubscriptionClients.length}
+                  </span>
+                </div>
+                {expiringSubscriptionClients.length === 0 ? (
+                  <p className="text-[11px] text-gray-400 italic py-2">
+                    Нет клиентов с истекающим абонементом
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {expiringSubscriptionClients.map((c) => (
+                      <div key={c.id} className="p-2 bg-slate-50 border border-slate-100 rounded-lg flex items-center justify-between text-xs">
+                        <div>
+                          <div className="font-bold text-slate-800">{c.childSurname} {c.childName}</div>
+                          <div className="text-[10px] text-slate-500">{c.groupName || 'Без группы'} • {c.parentPhone}</div>
+                        </div>
+                        <span className="bg-amber-100 text-amber-900 font-black text-[10px] px-1.5 py-0.5 rounded">
+                          {c.abonementSessionsLeft} зан.
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Card 2: Неоплаченные абонементы / Долги */}
+              <div className="bg-white p-4 rounded-xl border border-rose-200/80 shadow-2xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-rose-900 flex items-center gap-1.5">
+                    <UserX className="w-4 h-4 text-rose-600" />
+                    Неоплаченные абонементы / Долги
+                  </span>
+                  <span className="bg-rose-100 text-rose-800 font-bold text-xs px-2 py-0.5 rounded-full">
+                    {debtorsList.length}
+                  </span>
+                </div>
+                {debtorsList.length === 0 ? (
+                  <p className="text-[11px] text-gray-400 italic py-2">
+                    Долги и задолженности отсутствуют
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {debtorsList.map((c) => (
+                      <div key={c.id} className="p-2 bg-rose-50/50 border border-rose-100 rounded-lg flex items-center justify-between text-xs">
+                        <div>
+                          <div className="font-bold text-slate-800">{c.childSurname} {c.childName}</div>
+                          <div className="text-[10px] text-rose-700">{c.parentName} ({c.parentPhone})</div>
+                        </div>
+                        <button
+                          onClick={() => setShowDebtorsModal(true)}
+                          className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] px-2 py-1 rounded transition"
+                        >
+                          Долг
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Card 3: Не сдан отчет по тренировке */}
+              <div className="bg-white p-4 rounded-xl border border-amber-200/80 shadow-2xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-amber-900 flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-amber-600" />
+                    Тренер не сдал отчет
+                  </span>
+                  <span className="bg-amber-100 text-amber-800 font-bold text-xs px-2 py-0.5 rounded-full">
+                    {missingTrainerReports.length}
+                  </span>
+                </div>
+                {missingTrainerReports.length === 0 ? (
+                  <p className="text-[11px] text-gray-400 italic py-2">
+                    Все прошедшие тренировки с зафиксированными табелями!
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {missingTrainerReports.map((m) => (
+                      <div key={m.id} className="p-2 bg-amber-50/60 border border-amber-200/60 rounded-lg flex items-center justify-between text-xs">
+                        <div>
+                          <div className="font-bold text-slate-800">{m.groupName}</div>
+                          <div className="text-[10px] text-amber-800 font-mono">{m.coachName} • {m.dateStr} ({m.slot})</div>
+                        </div>
+                        <span className="bg-amber-200 text-amber-900 text-[9px] font-bold px-1.5 py-0.5 rounded">
+                          Нет отчета
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Органичные окна: Аренда за месяц и Зарплаты за месяц (в светлой стилистике дашборда) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Аренда за месяц */}
+            <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-left relative overflow-hidden">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <div className="flex items-center space-x-2">
+                  <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100">
+                    <Building className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-sm text-slate-900">
+                      Аренда за месяц (начислено)
+                    </h3>
+                    <p className="text-[10px] text-gray-400">
+                      Органичное окно автоначислений аренды по сессиям
+                    </p>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg text-xs font-mono font-bold">
+                  {monthlyRentRecords.length} транзакций
+                </span>
+              </div>
+
+              <div className="mt-4 flex items-baseline justify-between">
+                <div>
+                  <div className="text-3xl font-extrabold text-slate-900 tracking-tight">
+                    {monthlyRentSum.toLocaleString("ru-RU")} ₽
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Начислено за текущий период ({currentMonthStr})
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {venueRatings.slice(0, 3).map((v, i) => (
+                  <div key={i} className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                    <div className="text-[10px] text-slate-500 truncate">{v.name}</div>
+                    <div className="text-xs font-bold text-indigo-600 mt-0.5">
+                      {v.rentAccrued > 0 ? `${v.rentAccrued.toLocaleString("ru-RU")} ₽` : `${(v.groupsCount * 12 * 1200).toLocaleString("ru-RU")} ₽ (расчет)`}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Зарплаты за месяц */}
+            <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-left relative overflow-hidden">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <div className="flex items-center space-x-2">
+                  <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100">
+                    <Receipt className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-sm text-slate-900">
+                      Зарплаты за месяц (начислено)
+                    </h3>
+                    <p className="text-[10px] text-gray-400">
+                      Органичное окно начислений ФОТ тренерского штаба
+                    </p>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg text-xs font-mono font-bold">
+                  {coaches.length} тренеров
+                </span>
+              </div>
+
+              <div className="mt-4 flex items-baseline justify-between">
+                <div>
+                  <div className="text-3xl font-extrabold text-emerald-600 tracking-tight">
+                    {monthlySalarySum > 0 ? monthlySalarySum.toLocaleString("ru-RU") : (trainingSessions.length * 1500).toLocaleString("ru-RU")} ₽
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    ФОТ за проведение {trainingSessions.length} тренировок
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {coaches.slice(0, 3).map((c, i) => {
+                  const coachSessions = trainingSessions.filter(
+                    (ts) => ts.coachId === c.id || ts.coachName?.includes(c.name)
+                  ).length;
+                  const estimatedPay = coachSessions * (c.rate || 1500);
+                  return (
+                    <div key={i} className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                      <div className="text-[10px] text-slate-500 truncate">{c.name}</div>
+                      <div className="text-xs font-bold text-emerald-600 mt-0.5">
+                        {estimatedPay > 0 ? `${estimatedPay.toLocaleString("ru-RU")} ₽` : `${c.rate || 1500} ₽/зан.`}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Цели месяца, Воронка продаж, Отмененные тренировки и Рейтинг площадок */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* COLUMN 1 & 2: Sales pipeline & weekday attendance distribution */}
             <div className="lg:col-span-2 space-y-6">
-              {/* Воронка продаж - horizontal stacked visualization exactly matching Image 7 middle left */}
-              <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-4">
+              {/* Цели месяца */}
+              <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-4 text-left">
+                <div className="flex items-center justify-between border-b pb-3">
+                  <div>
+                    <h3 className="font-extrabold text-slate-950 text-sm flex items-center gap-2">
+                      <Target className="w-4 h-4 text-emerald-600" />
+                      Цели месяца ({currentMonthStr})
+                    </h3>
+                    <p className="text-[10px] text-gray-400">
+                      Отслеживание ключевых KPI футбольного клуба по набору и выручке
+                    </p>
+                  </div>
+                  {isEditingGoals ? (
+                    <button
+                      onClick={handleSaveGoals}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition"
+                    >
+                      Сохранить
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setTempChildrenGoal(targetChildrenGoal);
+                        setTempRevenueGoal(targetRevenueGoal);
+                        setIsEditingGoals(true);
+                      }}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1"
+                    >
+                      <Edit2 className="w-3 h-3" />
+                      Изменить цели
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Goal 1: Children count */}
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+                      <span>Цель по детям</span>
+                      {isEditingGoals ? (
+                        <input
+                          type="number"
+                          value={tempChildrenGoal}
+                          onChange={(e) => setTempChildrenGoal(Number(e.target.value))}
+                          className="w-20 border rounded px-2 py-0.5 text-xs text-right font-mono"
+                        />
+                      ) : (
+                        <span className="font-mono text-emerald-600">{clients.length} / {targetChildrenGoal} детей</span>
+                      )}
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+                      <div
+                        className="bg-emerald-500 h-3 rounded-full transition-all duration-500"
+                        style={{ width: `${Math.min(100, Math.round((clients.length / targetChildrenGoal) * 100))}%` }}
+                      ></div>
+                    </div>
+                    <div className="flex justify-between text-[10px] text-gray-500 font-mono">
+                      <span>Выполнение: {Math.round((clients.length / targetChildrenGoal) * 100)}%</span>
+                      <span>Осталось: {Math.max(0, targetChildrenGoal - clients.length)} детей</span>
+                    </div>
+                  </div>
+
+                  {/* Goal 2: Revenue */}
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 space-y-2">
+                    {(() => {
+                      const monthRevenue = finances
+                        .filter((f) => f.type === "income" && f.date.substring(0, 7) === currentMonthStr)
+                        .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+                      const percent = Math.round((monthRevenue / targetRevenueGoal) * 100);
+                      return (
+                        <>
+                          <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+                            <span>Цель по выручке</span>
+                            {isEditingGoals ? (
+                              <input
+                                type="number"
+                                value={tempRevenueGoal}
+                                onChange={(e) => setTempRevenueGoal(Number(e.target.value))}
+                                className="w-28 border rounded px-2 py-0.5 text-xs text-right font-mono"
+                              />
+                            ) : (
+                              <span className="font-mono text-emerald-600">{monthRevenue.toLocaleString("ru-RU")} / {targetRevenueGoal.toLocaleString("ru-RU")} ₽</span>
+                            )}
+                          </div>
+                          <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+                            <div
+                              className="bg-indigo-500 h-3 rounded-full transition-all duration-500"
+                              style={{ width: `${Math.min(100, percent)}%` }}
+                            ></div>
+                          </div>
+                          <div className="flex justify-between text-[10px] text-gray-500 font-mono">
+                            <span>Выполнение: {percent}%</span>
+                            <span>Осталось: {Math.max(0, targetRevenueGoal - monthRevenue).toLocaleString("ru-RU")} ₽</span>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+
+              {/* Воронка продаж */}
+              <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-4 text-left">
                 <div className="flex border-b pb-3 items-center justify-between">
                   <div>
                     <h3 className="font-extrabold text-slate-950 text-sm">
@@ -1453,12 +2112,11 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                       Конверсия от первого касания до платящего ученика
                     </p>
                   </div>
-                  <button className="text-xs font-bold text-emerald-600 hover:underline">
-                    Детальная аналитика
-                  </button>
+                  <span className="text-xs font-bold px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg">
+                    Конверсия: {leads.length > 0 ? Math.round((activeClients.length / (leads.length + activeClients.length)) * 100) : 0}%
+                  </span>
                 </div>
 
-                {/* Stacked funnel blocks */}
                 <div className="space-y-4 font-sans mt-2">
                   {funnelData.map((fn, idx) => (
                     <motion.div
@@ -1468,7 +2126,6 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                       transition={{ delay: idx * 0.1, duration: 0.4 }}
                       className="relative text-left"
                     >
-                      {/* Connecting line to next item if not last */}
                       {idx > 0 && fn.conversionFromPrev !== null && (
                         <div className="absolute -top-3.5 right-6 flex items-center justify-end z-10">
                           <div className="bg-white border shadow-sm rounded-full px-2 py-0.5 text-[9px] font-bold text-slate-500 z-10 flex items-center gap-1">
@@ -1478,51 +2135,174 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                         </div>
                       )}
 
-                      <div
-                        className={`flex items-center justify-between p-2.5 rounded-xl border border-slate-100/50 shadow-sm ${fn.lightBg} relative overflow-hidden group`}
-                      >
-                        {/* Background progress fill overlay */}
+                      <div className={`flex items-center justify-between p-2.5 rounded-xl border border-slate-100/50 shadow-sm ${fn.lightBg} relative overflow-hidden group`}>
                         <motion.div
                           className={`absolute left-0 top-0 bottom-0 bg-gradient-to-r ${fn.color} opacity-10`}
                           initial={{ width: 0 }}
                           animate={{ width: `${fn.percent}%` }}
-                          transition={{
-                            delay: 0.3 + idx * 0.1,
-                            duration: 0.8,
-                            ease: "easeOut",
-                          }}
+                          transition={{ delay: 0.3 + idx * 0.1, duration: 0.8, ease: "easeOut" }}
                         />
 
                         <div className="flex items-center space-x-3 relative z-10">
-                          <div
-                            className={`w-8 h-8 rounded-lg ${fn.bgMain} text-white flex items-center justify-center text-sm shadow-md`}
-                          >
+                          <div className={`w-8 h-8 rounded-lg ${fn.bgMain} text-white flex items-center justify-center text-sm shadow-md`}>
                             {fn.icon}
                           </div>
                           <div>
-                            <div className="text-xs font-bold text-slate-800">
-                              {fn.stage}
-                            </div>
+                            <div className="text-xs font-bold text-slate-800">{fn.stage}</div>
                             <div className="text-[10px] text-slate-500">
-                              Доля от общего:{" "}
-                              <span className="font-medium text-slate-700">
-                                {fn.percent}%
-                              </span>
+                              Доля: <span className="font-medium text-slate-700">{fn.percent}%</span>
                             </div>
                           </div>
                         </div>
 
                         <div className="font-mono text-right relative z-10">
-                          <span className="text-lg font-black text-slate-900 block leading-none">
-                            {fn.count}
-                          </span>
-                          <span className="text-[9px] uppercase tracking-widest text-slate-400 font-bold">
-                            Лидов
-                          </span>
+                          <span className="text-lg font-black text-slate-900 block leading-none">{fn.count}</span>
+                          <span className="text-[9px] uppercase tracking-widest text-slate-400 font-bold">Лидов</span>
                         </div>
                       </div>
                     </motion.div>
                   ))}
+                </div>
+              </div>
+
+              {/* РЕЙТИНГ ПЛОЩАДОК */}
+              <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-4 text-left">
+                <div className="flex items-center justify-between border-b pb-3">
+                  <div>
+                    <h3 className="font-extrabold text-slate-950 text-sm flex items-center gap-2">
+                      <Building className="w-4 h-4 text-indigo-600" />
+                      Рейтинг площадок (Дети по филиалам)
+                    </h3>
+                    <p className="text-[10px] text-gray-400">
+                      Количество заниматься детей и начисленная аренда по каждой локации
+                    </p>
+                  </div>
+                  <span className="text-xs font-bold bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg">
+                    {venueRatings.length} площадок
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  {venueRatings.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic py-2">
+                      Группы и площадки пока не привязаны
+                    </p>
+                  ) : (
+                    venueRatings.map((v, idx) => (
+                      <div key={idx} className="p-3 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between text-xs">
+                        <div className="space-y-1">
+                          <div className="font-bold text-slate-850 flex items-center gap-2">
+                            <span>{v.name}</span>
+                            <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-mono font-semibold">
+                              {v.groupsCount} групп
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-gray-500">
+                            Аренда начислено: <span className="font-bold text-slate-700">{v.rentAccrued > 0 ? `${v.rentAccrued.toLocaleString("ru-RU")} ₽` : "Включено"}</span>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <div className="text-base font-black text-slate-900 font-mono">
+                            {v.childrenCount} детей
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-mono">
+                            {v.percent}% от всех учеников
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* ОТМЕНЕННЫЕ ТРЕНИРОВКИ */}
+              <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-4 text-left">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b pb-3 gap-2">
+                  <div>
+                    <h3 className="font-extrabold text-slate-950 text-sm flex items-center gap-2">
+                      <Ban className="w-4 h-4 text-rose-600" />
+                      Отмененные тренировки (Аналитика отмен)
+                    </h3>
+                    <p className="text-[10px] text-gray-400">
+                      Статистика отмен и фиксация причин для оптимизации расписания
+                    </p>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <div className="bg-slate-100 p-0.5 rounded-lg flex items-center text-[10px] font-bold">
+                      <button
+                        onClick={() => setCancellationScope("month")}
+                        className={`px-2.5 py-1 rounded-md transition ${cancellationScope === "month" ? "bg-white text-slate-900 shadow-2xs" : "text-gray-500"}`}
+                      >
+                        За месяц
+                      </button>
+                      <button
+                        onClick={() => setCancellationScope("all")}
+                        className={`px-2.5 py-1 rounded-md transition ${cancellationScope === "all" ? "bg-white text-slate-900 shadow-2xs" : "text-gray-500"}`}
+                      >
+                        За всё время
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => setShowAddCancellationModal(true)}
+                      className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Зафиксировать отмену
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {Object.entries(cancelledByReason).map(([reason, count], idx) => (
+                    <div key={idx} className="p-2.5 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between text-xs">
+                      <span className="text-slate-600 text-[11px] font-medium">{reason}</span>
+                      <span className="font-mono font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full text-xs">
+                        {count}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-1 pt-2">
+                  {filteredCancelledSessions.length === 0 ? (
+                    <div className="text-center py-6 text-xs text-gray-400 italic bg-slate-50/50 rounded-xl border border-dashed">
+                      Отмененных тренировок за выбранный период не зафиксировано
+                    </div>
+                  ) : (
+                    filteredCancelledSessions.map((cs) => (
+                      <div key={cs.id} className="p-3 bg-rose-50/30 border border-rose-100 rounded-xl flex items-center justify-between text-xs">
+                        <div className="space-y-0.5">
+                          <div className="font-bold text-slate-900 flex items-center gap-2">
+                            <span>{cs.groupName}</span>
+                            <span className="bg-rose-100 text-rose-800 text-[9px] font-bold px-2 py-0.5 rounded-full">
+                              {cs.reason}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-500">
+                            Дата: <span className="font-mono font-bold">{cs.date}</span> {cs.coachName ? `• Тренер: ${cs.coachName}` : ""}
+                          </div>
+                          {cs.notes && (
+                            <p className="text-[10px] text-gray-400 italic">{cs.notes}</p>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            if (window.confirm("Удалить запись об отмене?")) {
+                              deleteCancelledSession(cs.id);
+                            }
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-100 rounded-lg transition"
+                          title="Удалить запись"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
 
@@ -1641,7 +2421,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                   </button>
                 </div>
 
-                <div className="space-y-3.5 text-xs font-sans max-h-[300px] overflow-y-auto">
+                <div className="space-y-2 text-xs font-sans max-h-[340px] overflow-y-auto pr-1">
                   {directorTasks.length === 0 ? (
                     <p className="text-gray-400 italic py-2">
                       Задач руководителя не найдено.
@@ -1649,33 +2429,68 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                   ) : (
                     directorTasks.map((tk, idx) => (
                       <div
-                        key={idx}
-                        className="flex items-start space-x-3 text-xs leading-relaxed"
+                        key={tk.id || idx}
+                        draggable
+                        onDragStart={(e) => {
+                          setDraggedTaskId(tk.id);
+                          e.dataTransfer.effectAllowed = "move";
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "move";
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (draggedTaskId && draggedTaskId !== tk.id) {
+                            reorderDirectorTasks(draggedTaskId, tk.id);
+                          }
+                          setDraggedTaskId(null);
+                        }}
+                        className={`flex items-start space-x-2 text-xs leading-relaxed p-2.5 rounded-xl border transition group ${
+                          draggedTaskId === tk.id
+                            ? "bg-slate-100 border-dashed border-slate-300 opacity-60"
+                            : "bg-slate-50 hover:bg-slate-100/90 border-slate-200/80 shadow-2xs"
+                        }`}
                       >
+                        {/* Drag Handle Icon */}
+                        <div
+                          className="mt-0.5 p-0.5 text-slate-300 group-hover:text-slate-500 cursor-grab active:cursor-grabbing shrink-0 transition"
+                          title="Зажмите для перетаскивания задачи"
+                        >
+                          <GripVertical className="w-3.5 h-3.5" />
+                        </div>
+
+                        {/* Complete Checkbox */}
                         <button
                           onClick={() => {
                             completeTask(tk.id);
                             alert("Задача стянута в архив решенных задач!");
                           }}
-                          className={`mt-0.5 p-0.5 border rounded transition ${
+                          className={`mt-0.5 p-0.5 border rounded transition shrink-0 ${
                             tk.status === "completed"
                               ? "bg-emerald-100 border-emerald-400 text-emerald-800"
-                              : "border-gray-200 text-transparent hover:border-gray-400 cursor-pointer"
+                              : "border-gray-300 bg-white text-transparent hover:border-emerald-500 cursor-pointer"
                           }`}
                         >
                           <Check className="w-3 h-3 text-emerald-600" />
                         </button>
-                        <div className="space-y-0.5 flex-1">
+
+                        {/* Task Info */}
+                        <div className="space-y-0.5 flex-1 min-w-0">
                           <h4
-                            className={`font-semibold pr-2 ${tk.status === "completed" ? "line-through text-gray-400" : "text-slate-800"}`}
+                            className={`font-semibold pr-2 break-words ${
+                              tk.status === "completed" ? "line-through text-gray-400" : "text-slate-800"
+                            }`}
                           >
                             {tk.title}
                           </h4>
-                          <p className="text-[10px] text-gray-400">
-                            {tk.description}
-                          </p>
+                          {tk.description && (
+                            <p className="text-[10px] text-gray-400 break-words leading-tight">
+                              {tk.description}
+                            </p>
+                          )}
                           <div
-                            className={`text-[9px] font-mono font-bold ${
+                            className={`text-[9px] font-mono font-bold mt-1 ${
                               tk.dueDate ===
                               (() => {
                                 const n = new Date();
@@ -1688,17 +2503,39 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                             {tk.dueDate}
                           </div>
                         </div>
-                        <button
-                          onClick={() => {
-                            if (window.confirm("Удалить задачу?")) {
-                              deleteTask(tk.id);
-                            }
-                          }}
-                          className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition ml-auto"
-                          title="Удалить задачу"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+
+                        {/* Move Up / Down Buttons & Delete */}
+                        <div className="flex items-center space-x-1 shrink-0 mt-0.5">
+                          <div className="flex flex-col space-y-0.5">
+                            <button
+                              disabled={idx === 0}
+                              onClick={() => moveDirectorTask(tk.id, "up")}
+                              className="p-0.5 text-slate-400 hover:text-slate-800 disabled:opacity-20 transition hover:bg-slate-200/60 rounded"
+                              title="Переместить вверх"
+                            >
+                              <ChevronUp className="w-3 h-3" />
+                            </button>
+                            <button
+                              disabled={idx === directorTasks.length - 1}
+                              onClick={() => moveDirectorTask(tk.id, "down")}
+                              className="p-0.5 text-slate-400 hover:text-slate-800 disabled:opacity-20 transition hover:bg-slate-200/60 rounded"
+                              title="Переместить вниз"
+                            >
+                              <ChevronDown className="w-3 h-3" />
+                            </button>
+                          </div>
+                          <button
+                            onClick={() => {
+                              if (window.confirm("Удалить задачу?")) {
+                                deleteTask(tk.id);
+                              }
+                            }}
+                            className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition ml-1"
+                            title="Удалить задачу"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     ))
                   )}
@@ -2851,6 +3688,234 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
             referrerPolicy="no-referrer"
             onClick={(e) => e.stopPropagation()}
           />
+        </div>
+      )}
+
+      {/* MODAL: Today Payments List */}
+      {showTodayPaymentsModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border space-y-4 text-left max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-emerald-600" />
+                  Поступления за сегодня ({todayISO})
+                </h3>
+                <p className="text-xs text-gray-400">
+                  Список всех проведенных оплатных транзакций за день
+                </p>
+              </div>
+              <button
+                onClick={() => setShowTodayPaymentsModal(false)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-gray-400 hover:text-slate-700 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {todayIncomeRecords.length === 0 ? (
+                <p className="text-xs text-gray-400 italic py-6 text-center">
+                  Сегодня оплат пока не было зарегистрировано
+                </p>
+              ) : (
+                todayIncomeRecords.map((item) => (
+                  <div key={item.id} className="p-3 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between text-xs">
+                    <div className="space-y-0.5">
+                      <div className="font-bold text-slate-900">{item.description || item.category}</div>
+                      <div className="text-[10px] text-slate-500">Категория: {item.category} • Дата: {item.date}</div>
+                    </div>
+                    <div className="text-right font-mono font-black text-emerald-600 text-sm">
+                      +{item.amount.toLocaleString("ru-RU")} ₽
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="pt-2 border-t flex items-center justify-between text-xs">
+              <span className="font-bold text-slate-600">Итого за сегодня:</span>
+              <span className="font-extrabold text-emerald-600 font-mono text-base">{todayIncomeSum.toLocaleString("ru-RU")} ₽</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Debtors List */}
+      {showDebtorsModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border space-y-4 text-left max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-rose-600" />
+                  Родители с задолженностью (Долги)
+                </h3>
+                <p className="text-xs text-gray-400">
+                  Список клиентов с неисполненными обязательствами по оплате
+                </p>
+              </div>
+              <button
+                onClick={() => setShowDebtorsModal(false)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-gray-400 hover:text-slate-700 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {debtorsList.length === 0 ? (
+                <p className="text-xs text-gray-400 italic py-6 text-center">
+                  Отлично! Долгов по абонементам и тренировкам нет.
+                </p>
+              ) : (
+                debtorsList.map((c) => {
+                  const debtVal = (c as any).debtAmount || (c.abonement === "12_sessions" ? 12000 : c.abonement === "8_sessions" ? 8000 : 4500);
+                  return (
+                    <div key={c.id} className="p-3.5 bg-rose-50/40 border border-rose-100 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between text-xs gap-2">
+                      <div className="space-y-1">
+                        <div className="font-bold text-slate-900 text-sm">
+                          Ученик: {c.childSurname} {c.childName} ({c.groupName || 'Группа не указана'})
+                        </div>
+                        <div className="text-slate-600 flex items-center gap-3 text-[11px]">
+                          <span>Родитель: <strong className="text-slate-800">{c.parentName}</strong></span>
+                          <span>Тел: <a href={`tel:${c.parentPhone}`} className="text-emerald-600 font-bold hover:underline">{c.parentPhone}</a></span>
+                        </div>
+                        <div className="text-[10px] text-rose-700 font-semibold">
+                          Статус абонемента: {c.abonementStatus}
+                        </div>
+                      </div>
+
+                      <div className="text-right sm:text-right shrink-0">
+                        <div className="text-rose-600 font-black font-mono text-base">
+                          {debtVal.toLocaleString("ru-RU")} ₽
+                        </div>
+                        <a
+                          href={`https://wa.me/${c.parentPhone.replace(/[^0-9]/g, "")}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-block mt-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] px-2.5 py-1 rounded transition"
+                        >
+                          Написать в WhatsApp
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Fix Cancelled Training */}
+      {showAddCancellationModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border space-y-4 text-left">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <Ban className="w-5 h-5 text-rose-600" />
+                  Зафиксировать отмену тренировки
+                </h3>
+                <p className="text-xs text-gray-400">
+                  Внесите причину отмены для управленческого учета
+                </p>
+              </div>
+              <button
+                onClick={() => setShowAddCancellationModal(false)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-gray-400 hover:text-slate-700 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddCancellationSubmit} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">Группа</label>
+                <select
+                  value={newCancelGroup}
+                  onChange={(e) => {
+                    setNewCancelGroup(e.target.value);
+                    const grp = groups.find((g) => g.name === e.target.value);
+                    if (grp) setNewCancelCoach(grp.coachName || "");
+                  }}
+                  className="w-full border rounded-lg p-2 bg-slate-50 text-slate-800 font-medium outline-none focus:ring-2 focus:ring-rose-500/20"
+                  required
+                >
+                  <option value="">-- Выберите группу --</option>
+                  {groups.map((g) => (
+                    <option key={g.id} value={g.name}>{g.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">Дата отмены</label>
+                <input
+                  type="date"
+                  value={newCancelDate}
+                  onChange={(e) => setNewCancelDate(e.target.value)}
+                  className="w-full border rounded-lg p-2 bg-slate-50 text-slate-800 font-medium outline-none focus:ring-2 focus:ring-rose-500/20"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">Причина отмены</label>
+                <select
+                  value={newCancelReason}
+                  onChange={(e) => setNewCancelReason(e.target.value as any)}
+                  className="w-full border rounded-lg p-2 bg-slate-50 text-slate-800 font-medium outline-none focus:ring-2 focus:ring-rose-500/20"
+                >
+                  <option value="Болезнь тренера">Болезнь тренера</option>
+                  <option value="Занятость зала">Занятость / Ремонт зала</option>
+                  <option value="Погодные условия">Погодные условия</option>
+                  <option value="Мало участников">Мало участников</option>
+                  <option value="Праздничный день">Праздничный день</option>
+                  <option value="Другое">Другое</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">Тренер</label>
+                <input
+                  type="text"
+                  value={newCancelCoach}
+                  onChange={(e) => setNewCancelCoach(e.target.value)}
+                  placeholder="ФИО тренера"
+                  className="w-full border rounded-lg p-2 bg-slate-50 text-slate-800 font-medium outline-none focus:ring-2 focus:ring-rose-500/20"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">Примечание</label>
+                <textarea
+                  value={newCancelNotes}
+                  onChange={(e) => setNewCancelNotes(e.target.value)}
+                  placeholder="Дополнительные подробности..."
+                  rows={2}
+                  className="w-full border rounded-lg p-2 bg-slate-50 text-slate-800 font-medium outline-none focus:ring-2 focus:ring-rose-500/20"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddCancellationModal(false)}
+                  className="px-3 py-1.5 rounded-lg border text-gray-600 font-bold hover:bg-slate-100 transition"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold transition"
+                >
+                  Сохранить отмену
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

@@ -217,6 +217,16 @@ export interface TrainingSessionProtocol {
   }[];
 }
 
+export interface CancelledSession {
+  id: string;
+  groupId?: string;
+  groupName: string;
+  date: string; // YYYY-MM-DD
+  reason: 'Болезнь тренера' | 'Занятость зала' | 'Погодные условия' | 'Мало участников' | 'Праздничный день' | 'Другое';
+  notes?: string;
+  coachName?: string;
+}
+
 export interface Counterparty {
   id: string;
   name: string;

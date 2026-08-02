@@ -36,6 +36,7 @@ import {
   Homework,
   HomeworkSubmission,
   Counterparty,
+  CancelledSession,
 } from "../types";
 
 // Helper to recursively remove undefined properties before writing to Firestore
@@ -177,6 +178,7 @@ interface CRMContextType {
   addTask: (task: Omit<CRMTask, "id" | "status">) => void;
   updateTask: (id: string, updates: Partial<CRMTask>) => Promise<void>;
   completeTask: (id: string) => void;
+  reorderTasks: (newTasks: CRMTask[]) => void;
   addChatMessage: (msg: Omit<ChatMessage, "id" | "timestamp">) => void;
   updateChatMessage: (id: string, newText: string) => void;
   deleteChatMessage: (id: string) => void;
@@ -283,6 +285,9 @@ interface CRMContextType {
   updateAutoOverdueTasks: (enabled: boolean) => Promise<void>;
   crmConfig: CRMConfig;
   updateCRMConfig: (config: Partial<CRMConfig>) => Promise<void>;
+  cancelledSessions: CancelledSession[];
+  addCancelledSession: (session: Omit<CancelledSession, "id">) => Promise<void>;
+  deleteCancelledSession: (id: string) => Promise<void>;
 }
 
 const CRMContext = createContext<CRMContextType | undefined>(undefined);
@@ -301,6 +306,33 @@ const INITIAL_FINANCES: FinanceRecord[] = [];
 const INITIAL_MESSAGES: ChatMessage[] = [];
 
 const INITIAL_LEADS: Lead[] = [];
+
+const INITIAL_CANCELLED_SESSIONS: CancelledSession[] = [
+  {
+    id: "cs_1",
+    groupName: "Группа 2016-2017 (Манеж 1)",
+    date: "2026-08-01",
+    reason: "Занятость зала",
+    notes: "Проводятся плановые профилактические работы на газоне",
+    coachName: "Павел Ивонин"
+  },
+  {
+    id: "cs_2",
+    groupName: "Группа 2014-2015 (Школа 132)",
+    date: "2026-07-20",
+    reason: "Болезнь тренера",
+    notes: "Замена тренера не была найдена вовремя",
+    coachName: "Александр Смирнов"
+  },
+  {
+    id: "cs_3",
+    groupName: "Группа 2018 (Энергия)",
+    date: "2026-07-12",
+    reason: "Праздничный день",
+    notes: "Городские праздничные мероприятия в спорткомплексе",
+    coachName: "Иван Иванов"
+  }
+];
 
 const INITIAL_FINANCE_CATEGORIES: FinanceCategory[] = [
   { id: "cat_in_ab", type: "income", name: "Абонементы", isSystem: true },
@@ -424,6 +456,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     return cached ? JSON.parse(cached) : [];
   });
   const [counterparties, setCounterparties] = useState<Counterparty[]>(INITIAL_COUNTERPARTIES);
+  const [cancelledSessions, setCancelledSessions] = useState<CancelledSession[]>(() => {
+    const cached = localStorage.getItem("amkar_cancelled_sessions");
+    return cached ? JSON.parse(cached) : INITIAL_CANCELLED_SESSIONS;
+  });
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [firebaseReady, setFirebaseReady] = useState(false);
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
@@ -952,6 +988,36 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       (err) => handleSnapshotErr(err, "counterparties"),
     );
 
+    const unsubProducts = onSnapshot(
+      collection(db, "products"),
+      (snapshot) => {
+        const list: Product[] = [];
+        snapshot.forEach((doc) => {
+          list.push(doc.data() as Product);
+        });
+        list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+        if (list.length > 0) {
+          setProducts(list);
+        }
+      },
+      (err) => handleSnapshotErr(err, "products"),
+    );
+
+    const unsubCancelledSessions = onSnapshot(
+      collection(db, "cancelled_sessions"),
+      (snapshot) => {
+        const list: CancelledSession[] = [];
+        snapshot.forEach((doc) => {
+          list.push(doc.data() as CancelledSession);
+        });
+        list.sort((a, b) => b.date.localeCompare(a.date));
+        if (list.length > 0) {
+          setCancelledSessions(list);
+        }
+      },
+      (err) => handleSnapshotErr(err, "cancelled_sessions"),
+    );
+
     return () => {
       unsubLeads();
       unsubClients();
@@ -964,6 +1030,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       unsubNotifications();
       unsubAccounts();
       unsubCounterparties();
+      unsubProducts();
+      unsubCancelledSessions();
     };
   }, [firebaseReady]);
 
@@ -1778,25 +1846,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       }),
     );
 
-    const group = groups.find((g) => g.id === groupId);
-    const directorTaskId = `t_${Date.now()}_att`;
-    const directorTask: CRMTask = {
-      id: directorTaskId,
-      title: `Отмечена посещаемость в группе: ${group?.name || groupId}`,
-      assignedTo: "director",
-      status: "new",
-      dueDate: new Date().toLocaleDateString("ru-RU"),
-      description: `Тренер ${group?.coachName || "Тренер"} утвердил лист посещаемости на ${date}. Присутствовало: ${records.filter((r) => r.status === "present").length} человек.`,
-    };
-
-    setTasks((prev) => [directorTask, ...prev]);
-
     // Background sync with Batch for Efficiency and Correctness
     try {
       const batch = writeBatch(db);
       
       batch.set(doc(db, "training_sessions", newProtocol.id), removeUndefined(newProtocol) as any);
-      batch.set(doc(db, "tasks", directorTaskId), removeUndefined(directorTask) as any);
 
       records.forEach((record) => {
         const c = clients.find((cl) => cl.id === record.clientId);
@@ -2034,6 +2088,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     });
   };
 
+  const reorderTasks = (newTasks: CRMTask[]) => {
+    setTasks(newTasks);
+  };
+
   const addChatMessage = async (
     msgData: Omit<ChatMessage, "id" | "timestamp">,
   ) => {
@@ -2143,31 +2201,95 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   useEffect(() => {
-    localStorage.setItem("amkar_products", JSON.stringify(products));
+    try {
+      localStorage.setItem("amkar_products", JSON.stringify(products));
+    } catch (e) {
+      console.warn("Failed to update products in localStorage:", e);
+    }
   }, [products]);
   useEffect(() => {
-    localStorage.setItem("amkar_orders", JSON.stringify(storeOrders));
+    try {
+      localStorage.setItem("amkar_orders", JSON.stringify(storeOrders));
+    } catch (e) {
+      console.warn("Failed to update orders in localStorage:", e);
+    }
   }, [storeOrders]);
   useEffect(() => {
-    localStorage.setItem("amkar_homeworks", JSON.stringify(homeworks));
+    try {
+      localStorage.setItem("amkar_homeworks", JSON.stringify(homeworks));
+    } catch (e) {
+      console.warn("Failed to update homeworks in localStorage:", e);
+    }
   }, [homeworks]);
   useEffect(() => {
-    localStorage.setItem(
-      "amkar_homework_submissions",
-      JSON.stringify(homeworkSubmissions),
-    );
+    try {
+      localStorage.setItem(
+        "amkar_homework_submissions",
+        JSON.stringify(homeworkSubmissions),
+      );
+    } catch (e) {
+      console.warn("Failed to update homeworkSubmissions in localStorage:", e);
+    }
   }, [homeworkSubmissions]);
 
-  const addProduct = async (product: Omit<Product, "id">) => {
-    setProducts((prev) => [...prev, { ...product, id: `prod_${Date.now()}` }]);
+  const addCancelledSession = async (session: Omit<CancelledSession, "id">) => {
+    const newSession: CancelledSession = {
+      ...session,
+      id: `cs_${Date.now()}`,
+    };
+    setCancelledSessions((prev) => [newSession, ...prev]);
+    try {
+      await setDoc(doc(db, "cancelled_sessions", newSession.id), removeUndefined(newSession) as any);
+    } catch (e) {
+      console.error("Error adding cancelled session to Firestore:", e);
+    }
   };
+
+  const deleteCancelledSession = async (id: string) => {
+    setCancelledSessions((prev) => prev.filter((s) => s.id !== id));
+    try {
+      await deleteDoc(doc(db, "cancelled_sessions", id));
+    } catch (e) {
+      console.error("Error deleting cancelled session from Firestore:", e);
+    }
+  };
+
+  const addProduct = async (product: Omit<Product, "id">) => {
+    const newProd: Product = {
+      id: `prod_${Date.now()}`,
+      name: product.name || "",
+      category: product.category || "Экипировка",
+      price: typeof product.price === "number" ? product.price : Number(product.price) || 0,
+      description: product.description || "",
+      photoUrl: product.photoUrl || "",
+    };
+    setProducts((prev) => [...prev, newProd]);
+    try {
+      await setDoc(doc(db, "products", newProd.id), removeUndefined(newProd) as any);
+    } catch (e) {
+      console.error("Error writing product to Firestore:", e);
+    }
+  };
+
   const updateProduct = async (id: string, updates: Partial<Product>) => {
+    const sanitizedUpdates = removeUndefined({ ...updates });
     setProducts((prev) =>
       prev.map((p) => (p.id === id ? { ...p, ...updates } : p)),
     );
+    try {
+      await updateDoc(doc(db, "products", id), sanitizedUpdates as any);
+    } catch (e) {
+      console.error("Error updating product in Firestore:", e);
+    }
   };
+
   const deleteProduct = async (id: string) => {
     setProducts((prev) => prev.filter((p) => p.id !== id));
+    try {
+      await deleteDoc(doc(db, "products", id));
+    } catch (e) {
+      console.error("Error deleting product from Firestore:", e);
+    }
   };
 
   const createOrder = async (order: Omit<StoreOrder, "id" | "date">) => {
@@ -3085,6 +3207,9 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         updateCounterparty,
         deleteCounterparty,
         trainingSessions,
+        cancelledSessions,
+        addCancelledSession,
+        deleteCancelledSession,
         messages,
         calendarSyncEnabled,
         calendarSyncStatus,
@@ -3112,6 +3237,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         ratePlayer,
         completeTask,
         updateTask,
+        reorderTasks,
         addTask,
         notifications,
         addNotification,

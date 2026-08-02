@@ -2506,7 +2506,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                             {p.name}
                           </h3>
                           <div className="text-lg font-black text-slate-900 mb-3">
-                            {p.price.toLocaleString()} ₽
+                            {(p.price || 0).toLocaleString()} ₽
                           </div>
                         </div>
                         {inCart ? (
