@@ -1156,6 +1156,17 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   const addLead = async (
     leadData: Omit<Lead, "id" | "createdAt" | "timeString" | "status">,
   ) => {
+    // Prevent duplicate lead creation if recently created by server or client
+    if (leadData.parentPhone && leadData.parentPhone !== "Не указан") {
+      const isRecentlyAdded = leads.some((l) => {
+        const phoneMatch = l.parentPhone.replace(/\D/g, "") === leadData.parentPhone.replace(/\D/g, "");
+        const nameMatch = l.childName === leadData.childName;
+        const recent = l.createdAt && (Date.now() - new Date(l.createdAt).getTime() < 120000);
+        return phoneMatch && nameMatch && recent;
+      });
+      if (isRecentlyAdded) return;
+    }
+
     const now = new Date();
     const leadId = `l_${Date.now()}`;
     const newLead: Lead = {
