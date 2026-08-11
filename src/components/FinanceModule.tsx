@@ -84,6 +84,7 @@ export const FinanceModule: React.FC = () => {
     addCounterparty,
     updateCounterparty,
     deleteCounterparty,
+    currentRole,
   } = useCRM();
 
   const [activeTab, setActiveTab] = useState<
@@ -99,7 +100,8 @@ export const FinanceModule: React.FC = () => {
     | "debts"
     | "counterparties"
     | "client_income"
-  >("dashboard");
+    | "expiring"
+  >(() => (currentRole === "manager" ? "expiring" : "dashboard"));
 
   const [salaryTab, setSalaryTab] = useState<"staff" | "transactions">("staff");
   const [selectedCoachIdForDetail, setSelectedCoachIdForDetail] = useState<string | null>(null);
@@ -621,83 +623,293 @@ export const FinanceModule: React.FC = () => {
             </h1><HeaderDescription text={<>Ввод операций, P&L, финансовое планирование абонементов.</>} /></div>
           </div>
           <div className="flex bg-slate-100 p-1.5 rounded-xl flex-wrap">
-            <button
-              onClick={() => setActiveTab("dashboard")}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${activeTab === "dashboard" ? "bg-white shadow-sm text-emerald-600" : "text-gray-500 hover:text-gray-700"}`}
-            >
-              Дашборд
-            </button>
-            <button
-              onClick={() => setActiveTab("input")}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${activeTab === "input" ? "bg-white shadow-sm text-emerald-600" : "text-gray-500 hover:text-gray-700"}`}
-            >
-              ОперВвод
-            </button>
-            <button
-              onClick={() => setActiveTab("cashflow")}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${activeTab === "cashflow" ? "bg-white shadow-sm text-emerald-600" : "text-gray-500 hover:text-gray-700"}`}
-            >
-              ОДДС
-            </button>
-            <button
-              onClick={() => setActiveTab("pnl")}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${activeTab === "pnl" ? "bg-white shadow-sm text-emerald-600" : "text-gray-500 hover:text-gray-700"}`}
-            >
-              ОПУ
-            </button>
-            <button
-              onClick={() => setActiveTab("plan")}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${activeTab === "plan" ? "bg-white shadow-sm text-emerald-600" : "text-gray-500 hover:text-gray-700"}`}
-            >
-              ФинПлан
-            </button>
-            <button
-              onClick={() => setActiveTab("directories")}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${activeTab === "directories" ? "bg-white shadow-sm text-emerald-600" : "text-gray-500 hover:text-gray-700"}`}
-            >
-              Справочники
-            </button>
-            <button
-              onClick={() => setActiveTab("accounts")}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${activeTab === "accounts" ? "bg-white shadow-sm text-emerald-600" : "text-gray-500 hover:text-gray-700"}`}
-            >
-              Счета
-            </button>
-            <button
-              onClick={() => setActiveTab("salaries")}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${activeTab === "salaries" ? "bg-white shadow-sm text-emerald-600" : "text-gray-500 hover:text-gray-700"}`}
-            >
-              Зарплаты
-            </button>
-            <button
-              onClick={() => setActiveTab("rent")}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${activeTab === "rent" ? "bg-white shadow-sm text-emerald-600" : "text-gray-500 hover:text-gray-700"}`}
-            >
-              Аренда
-            </button>
-            <button
-              onClick={() => setActiveTab("counterparties")}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${activeTab === "counterparties" ? "bg-white shadow-sm text-emerald-600" : "text-gray-500 hover:text-gray-700"}`}
-            >
-              Контрагенты
-            </button>
-            <button
-              onClick={() => setActiveTab("debts")}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${activeTab === "debts" ? "bg-white shadow-sm text-emerald-600" : "text-gray-500 hover:text-gray-700"}`}
-            >
-              Долги
-            </button>
-            <button
-              onClick={() => setActiveTab("client_income")}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${activeTab === "client_income" ? "bg-white shadow-sm text-emerald-600" : "text-gray-500 hover:text-gray-700"}`}
-            >
-              Доходы от клиентов
-            </button>
+            {currentRole === "manager" ? (
+              <>
+                <button
+                  onClick={() => setActiveTab("expiring")}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                    activeTab === "expiring"
+                      ? "bg-white shadow-sm text-emerald-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  Заканчивается абонемент
+                </button>
+                <button
+                  onClick={() => setActiveTab("debts")}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                    activeTab === "debts"
+                      ? "bg-white shadow-sm text-emerald-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  Неоплаченные
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => setActiveTab("dashboard")}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                    activeTab === "dashboard"
+                      ? "bg-white shadow-sm text-emerald-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  Дашборд
+                </button>
+                <button
+                  onClick={() => setActiveTab("input")}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                    activeTab === "input"
+                      ? "bg-white shadow-sm text-emerald-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  ОперВвод
+                </button>
+                <button
+                  onClick={() => setActiveTab("cashflow")}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                    activeTab === "cashflow"
+                      ? "bg-white shadow-sm text-emerald-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  ОДДС
+                </button>
+                <button
+                  onClick={() => setActiveTab("pnl")}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                    activeTab === "pnl"
+                      ? "bg-white shadow-sm text-emerald-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  ОПУ
+                </button>
+                <button
+                  onClick={() => setActiveTab("plan")}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                    activeTab === "plan"
+                      ? "bg-white shadow-sm text-emerald-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  ФинПлан
+                </button>
+                <button
+                  onClick={() => setActiveTab("directories")}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                    activeTab === "directories"
+                      ? "bg-white shadow-sm text-emerald-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  Справочники
+                </button>
+                <button
+                  onClick={() => setActiveTab("accounts")}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                    activeTab === "accounts"
+                      ? "bg-white shadow-sm text-emerald-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  Счета
+                </button>
+                <button
+                  onClick={() => setActiveTab("salaries")}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                    activeTab === "salaries"
+                      ? "bg-white shadow-sm text-emerald-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  Зарплаты
+                </button>
+                <button
+                  onClick={() => setActiveTab("rent")}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                    activeTab === "rent"
+                      ? "bg-white shadow-sm text-emerald-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  Аренда
+                </button>
+                <button
+                  onClick={() => setActiveTab("counterparties")}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                    activeTab === "counterparties"
+                      ? "bg-white shadow-sm text-emerald-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  Контрагенты
+                </button>
+                <button
+                  onClick={() => setActiveTab("debts")}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                    activeTab === "debts"
+                      ? "bg-white shadow-sm text-emerald-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  Долги
+                </button>
+                <button
+                  onClick={() => setActiveTab("client_income")}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                    activeTab === "client_income"
+                      ? "bg-white shadow-sm text-emerald-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  Доходы от клиентов
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
 
       <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4 md:space-y-6">
+        {activeTab === "expiring" && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300 text-left">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-black text-slate-900">
+                  Заканчивается абонемент
+                </h2>
+                <p className="text-xs text-gray-500 mt-1">
+                  Список активных учеников, у которых осталось 1-2 занятия или ожидается оплата следующего абонемента.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-white rounded-2xl p-5 border border-amber-100 shadow-sm">
+                <div className="text-[10px] font-bold text-amber-700 uppercase tracking-wider mb-1">
+                  Всего подлежат продлению
+                </div>
+                <div className="text-2xl font-black text-slate-900">
+                  {clients.filter((c) => c.status === "active" && c.abonement && c.abonement !== "none" && (c.abonementSessionsLeft <= 2 || c.abonementStatus === "Ожидает оплаты" || c.abonementStatus === "unpaid")).length} учеников
+                </div>
+              </div>
+              <div className="bg-white rounded-2xl p-5 border border-amber-100 shadow-sm">
+                <div className="text-[10px] font-bold text-amber-700 uppercase tracking-wider mb-1">
+                  Осталось 1-2 занятия
+                </div>
+                <div className="text-2xl font-black text-amber-600">
+                  {clients.filter((c) => c.status === "active" && c.abonementSessionsLeft > 0 && c.abonementSessionsLeft <= 2).length} учеников
+                </div>
+              </div>
+              <div className="bg-white rounded-2xl p-5 border border-amber-100 shadow-sm">
+                <div className="text-[10px] font-bold text-amber-700 uppercase tracking-wider mb-1">
+                  Ожидают счет на оплату
+                </div>
+                <div className="text-2xl font-black text-rose-600">
+                  {clients.filter((c) => c.status === "active" && (c.abonementStatus === "Ожидает оплаты" || c.abonementStatus === "unpaid" || c.abonementSessionsLeft === 0)).length} учеников
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm space-y-4">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-slate-700 border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-gray-400 font-semibold uppercase tracking-wider border-b text-[10px]">
+                      <th className="p-3">Ученик (Ребенок)</th>
+                      <th className="p-3">Родитель & Связь</th>
+                      <th className="p-3">Группа</th>
+                      <th className="p-3">Абонемент</th>
+                      <th className="p-3">Остаток занятий</th>
+                      <th className="p-3">Статус оплаты</th>
+                      <th className="p-3 text-right">Действия</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {clients
+                      .filter(
+                        (c) =>
+                          c.status === "active" &&
+                          c.abonement &&
+                          c.abonement !== "none" &&
+                          (c.abonementSessionsLeft <= 2 ||
+                            c.abonementStatus === "Ожидает оплаты" ||
+                            c.abonementStatus === "unpaid")
+                      )
+                      .map((c) => (
+                        <tr key={c.id} className="hover:bg-slate-50 transition">
+                          <td className="p-3">
+                            <div className="font-bold text-slate-900">
+                              {c.childSurname} {c.childName}
+                            </div>
+                            <div className="text-[10px] text-gray-400">
+                              {c.childAge} лет ({c.childBirthYear} г.р.)
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <div className="font-semibold text-slate-800">
+                              {c.parentName}
+                            </div>
+                            <div className="text-[10px] text-indigo-600 font-mono">
+                              {c.parentPhone}
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded font-bold text-[10px]">
+                              {c.groupName || "Без группы"}
+                            </span>
+                          </td>
+                          <td className="p-3 font-medium text-slate-800">
+                            {c.abonement === "1_session"
+                              ? "Разовое (1 зан)"
+                              : c.abonement === "4_sessions"
+                                ? "Абонемент 4 зан"
+                                : c.abonement === "8_sessions"
+                                  ? "Абонемент 8 зан"
+                                  : c.abonement === "12_sessions"
+                                    ? "Абонемент 12 зан"
+                                    : c.abonement}
+                          </td>
+                          <td className="p-3">
+                            <span className={`px-2 py-1 rounded-lg font-black text-xs ${
+                              c.abonementSessionsLeft === 0
+                                ? "bg-rose-100 text-rose-800"
+                                : c.abonementSessionsLeft === 1
+                                  ? "bg-amber-100 text-amber-800"
+                                  : "bg-yellow-100 text-yellow-800"
+                            }`}>
+                              {c.abonementSessionsLeft} из {c.abonementTotalSessions || 8} зан.
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              c.abonementStatus === "Оплачено"
+                                ? "bg-emerald-100 text-emerald-800"
+                                : "bg-rose-100 text-rose-800"
+                            }`}>
+                              {c.abonementStatus || "Ожидает оплаты"}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right">
+                            <button
+                              onClick={() => showNotification(`Ссылка на оплату отправлена родителю ${c.parentName} (${c.parentPhone})!`)}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition shadow-xs"
+                            >
+                              Отправить счет
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
         {activeTab === "dashboard" && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">

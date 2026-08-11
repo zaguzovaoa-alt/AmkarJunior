@@ -92,7 +92,6 @@ function DashboardContainer() {
 
       case "manager":
         if (currentTab === "hq_settings" || currentTab === "manager_settings") return <HQSettings />;
-        if (currentTab === "hq_store") return <AdminStore />;
         if (currentTab === "manager_leads" || currentTab === "hq_leads") {
           return (
             <ManagerCRM
@@ -123,13 +122,6 @@ function DashboardContainer() {
           return <GroupsModule />;
         if (currentTab === "hq_tasks") return <TasksModule />;
         if (currentTab === "hq_sessions") return <TrainerSessions />;
-        if (currentTab === "hq_attendance")
-          return (
-            <TrainerCRM
-              activeTab="trainer_attendance"
-              setActiveTab={setCurrentTab}
-            />
-          );
         if (currentTab === "hq_messages")
           return (
             <TrainerCRM

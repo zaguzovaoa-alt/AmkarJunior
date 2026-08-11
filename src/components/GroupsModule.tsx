@@ -65,6 +65,8 @@ export const GroupsModule: React.FC = () => {
     "Ср 18:00",
   ]);
   const [scheduleInput, setScheduleInput] = useState("Пн 18:00, Ср 18:00");
+  const [scheduleStartDate, setScheduleStartDate] = useState("");
+  const [scheduleEndDate, setScheduleEndDate] = useState("");
   const [newIsSelectTeam, setNewIsSelectTeam] = useState(false);
   const [newTargetCompetition, setNewTargetCompetition] = useState("");
   const [newGroupVenueCost, setNewGroupVenueCost] = useState<number>(0);
@@ -85,6 +87,8 @@ export const GroupsModule: React.FC = () => {
   );
   const [editSelectedCoachId, setEditSelectedCoachId] = useState("");
   const [editScheduleInput, setEditScheduleInput] = useState("");
+  const [editScheduleStartDate, setEditScheduleStartDate] = useState("");
+  const [editScheduleEndDate, setEditScheduleEndDate] = useState("");
   const [editIsSelectTeam, setEditIsSelectTeam] = useState(false);
   const [editTargetCompetition, setEditTargetCompetition] = useState("");
   const [editVenueCost, setEditVenueCost] = useState<number>(0);
@@ -182,7 +186,9 @@ export const GroupsModule: React.FC = () => {
         [],
         newGroupVenueCost,
         newGroupMaxCapacity,
-        newGroupVenueId
+        newGroupVenueId,
+        scheduleStartDate || undefined,
+        scheduleEndDate || undefined,
       );
 
       // Reset
@@ -192,6 +198,8 @@ export const GroupsModule: React.FC = () => {
       setNewGroupBirthYearTo(new Date().getFullYear() - 9);
       setSelectedCoachId("");
       setScheduleInput("Пн 18:00, Ср 18:00");
+      setScheduleStartDate("");
+      setScheduleEndDate("");
       setNewIsSelectTeam(false);
       setNewTargetCompetition("");
       setNewGroupVenueCost(0);
@@ -211,6 +219,8 @@ export const GroupsModule: React.FC = () => {
     setEditGroupBirthYearTo(group.birthYearTo || group.year + 1);
     setEditSelectedCoachId(group.coachId || "");
     setEditScheduleInput((group.scheduleDays || []).join(", "));
+    setEditScheduleStartDate(group.scheduleStartDate || "");
+    setEditScheduleEndDate(group.scheduleEndDate || "");
     setEditIsSelectTeam(group.isSelectTeam || false);
     setEditTargetCompetition(group.targetCompetition || "");
     setEditVenueCost(group.venueCost || 0);
@@ -243,6 +253,8 @@ export const GroupsModule: React.FC = () => {
         coachId,
         coachName,
         scheduleDays: parsedSchedule,
+        scheduleStartDate: editScheduleStartDate || undefined,
+        scheduleEndDate: editScheduleEndDate || undefined,
         isSelectTeam: editIsSelectTeam,
         targetCompetition: editTargetCompetition,
         venueCost: editVenueCost,
@@ -950,9 +962,60 @@ export const GroupsModule: React.FC = () => {
                   <p className="text-[9px] text-gray-400 mt-1">Выберите дни и укажите время</p>
                   <button type="button" onClick={() => setScheduleInput('')} className="text-[9px] text-red-500 hover:underline">Очистить</button>
                 </div>
+
+                <div className="pt-2 grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-600 uppercase font-mono block">
+                      Период с (Дата начала)
+                    </label>
+                    <input
+                      type="date"
+                      value={scheduleStartDate}
+                      onChange={(e) => setScheduleStartDate(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border rounded-xl text-xs font-semibold focus:outline-none focus:border-red-600"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-600 uppercase font-mono block">
+                      Период по (Дата окончания)
+                    </label>
+                    <input
+                      type="date"
+                      value={scheduleEndDate}
+                      onChange={(e) => setScheduleEndDate(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border rounded-xl text-xs font-semibold focus:outline-none focus:border-red-600"
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-1 col-span-3 sm:col-span-1">
+                  <label className="text-xs font-black text-slate-900 uppercase font-mono tracking-wider">
+                    Площадка (Контрагент)
+                  </label>
+                  <select
+                    value={newGroupVenueId}
+                    onChange={(e) => {
+                      const selectedId = e.target.value;
+                      setNewGroupVenueId(selectedId);
+                      const cp = counterparties.find((c) => c.id === selectedId);
+                      if (cp && cp.rate) {
+                        setNewGroupVenueCost(cp.rate);
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-red-600 bg-white"
+                  >
+                    <option value="">-- Не выбрана --</option>
+                    {counterparties
+                      .filter((c) => c.type === "school_rent" || c.type === "hall_rent")
+                      .map((cp) => (
+                        <option key={cp.id} value={cp.id}>
+                          {cp.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
                  <div className="space-y-1">
                   <label className="text-xs font-black text-slate-900 uppercase font-mono tracking-wider">
                     Аренда (₽/занят.)
@@ -1154,9 +1217,60 @@ export const GroupsModule: React.FC = () => {
                   <p className="text-[9px] text-gray-400 mt-1">Выберите дни и укажите время</p>
                   <button type="button" onClick={() => setEditScheduleInput('')} className="text-[9px] text-red-500 hover:underline">Очистить</button>
                 </div>
+
+                <div className="pt-2 grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-600 uppercase font-mono block">
+                      Период с (Дата начала)
+                    </label>
+                    <input
+                      type="date"
+                      value={editScheduleStartDate}
+                      onChange={(e) => setEditScheduleStartDate(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border rounded-xl text-xs font-semibold focus:outline-none focus:border-red-600"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-600 uppercase font-mono block">
+                      Период по (Дата окончания)
+                    </label>
+                    <input
+                      type="date"
+                      value={editScheduleEndDate}
+                      onChange={(e) => setEditScheduleEndDate(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border rounded-xl text-xs font-semibold focus:outline-none focus:border-red-600"
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-1 col-span-3 sm:col-span-1">
+                  <label className="text-xs font-black text-slate-900 uppercase font-mono tracking-wider">
+                    Площадка (Контрагент)
+                  </label>
+                  <select
+                    value={editVenueId}
+                    onChange={(e) => {
+                      const selectedId = e.target.value;
+                      setEditVenueId(selectedId);
+                      const cp = counterparties.find((c) => c.id === selectedId);
+                      if (cp && cp.rate) {
+                        setEditVenueCost(cp.rate);
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-red-600 bg-white"
+                  >
+                    <option value="">-- Не выбрана --</option>
+                    {counterparties
+                      .filter((c) => c.type === "school_rent" || c.type === "hall_rent")
+                      .map((cp) => (
+                        <option key={cp.id} value={cp.id}>
+                          {cp.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
                  <div className="space-y-1">
                   <label className="text-xs font-black text-slate-900 uppercase font-mono tracking-wider">
                     Аренда (₽/занят.)

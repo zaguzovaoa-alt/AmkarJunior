@@ -138,9 +138,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           },
           { id: "hq_coaches", label: "Тренеры", icon: GraduationCap },
           { id: "hq_groups", label: "Группы", icon: FolderPlus },
-          { id: "hq_finances", label: "Финансы", icon: DollarSign },
-          { id: "hq_analytics", label: "Бонусы и Аналитика", icon: Sparkles },
-          { id: "hq_attendance", label: "Посещения", icon: CheckSquare },
+          { id: "hq_finances", label: "Абонементы и Долги", icon: DollarSign },
           { id: "hq_tasks", label: "Задачи", icon: CheckSquare },
           {
             id: "hq_messages",
@@ -153,7 +151,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             label: "Google Календарь",
             icon: RefreshCw,
           },
-          { id: "hq_store", label: "Магазин (Админ)", icon: ShoppingCart },
           { id: "manager_settings", label: "Настройки", icon: Settings },
         ];
       default:

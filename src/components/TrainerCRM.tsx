@@ -554,7 +554,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                         s.coachId === myCoach.id ||
                         s.coachName.includes(myCoach.name),
                     );
-                    if (mySessions.length === 0) return "87%";
+                    if (mySessions.length === 0) return "0%";
                     const totalPlayers = mySessions.reduce(
                       (sum, s) =>
                         sum + s.presentCount + s.sickCount + s.absentCount,
@@ -771,16 +771,41 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                           return `${Math.round(avg)}%`;
                         })()}
                       </div>
-                      <div className="text-[9px] font-bold text-emerald-500 mt-1">
-                        +5% к прошлой неделе
-                      </div>
+                      {dailyAttendance.some((d) => d.hasData) && (
+                        <div className="text-[9px] font-bold text-emerald-500 mt-1">
+                          За текущую неделю
+                        </div>
+                      )}
                     </div>
                     <div>
                       <div className="text-[10px] text-gray-400 font-medium">
                         Всего тренировок
                       </div>
                       <div className="text-xl font-bold text-slate-800 leading-none">
-                        6
+                        {(() => {
+                          const weekSessions = mySessions.filter((s) => {
+                            return weekDates.some((d) => {
+                              const dStr =
+                                d.getFullYear() +
+                                "-" +
+                                String(d.getMonth() + 1).padStart(2, "0") +
+                                "-" +
+                                String(d.getDate()).padStart(2, "0");
+                              const dRu = d.toLocaleDateString("ru-RU");
+                              return (
+                                (s.dateString &&
+                                  (s.dateString.includes(dStr) ||
+                                    s.dateString.includes(dRu))) ||
+                                (s.date &&
+                                  (s.date.includes(dStr) ||
+                                    s.date.includes(dRu)))
+                              );
+                            });
+                          });
+                          const activeList =
+                            weekSessions.length > 0 ? weekSessions : mySessions;
+                          return activeList.length;
+                        })()}
                       </div>
                     </div>
                     <div>
@@ -788,7 +813,42 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                         Всего посещений
                       </div>
                       <div className="text-sm font-bold text-slate-800 leading-none">
-                        92 из 106
+                        {(() => {
+                          const weekSessions = mySessions.filter((s) => {
+                            return weekDates.some((d) => {
+                              const dStr =
+                                d.getFullYear() +
+                                "-" +
+                                String(d.getMonth() + 1).padStart(2, "0") +
+                                "-" +
+                                String(d.getDate()).padStart(2, "0");
+                              const dRu = d.toLocaleDateString("ru-RU");
+                              return (
+                                (s.dateString &&
+                                  (s.dateString.includes(dStr) ||
+                                    s.dateString.includes(dRu))) ||
+                                (s.date &&
+                                  (s.date.includes(dStr) ||
+                                    s.date.includes(dRu)))
+                              );
+                            });
+                          });
+                          const activeList =
+                            weekSessions.length > 0 ? weekSessions : mySessions;
+                          const present = activeList.reduce(
+                            (sum, s) => sum + (s.presentCount || 0),
+                            0,
+                          );
+                          const total = activeList.reduce(
+                            (sum, s) =>
+                              sum +
+                              (s.presentCount || 0) +
+                              (s.absentCount || 0) +
+                              (s.sickCount || 0),
+                            0,
+                          );
+                          return total > 0 ? `${present} из ${total}` : "0 из 0";
+                        })()}
                       </div>
                     </div>
                   </div>

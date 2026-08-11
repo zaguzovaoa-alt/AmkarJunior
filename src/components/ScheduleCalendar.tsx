@@ -180,6 +180,7 @@ export const ScheduleCalendar: React.FC<{
     "regular" | "match" | "masterclass" | "meeting" | "competition"
   >("regular");
   const [newEventNotes, setNewEventNotes] = useState("");
+  const [repeatEndDate, setRepeatEndDate] = useState("");
   const [notificationTarget, setNotificationTarget] = useState<
     "none" | "all" | "group"
   >("none");
@@ -219,6 +220,11 @@ export const ScheduleCalendar: React.FC<{
             const testDate = new Date(year, month, d);
             if (testDate.getDay() === targetDayOfWeek) {
               const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+              // Filter by start/end date range if defined on group
+              if (g.scheduleStartDate && dateStr < g.scheduleStartDate) continue;
+              if (g.scheduleEndDate && dateStr > g.scheduleEndDate) continue;
+
               const activeCoach = coaches.find((c) => c.id === g.coachId);
               const coachName = activeCoach
                 ? activeCoach.name
@@ -551,9 +557,18 @@ export const ScheduleCalendar: React.FC<{
           : "";
       const slotToAdd = `${locPrefix}${weekdayAbbr} ${newEventTime}`;
 
+      const groupUpdates: Partial<Omit<TrainingGroup, "id">> = {};
       if (!(gObj.scheduleDays || []).includes(slotToAdd)) {
-        const updatedSlots = [...(gObj.scheduleDays || []), slotToAdd];
-        updateGroup(gObj.id, { scheduleDays: updatedSlots });
+        groupUpdates.scheduleDays = [...(gObj.scheduleDays || []), slotToAdd];
+      }
+      if (!gObj.scheduleStartDate || newEventDate < gObj.scheduleStartDate) {
+        groupUpdates.scheduleStartDate = newEventDate;
+      }
+      if (repeatEndDate) {
+        groupUpdates.scheduleEndDate = repeatEndDate;
+      }
+      if (Object.keys(groupUpdates).length > 0) {
+        updateGroup(gObj.id, groupUpdates);
       }
     }
 
@@ -1753,15 +1768,27 @@ export const ScheduleCalendar: React.FC<{
               </div>
 
               {newEventType === "regular" && (
-                <div className="p-3 bg-red-50/50 border border-red-100 rounded-xl space-y-1">
-                  <span className="text-[9px] font-bold text-red-600 uppercase font-mono block">
-                    РЕКУРРЕНТНОЕ СОБЫТИЕ:
-                  </span>
-                  <p className="text-[10px] text-slate-500 leading-normal">
-                    Поскольку выбрана категория регулярного занятия, этот день
-                    недели автоматически добавится в повторяемый график группы в
-                    CRM-системе.
-                  </p>
+                <div className="p-3 bg-red-50/50 border border-red-100 rounded-xl space-y-2">
+                  <div>
+                    <span className="text-[9px] font-bold text-red-600 uppercase font-mono block">
+                      РЕКУРРЕНТНОЕ СОБЫТИЕ:
+                    </span>
+                    <p className="text-[10px] text-slate-500 leading-normal">
+                      День недели автоматически добавится в расписание группы. Укажите дату окончания периода (например, май) при необходимости.
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-600 uppercase font-mono block">
+                      Повторять ДО (Дата окончания периода)
+                    </label>
+                    <input
+                      type="date"
+                      value={repeatEndDate}
+                      onChange={(e) => setRepeatEndDate(e.target.value)}
+                      placeholder="По умолчанию бессрочно"
+                      className="w-full px-2.5 py-1.5 border border-red-200 rounded-lg text-xs font-semibold bg-white focus:outline-none focus:border-red-600"
+                    />
+                  </div>
                 </div>
               )}
 

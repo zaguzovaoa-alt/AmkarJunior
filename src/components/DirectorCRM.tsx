@@ -2032,19 +2032,32 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                 <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
                 <div>
                   <h3 className="font-extrabold text-amber-950 text-sm">
-                    Требует внимания управляющего директора
+                    {currentRole === "manager"
+                      ? "Требует внимания менеджера"
+                      : "Требует внимания управляющего директора"}
                   </h3>
                   <p className="text-[11px] text-amber-800/80">
-                    Оперативные риски: окончания абонементов, долги, отсутствие отчетов тренеров
+                    {currentRole === "manager"
+                      ? "Оперативные риски: окончания абонементов, долги"
+                      : "Оперативные риски: окончания абонементов, долги, отсутствие отчетов тренеров"}
                   </p>
                 </div>
               </div>
               <span className="bg-amber-200/80 text-amber-900 font-extrabold text-xs px-2.5 py-1 rounded-lg font-mono">
-                {expiringSubscriptionClients.length + debtorsList.length + missingTrainerReports.length} задач
+                {currentRole === "manager"
+                  ? expiringSubscriptionClients.length + debtorsList.length
+                  : expiringSubscriptionClients.length +
+                    debtorsList.length +
+                    missingTrainerReports.length}{" "}
+                задач
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div
+              className={`grid grid-cols-1 ${
+                currentRole === "manager" ? "md:grid-cols-2" : "md:grid-cols-3"
+              } gap-4`}
+            >
               {/* Card 1: Заканчивается абонемент */}
               <div className="bg-white p-4 rounded-xl border border-amber-200/80 shadow-2xs space-y-2">
                 <div className="flex items-center justify-between">
@@ -2063,10 +2076,17 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                 ) : (
                   <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                     {expiringSubscriptionClients.map((c) => (
-                      <div key={c.id} className="p-2 bg-slate-50 border border-slate-100 rounded-lg flex items-center justify-between text-xs">
+                      <div
+                        key={c.id}
+                        className="p-2 bg-slate-50 border border-slate-100 rounded-lg flex items-center justify-between text-xs"
+                      >
                         <div>
-                          <div className="font-bold text-slate-800">{c.childSurname} {c.childName}</div>
-                          <div className="text-[10px] text-slate-500">{c.groupName || 'Без группы'} • {c.parentPhone}</div>
+                          <div className="font-bold text-slate-800">
+                            {c.childSurname} {c.childName}
+                          </div>
+                          <div className="text-[10px] text-slate-500">
+                            {c.groupName || "Без группы"} • {c.parentPhone}
+                          </div>
                         </div>
                         <span className="bg-amber-100 text-amber-900 font-black text-[10px] px-1.5 py-0.5 rounded">
                           {c.abonementSessionsLeft} зан.
@@ -2095,10 +2115,17 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                 ) : (
                   <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                     {debtorsList.map((c) => (
-                      <div key={c.id} className="p-2 bg-rose-50/50 border border-rose-100 rounded-lg flex items-center justify-between text-xs">
+                      <div
+                        key={c.id}
+                        className="p-2 bg-rose-50/50 border border-rose-100 rounded-lg flex items-center justify-between text-xs"
+                      >
                         <div>
-                          <div className="font-bold text-slate-800">{c.childSurname} {c.childName}</div>
-                          <div className="text-[10px] text-rose-700">{c.parentName} ({c.parentPhone})</div>
+                          <div className="font-bold text-slate-800">
+                            {c.childSurname} {c.childName}
+                          </div>
+                          <div className="text-[10px] text-rose-700">
+                            {c.parentName} ({c.parentPhone})
+                          </div>
                         </div>
                         <button
                           onClick={() => setShowDebtorsModal(true)}
@@ -2113,135 +2140,169 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
               </div>
 
               {/* Card 3: Не сдан отчет по тренировке */}
-              <div className="bg-white p-4 rounded-xl border border-amber-200/80 shadow-2xs space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-extrabold text-amber-900 flex items-center gap-1.5">
-                    <FileText className="w-4 h-4 text-amber-600" />
-                    Тренер не сдал отчет
-                  </span>
-                  <span className="bg-amber-100 text-amber-800 font-bold text-xs px-2 py-0.5 rounded-full">
-                    {missingTrainerReports.length}
-                  </span>
-                </div>
-                {missingTrainerReports.length === 0 ? (
-                  <p className="text-[11px] text-gray-400 italic py-2">
-                    Все прошедшие тренировки с зафиксированными табелями!
-                  </p>
-                ) : (
-                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                    {missingTrainerReports.map((m) => (
-                      <div key={m.id} className="p-2 bg-amber-50/60 border border-amber-200/60 rounded-lg flex items-center justify-between text-xs">
-                        <div>
-                          <div className="font-bold text-slate-800">{m.groupName}</div>
-                          <div className="text-[10px] text-amber-800 font-mono">{m.coachName} • {m.dateStr} ({m.slot})</div>
-                        </div>
-                        <span className="bg-amber-200 text-amber-900 text-[9px] font-bold px-1.5 py-0.5 rounded">
-                          Нет отчета
-                        </span>
-                      </div>
-                    ))}
+              {currentRole !== "manager" && (
+                <div className="bg-white p-4 rounded-xl border border-amber-200/80 shadow-2xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-extrabold text-amber-900 flex items-center gap-1.5">
+                      <FileText className="w-4 h-4 text-amber-600" />
+                      Тренер не сдал отчет
+                    </span>
+                    <span className="bg-amber-100 text-amber-800 font-bold text-xs px-2 py-0.5 rounded-full">
+                      {missingTrainerReports.length}
+                    </span>
                   </div>
-                )}
-              </div>
+                  {missingTrainerReports.length === 0 ? (
+                    <p className="text-[11px] text-gray-400 italic py-2">
+                      Все прошедшие тренировки с зафиксированными табелями!
+                    </p>
+                  ) : (
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                      {missingTrainerReports.map((m) => (
+                        <div
+                          key={m.id}
+                          className="p-2 bg-amber-50/60 border border-amber-200/60 rounded-lg flex items-center justify-between text-xs"
+                        >
+                          <div>
+                            <div className="font-bold text-slate-800">
+                              {m.groupName}
+                            </div>
+                            <div className="text-[10px] text-amber-800 font-mono">
+                              {m.coachName} • {m.dateStr} ({m.slot})
+                            </div>
+                          </div>
+                          <span className="bg-amber-200 text-amber-900 text-[9px] font-bold px-1.5 py-0.5 rounded">
+                            Нет отчета
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
           {/* Органичные окна: Аренда за месяц и Зарплаты за месяц (в светлой стилистике дашборда) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Аренда за месяц */}
-            <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-left relative overflow-hidden">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                <div className="flex items-center space-x-2">
-                  <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100">
-                    <Building className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="font-extrabold text-sm text-slate-900">
-                      Аренда за месяц (начислено)
-                    </h3>
-                    <p className="text-[10px] text-gray-400">
-                      Органичное окно автоначислений аренды по сессиям
-                    </p>
-                  </div>
-                </div>
-                <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg text-xs font-mono font-bold">
-                  {monthlyRentRecords.length} транзакций
-                </span>
-              </div>
-
-              <div className="mt-4 flex items-baseline justify-between">
-                <div>
-                  <div className="text-3xl font-extrabold text-slate-900 tracking-tight">
-                    {monthlyRentSum.toLocaleString("ru-RU")} ₽
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    Начислено за текущий период ({currentMonthStr})
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {venueRatings.slice(0, 3).map((v, i) => (
-                  <div key={i} className="bg-slate-50 p-2 rounded-xl border border-slate-100">
-                    <div className="text-[10px] text-slate-500 truncate">{v.name}</div>
-                    <div className="text-xs font-bold text-indigo-600 mt-0.5">
-                      {v.rentAccrued > 0 ? `${v.rentAccrued.toLocaleString("ru-RU")} ₽` : `${(v.groupsCount * 12 * 1200).toLocaleString("ru-RU")} ₽ (расчет)`}
+          {currentRole !== "manager" && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Аренда за месяц */}
+              <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-left relative overflow-hidden">
+                <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                  <div className="flex items-center space-x-2">
+                    <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100">
+                      <Building className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="font-extrabold text-sm text-slate-900">
+                        Аренда за месяц (начислено)
+                      </h3>
+                      <p className="text-[10px] text-gray-400">
+                        Органичное окно автоначислений аренды по сессиям
+                      </p>
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
+                  <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg text-xs font-mono font-bold">
+                    {monthlyRentRecords.length} транзакций
+                  </span>
+                </div>
 
-            {/* Зарплаты за месяц */}
-            <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-left relative overflow-hidden">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                <div className="flex items-center space-x-2">
-                  <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100">
-                    <Receipt className="w-4 h-4" />
-                  </div>
+                <div className="mt-4 flex items-baseline justify-between">
                   <div>
-                    <h3 className="font-extrabold text-sm text-slate-900">
-                      Зарплаты за месяц (начислено)
-                    </h3>
-                    <p className="text-[10px] text-gray-400">
-                      Органичное окно начислений ФОТ тренерского штаба
+                    <div className="text-3xl font-extrabold text-slate-900 tracking-tight">
+                      {monthlyRentSum.toLocaleString("ru-RU")} ₽
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Начислено за текущий период ({currentMonthStr})
                     </p>
                   </div>
                 </div>
-                <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg text-xs font-mono font-bold">
-                  {coaches.length} тренеров
-                </span>
-              </div>
 
-              <div className="mt-4 flex items-baseline justify-between">
-                <div>
-                  <div className="text-3xl font-extrabold text-emerald-600 tracking-tight">
-                    {monthlySalarySum > 0 ? monthlySalarySum.toLocaleString("ru-RU") : (trainingSessions.length * 1500).toLocaleString("ru-RU")} ₽
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    ФОТ за проведение {trainingSessions.length} тренировок
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {coaches.slice(0, 3).map((c, i) => {
-                  const coachSessions = trainingSessions.filter(
-                    (ts) => ts.coachId === c.id || ts.coachName?.includes(c.name)
-                  ).length;
-                  const estimatedPay = coachSessions * (c.rate || 1500);
-                  return (
-                    <div key={i} className="bg-slate-50 p-2 rounded-xl border border-slate-100">
-                      <div className="text-[10px] text-slate-500 truncate">{c.name}</div>
-                      <div className="text-xs font-bold text-emerald-600 mt-0.5">
-                        {estimatedPay > 0 ? `${estimatedPay.toLocaleString("ru-RU")} ₽` : `${c.rate || 1500} ₽/зан.`}
+                <div className="mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {venueRatings.slice(0, 3).map((v, i) => (
+                    <div
+                      key={i}
+                      className="bg-slate-50 p-2 rounded-xl border border-slate-100"
+                    >
+                      <div className="text-[10px] text-slate-500 truncate">
+                        {v.name}
+                      </div>
+                      <div className="text-xs font-bold text-indigo-600 mt-0.5">
+                        {v.rentAccrued > 0
+                          ? `${v.rentAccrued.toLocaleString("ru-RU")} ₽`
+                          : `${(v.groupsCount * 12 * 1200).toLocaleString(
+                              "ru-RU",
+                            )} ₽ (расчет)`}
                       </div>
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
+              </div>
+
+              {/* Зарплаты за месяц */}
+              <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-left relative overflow-hidden">
+                <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                  <div className="flex items-center space-x-2">
+                    <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100">
+                      <Receipt className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="font-extrabold text-sm text-slate-900">
+                        Зарплаты за месяц (начислено)
+                      </h3>
+                      <p className="text-[10px] text-gray-400">
+                        Органичное окно начислений ФОТ тренерского штаба
+                      </p>
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg text-xs font-mono font-bold">
+                    {coaches.length} тренеров
+                  </span>
+                </div>
+
+                <div className="mt-4 flex items-baseline justify-between">
+                  <div>
+                    <div className="text-3xl font-extrabold text-emerald-600 tracking-tight">
+                      {monthlySalarySum > 0
+                        ? monthlySalarySum.toLocaleString("ru-RU")
+                        : (trainingSessions.length * 1500).toLocaleString(
+                            "ru-RU",
+                          )}{" "}
+                      ₽
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      ФОТ за проведение {trainingSessions.length} тренировок
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {coaches.slice(0, 3).map((c, i) => {
+                    const coachSessions = trainingSessions.filter(
+                      (ts) =>
+                        ts.coachId === c.id ||
+                        ts.coachName?.includes(c.name),
+                    ).length;
+                    const estimatedPay = coachSessions * (c.rate || 1500);
+                    return (
+                      <div
+                        key={i}
+                        className="bg-slate-50 p-2 rounded-xl border border-slate-100"
+                      >
+                        <div className="text-[10px] text-slate-500 truncate">
+                          {c.name}
+                        </div>
+                        <div className="text-xs font-bold text-emerald-600 mt-0.5">
+                          {estimatedPay > 0
+                            ? `${estimatedPay.toLocaleString("ru-RU")} ₽`
+                            : `${c.rate || 1500} ₽/зан.`}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Цели месяца, Воронка продаж, Отмененные тренировки и Рейтинг площадок */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

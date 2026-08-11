@@ -159,6 +159,8 @@ export interface TrainingGroup {
   playersCount: number;
   attendanceRate: number;
   scheduleDays: string[]; // e.g. ["Пн 17:00", "Ср 17:00"]
+  scheduleStartDate?: string; // YYYY-MM-DD
+  scheduleEndDate?: string; // YYYY-MM-DD
   venueCost?: number; // Cost of the venue per training session
   venueId?: string; // Links to the specific Counterparty for rent calculation
   maxCapacity?: number; // Max capacity of the group to calculate load percentage

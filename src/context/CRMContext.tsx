@@ -232,6 +232,8 @@ interface CRMContextType {
     venueCost?: number,
     maxCapacity?: number,
     venueId?: string,
+    scheduleStartDate?: string,
+    scheduleEndDate?: string,
   ) => Promise<void>;
   deleteGroup: (id: string) => Promise<void>;
   updateGroup: (
@@ -384,6 +386,14 @@ const INITIAL_ACCOUNTS: Account[] = [
 ];
 
 const INITIAL_COUNTERPARTIES: Counterparty[] = [
+  {
+    id: "cp_spartak",
+    name: "Манеж «Спартак»",
+    type: "hall_rent",
+    paymentType: "per_session",
+    rate: 2000,
+    description: "Крытый футбольный манеж Спартак (аренда поля)",
+  },
   {
     id: "cp_school_10",
     name: "Школа №10 (Малый зал)",
@@ -2779,6 +2789,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     venueCost?: number,
     maxCapacity?: number,
     venueId?: string,
+    scheduleStartDate?: string,
+    scheduleEndDate?: string,
   ) => {
     // TELEGRAM ALERT: Check schedule conflict
     if (crmConfig.telegramAlerts?.scheduleConflict !== false) {
@@ -2813,6 +2825,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       venueCost,
       maxCapacity,
       venueId,
+      scheduleStartDate,
+      scheduleEndDate,
     };
     setGroups((prev) => [...prev, newGroup]);
     setDoc(doc(db, "groups", newGroup.id), newGroup).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
