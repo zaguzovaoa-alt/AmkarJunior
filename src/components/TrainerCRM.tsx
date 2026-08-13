@@ -82,14 +82,13 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
   // Try to find coach based on logged in user's full name, email, or phone.
   const myCoach = coaches.find(
     (c) =>
-      c.name.toLowerCase() === appUser?.fullName?.toLowerCase() ||
-      (c.phone && appUser?.phone && c.phone === appUser?.phone),
-  ) ||
-    coaches[0] || {
-      id: "c1",
-      name: "Пьянченко Василий Витальевич",
-      role: "Старший тренер",
-    };
+      (c.name && appUser?.fullName && c.name.toLowerCase() === appUser.fullName.toLowerCase()) ||
+      (c.phone && appUser?.phone && c.phone === appUser.phone),
+  ) || {
+    id: appUser?.uid || "coach_current",
+    name: appUser?.fullName || coaches[0]?.name || "Тренер",
+    role: appUser?.role === "director" ? "Директор" : "Тренер",
+  };
 
   const getGroupAttendanceRate = (groupId: string) => {
     const groupSessions = (trainingSessions || []).filter(s => s.groupId === groupId);
@@ -483,12 +482,6 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
             Добрый день,{" "}
             {(() => {
               const parts = myCoach.name.trim().split(/\s+/);
-              if (
-                myCoach.name.includes("Пьянченко") &&
-                !myCoach.name.includes("Василий")
-              ) {
-                return "Василий Пьянченко";
-              }
               if (parts.length >= 2) {
                 return `${parts[1]} ${parts[0]}`; // Имя Фамилия
               }

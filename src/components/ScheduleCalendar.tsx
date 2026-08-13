@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { HeaderDescription } from "./HeaderDescription";
 import { useCRM } from "../context/CRMContext";
+import { TrainingGroup } from "../types";
 import { parseScheduleString, RU_WEEKDAYS_MAP } from "../utils/scheduleParser";
 import {
   Calendar as CalendarIcon,

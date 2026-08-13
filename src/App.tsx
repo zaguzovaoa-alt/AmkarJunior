@@ -571,7 +571,7 @@ function AuthGateway() {
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appUser?.uid]);
+  }, [appUser?.uid, appUser?.fullName, appUser?.role, appUser?.email, appUser?.phone]);
 
   if (loading) {
     return <div className="min-h-screen bg-slate-900" />;

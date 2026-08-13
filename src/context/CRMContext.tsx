@@ -557,11 +557,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       } catch (e) {}
     }
     return {
-      name: "Василий",
-      role: "Менеджер / Администратор",
+      name: "Бычков Дмитрий Олегович",
+      role: "Директор",
       avatarUrl: "https://i.pravatar.cc/100?img=11",
-      phone: "+7 (999) 123-45-67",
-      email: "manager@amkar.ru",
+      phone: "+79194466199",
+      email: "dmitriifnl@gmail.com",
     };
   });
 

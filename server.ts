@@ -55,7 +55,18 @@ async function sendTelegramAlertServer(botToken: string, chatId: string, text: s
       }),
     });
     if (!res.ok) {
-      console.error("Telegram send alert failed:", await res.text());
+      const errText = await res.text();
+      console.error("Telegram send alert failed:", errText);
+      if (errText.includes("can't parse entities")) {
+        await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: text.replace(/<[^>]*>/g, ""),
+          }),
+        });
+      }
     } else {
       console.log("Telegram alert sent successfully to chatId:", chatId);
     }
