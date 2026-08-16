@@ -87,7 +87,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             badge: finalMessageCount || undefined,
           },
           { id: "trainer_knowledge", label: "База знаний", icon: BookOpen },
-          { id: "trainer_settings", label: "Настройки", icon: Settings },
         ];
       case "admin":
       case "director":
@@ -151,7 +150,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             label: "Google Календарь",
             icon: RefreshCw,
           },
-          { id: "manager_settings", label: "Настройки", icon: Settings },
         ];
       default:
         return [];

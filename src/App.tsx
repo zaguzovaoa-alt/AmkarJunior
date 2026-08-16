@@ -91,7 +91,6 @@ function DashboardContainer() {
         return <DirectorCRM setActiveTab={setCurrentTab} />;
 
       case "manager":
-        if (currentTab === "hq_settings" || currentTab === "manager_settings") return <HQSettings />;
         if (currentTab === "manager_leads" || currentTab === "hq_leads") {
           return (
             <ManagerCRM
@@ -139,7 +138,6 @@ function DashboardContainer() {
         );
 
       case "trainer":
-        if (currentTab === "trainer_settings") return <HQSettings />;
         if (currentTab === "trainer_home")
           return (
             <TrainerCRM activeTab="trainer_home" setActiveTab={setCurrentTab} />

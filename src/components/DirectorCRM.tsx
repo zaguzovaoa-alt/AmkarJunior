@@ -598,6 +598,12 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
 
   const activeClients = clients.filter((c) => c.status === "active");
   const trialClients = clients.filter((c) => c.status === "trial");
+  const todayLeadsCount = useMemo(() => {
+    return leads.filter((l) => l.createdAt && l.createdAt.slice(0, 10) === todayISO).length;
+  }, [leads, todayISO]);
+  const pendingTasksCount = useMemo(() => {
+    return tasks.filter((t) => t.status !== "completed").length;
+  }, [tasks]);
   const directorTasks = tasks.filter(
     (t) =>
       t.assignedTo === "director" &&
@@ -1818,17 +1824,19 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
             <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span>Тренировки</span>
           </button>
-          <button
-            onClick={() => setActiveSection("import")}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition duration-150 whitespace-nowrap shrink-0 ${
-              activeSection === "import"
-                ? "bg-white text-slate-900 shadow-3xs border border-slate-200/50"
-                : "text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span>Импорт</span>
-          </button>
+          {currentRole !== "manager" && (
+            <button
+              onClick={() => setActiveSection("import")}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition duration-150 whitespace-nowrap shrink-0 ${
+                activeSection === "import"
+                  ? "bg-white text-slate-900 shadow-3xs border border-slate-200/50"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span>Импорт</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1841,189 +1849,369 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
           <BirthdaysBanner clients={clients} />
 
           {/* Top summary cards header row with dynamic colorful sparkline charts */}
-          <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 md:gap-4">
-            {/* Деньги на счетах */}
-            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between gap-1">
-                  <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono truncate">
-                    Деньги на счетах
-                  </span>
-                  <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 font-extrabold text-[9px] rounded-full shrink-0 flex items-center gap-0.5">
-                    +18 300 ₽
-                  </span>
+          {currentRole === "manager" ? (
+            <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 md:gap-4">
+              {/* 1. Активные дети */}
+              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-gray-400 font-bold uppercase text-[10px] sm:text-[10.5px] tracking-wider font-mono truncate">
+                      Активные дети
+                    </span>
+                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 font-extrabold text-[10.5px] sm:text-[11px] rounded-full shrink-0">
+                      86% от плана
+                    </span>
+                  </div>
+                  <div className="text-xl md:text-2xl font-bold text-slate-900 mt-1.5 tracking-tight">
+                    {activeClients.length}
+                  </div>
                 </div>
-                <div className="text-xl md:text-2xl font-bold text-slate-900 mt-1.5 tracking-tight whitespace-nowrap">
-                  {totalBalance.toLocaleString("ru-RU")} ₽
-                </div>
+                <MiniSparklineChart
+                  data={[
+                    Math.max(1, activeClients.length - 15),
+                    Math.max(1, activeClients.length - 11),
+                    Math.max(1, activeClients.length - 8),
+                    Math.max(1, activeClients.length - 5),
+                    Math.max(1, activeClients.length - 2),
+                    activeClients.length,
+                  ]}
+                  color="#3b82f6"
+                  gradientId="mgrSparkClients"
+                />
               </div>
-              <MiniSparklineChart
-                data={[
-                  Math.max(1, totalBalance - 23400),
-                  Math.max(1, totalBalance - 19800),
-                  Math.max(1, totalBalance - 18200),
-                  Math.max(1, totalBalance - 12000),
-                  Math.max(1, totalBalance - 8500),
-                  Math.max(1, totalBalance - 3200),
-                  totalBalance,
-                ]}
-                color="#10b981"
-                gradientId="sparkBal"
-              />
-            </div>
 
-            {/* Поступления сегодня (Clickable) */}
-            <div
-              onClick={() => setShowTodayPaymentsModal(true)}
-              className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm text-left relative overflow-hidden cursor-pointer hover:border-emerald-300 hover:shadow-md transition group flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex items-center justify-between gap-1">
-                  <span className="text-emerald-700 font-bold uppercase text-[9px] tracking-wider font-mono truncate">
-                    Поступления сегодня
-                  </span>
-                  <span className="px-1.5 py-0.5 bg-emerald-100/80 text-emerald-800 font-extrabold text-[9px] rounded-full shrink-0">
-                    {todayIncomeRecords.length} оплат
-                  </span>
+              {/* 2. Новые заявки */}
+              <div
+                onClick={() => setActiveTab && setActiveTab("hq_leads")}
+                className="bg-white p-4 rounded-2xl border border-amber-100 shadow-sm text-left relative overflow-hidden cursor-pointer hover:border-amber-300 hover:shadow-md transition group flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-amber-700 font-bold uppercase text-[10px] sm:text-[10.5px] tracking-wider font-mono truncate">
+                      Новые заявки
+                    </span>
+                    <span className="px-2 py-0.5 bg-amber-100/80 text-amber-800 font-extrabold text-[10.5px] sm:text-[11px] rounded-full shrink-0">
+                      {todayLeadsCount > 0 ? `${todayLeadsCount} сегодня` : "3 сегодня"}
+                    </span>
+                  </div>
+                  <div className="text-xl md:text-2xl font-bold text-amber-700 mt-1.5 tracking-tight">
+                    {leads.filter((l) => l.status === "new").length}
+                  </div>
                 </div>
-                <div className="text-xl md:text-2xl font-bold text-emerald-700 mt-1.5 tracking-tight whitespace-nowrap">
-                  {todayIncomeSum.toLocaleString("ru-RU")} ₽
-                </div>
+                <MiniSparklineChart
+                  data={[
+                    Math.max(1, leads.length - 12),
+                    Math.max(1, leads.length - 9),
+                    Math.max(1, leads.length - 6),
+                    Math.max(1, leads.length - 4),
+                    Math.max(1, leads.length - 1),
+                    leads.length,
+                  ]}
+                  color="#f59e0b"
+                  gradientId="mgrSparkLeads"
+                />
               </div>
-              <MiniSparklineChart
-                data={[
-                  0,
-                  Math.round(todayIncomeSum * 0.15),
-                  Math.round(todayIncomeSum * 0.35),
-                  Math.round(todayIncomeSum * 0.5),
-                  Math.round(todayIncomeSum * 0.72),
-                  Math.round(todayIncomeSum * 0.88),
-                  todayIncomeSum,
-                ]}
-                color="#059669"
-                gradientId="sparkToday"
-              />
-            </div>
 
-            {/* Прибыль / Выручка за месяц */}
-            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between gap-1">
-                  <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono truncate">
-                    Прибыль месяца
-                  </span>
-                  <span className="px-1.5 py-0.5 bg-purple-50 text-purple-700 font-extrabold text-[9px] rounded-full shrink-0">
-                    Рентабельность 26%
-                  </span>
+              {/* 3. Задачи в работе */}
+              <div
+                onClick={() => setActiveTab && setActiveTab("hq_tasks")}
+                className="bg-white p-4 rounded-2xl border border-indigo-100 shadow-sm text-left relative overflow-hidden cursor-pointer hover:border-indigo-300 hover:shadow-md transition group flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-indigo-700 font-bold uppercase text-[10px] sm:text-[10.5px] tracking-wider font-mono truncate">
+                      Задачи в работе
+                    </span>
+                    <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 font-extrabold text-[10.5px] sm:text-[11px] rounded-full shrink-0">
+                      {pendingTasksCount} активных
+                    </span>
+                  </div>
+                  <div className="text-xl md:text-2xl font-bold text-indigo-700 mt-1.5 tracking-tight">
+                    {pendingTasksCount}
+                  </div>
                 </div>
-                <div className="text-xl md:text-2xl font-bold text-slate-900 mt-1.5 tracking-tight whitespace-nowrap">
-                  {monthRevenue.toLocaleString("ru-RU")} ₽
-                </div>
+                <MiniSparklineChart
+                  data={[
+                    Math.max(1, pendingTasksCount + 4),
+                    Math.max(1, pendingTasksCount + 2),
+                    Math.max(1, pendingTasksCount + 3),
+                    Math.max(1, pendingTasksCount + 1),
+                    Math.max(1, pendingTasksCount),
+                    pendingTasksCount,
+                  ]}
+                  color="#6366f1"
+                  gradientId="mgrSparkTasks"
+                />
               </div>
-              <MiniSparklineChart
-                data={[
-                  Math.round(monthRevenue * 0.15),
-                  Math.round(monthRevenue * 0.32),
-                  Math.round(monthRevenue * 0.52),
-                  Math.round(monthRevenue * 0.7),
-                  Math.round(monthRevenue * 0.85),
-                  monthRevenue,
-                ]}
-                color="#8b5cf6"
-                gradientId="sparkRev"
-              />
-            </div>
 
-            {/* Активные дети */}
-            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between gap-1">
-                  <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono truncate">
-                    Активные дети
-                  </span>
-                  <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 font-extrabold text-[9px] rounded-full shrink-0">
-                    86% от плана
-                  </span>
+              {/* 4. Заканчивается абонемент */}
+              <div
+                onClick={() => setActiveTab && setActiveTab("hq_finances")}
+                className="bg-white p-4 rounded-2xl border border-amber-100 shadow-sm text-left relative overflow-hidden cursor-pointer hover:border-amber-300 hover:shadow-md transition group flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-amber-700 font-bold uppercase text-[10px] sm:text-[10.5px] tracking-wider font-mono truncate">
+                      Продление абонемента
+                    </span>
+                    <span className="px-2 py-0.5 bg-amber-50 text-amber-700 font-extrabold text-[10.5px] sm:text-[11px] rounded-full shrink-0">
+                      {expiringSubscriptionClients.length} чел.
+                    </span>
+                  </div>
+                  <div className="text-xl md:text-2xl font-bold text-amber-800 mt-1.5 tracking-tight">
+                    {expiringSubscriptionClients.length}
+                  </div>
                 </div>
-                <div className="text-xl md:text-2xl font-bold text-slate-900 mt-1.5 tracking-tight">
-                  {activeClients.length}
-                </div>
+                <MiniSparklineChart
+                  data={[
+                    Math.max(1, expiringSubscriptionClients.length + 3),
+                    Math.max(1, expiringSubscriptionClients.length + 1),
+                    Math.max(1, expiringSubscriptionClients.length + 2),
+                    Math.max(1, expiringSubscriptionClients.length),
+                    expiringSubscriptionClients.length,
+                  ]}
+                  color="#d97706"
+                  gradientId="mgrSparkExpiring"
+                />
               </div>
-              <MiniSparklineChart
-                data={[
-                  Math.max(1, activeClients.length - 15),
-                  Math.max(1, activeClients.length - 11),
-                  Math.max(1, activeClients.length - 8),
-                  Math.max(1, activeClients.length - 5),
-                  Math.max(1, activeClients.length - 2),
-                  activeClients.length,
-                ]}
-                color="#3b82f6"
-                gradientId="sparkClients"
-              />
-            </div>
 
-            {/* Новые заявки */}
-            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between gap-1">
-                  <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider font-mono truncate">
-                    Новые заявки
-                  </span>
-                  <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 font-extrabold text-[9px] rounded-full shrink-0">
-                    3 сегодня
-                  </span>
+              {/* 5. Посещаемость */}
+              <div className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm text-left relative overflow-hidden flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-emerald-700 font-bold uppercase text-[10px] sm:text-[10.5px] tracking-wider font-mono truncate">
+                      Посещаемость
+                    </span>
+                    <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-extrabold text-[10.5px] sm:text-[11px] rounded-full shrink-0">
+                      {avgAttendanceRate}% ср.
+                    </span>
+                  </div>
+                  <div className="text-xl md:text-2xl font-bold text-emerald-700 mt-1.5 tracking-tight">
+                    {avgAttendanceRate}%
+                  </div>
                 </div>
-                <div className="text-xl md:text-2xl font-bold text-slate-900 mt-1.5 tracking-tight">
-                  {leads.filter((l) => l.status === "new").length}
-                </div>
+                <MiniSparklineChart
+                  data={[82, 85, 87, 86, 89, 91, avgAttendanceRate]}
+                  color="#10b981"
+                  gradientId="mgrSparkAtt"
+                />
               </div>
-              <MiniSparklineChart
-                data={[
-                  Math.max(1, leads.length - 12),
-                  Math.max(1, leads.length - 9),
-                  Math.max(1, leads.length - 6),
-                  Math.max(1, leads.length - 4),
-                  Math.max(1, leads.length - 1),
-                  leads.length,
-                ]}
-                color="#f59e0b"
-                gradientId="sparkLeads"
-              />
-            </div>
 
-            {/* Долги родителей (Clickable) */}
-            <div
-              onClick={() => setShowDebtorsModal(true)}
-              className="bg-white p-4 rounded-2xl border border-rose-100 shadow-sm text-left relative overflow-hidden cursor-pointer hover:border-rose-300 hover:shadow-md transition group flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex items-center justify-between gap-1">
-                  <span className="text-rose-700 font-bold uppercase text-[9px] tracking-wider font-mono truncate">
-                    Долги родителей
-                  </span>
-                  <span className="px-1.5 py-0.5 bg-rose-100 text-rose-800 font-extrabold text-[9px] rounded-full shrink-0">
-                    {debtorsList.length} должн.
-                  </span>
+              {/* 6. Всего групп */}
+              <div
+                onClick={() => setActiveTab && setActiveTab("hq_groups")}
+                className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden cursor-pointer hover:border-slate-300 hover:shadow-md transition group flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-gray-400 font-bold uppercase text-[10px] sm:text-[10.5px] tracking-wider font-mono truncate">
+                      Группы клуба
+                    </span>
+                    <span className="px-2 py-0.5 bg-purple-50 text-purple-700 font-extrabold text-[10.5px] sm:text-[11px] rounded-full shrink-0">
+                      {groups.length} групп
+                    </span>
+                  </div>
+                  <div className="text-xl md:text-2xl font-bold text-slate-900 mt-1.5 tracking-tight">
+                    {groups.length}
+                  </div>
                 </div>
-                <div className="text-xl md:text-2xl font-bold text-rose-600 mt-1.5 tracking-tight whitespace-nowrap">
-                  {totalDebtSum.toLocaleString("ru-RU")} ₽
-                </div>
+                <MiniSparklineChart
+                  data={[
+                    Math.max(1, groups.length - 3),
+                    Math.max(1, groups.length - 2),
+                    Math.max(1, groups.length - 1),
+                    groups.length,
+                  ]}
+                  color="#8b5cf6"
+                  gradientId="mgrSparkGroups"
+                />
               </div>
-              <MiniSparklineChart
-                data={[
-                  totalDebtSum + 18000,
-                  totalDebtSum + 14000,
-                  totalDebtSum + 9000,
-                  totalDebtSum + 5000,
-                  totalDebtSum + 2000,
-                  totalDebtSum,
-                ]}
-                color="#f43f5e"
-                gradientId="sparkDebts"
-              />
             </div>
-          </div>
+          ) : (
+            <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 md:gap-4">
+              {/* Деньги на счетах */}
+              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-gray-400 font-bold uppercase text-[10px] sm:text-[10.5px] tracking-wider font-mono truncate">
+                      Деньги на счетах
+                    </span>
+                    <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-extrabold text-[10.5px] sm:text-[11px] rounded-full shrink-0 flex items-center gap-0.5">
+                      +18 300 ₽
+                    </span>
+                  </div>
+                  <div className="text-xl md:text-2xl font-bold text-slate-900 mt-1.5 tracking-tight whitespace-nowrap">
+                    {totalBalance.toLocaleString("ru-RU")} ₽
+                  </div>
+                </div>
+                <MiniSparklineChart
+                  data={[
+                    Math.max(1, totalBalance - 23400),
+                    Math.max(1, totalBalance - 19800),
+                    Math.max(1, totalBalance - 18200),
+                    Math.max(1, totalBalance - 12000),
+                    Math.max(1, totalBalance - 8500),
+                    Math.max(1, totalBalance - 3200),
+                    totalBalance,
+                  ]}
+                  color="#10b981"
+                  gradientId="sparkBal"
+                />
+              </div>
+
+              {/* Поступления сегодня (Clickable) */}
+              <div
+                onClick={() => setShowTodayPaymentsModal(true)}
+                className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm text-left relative overflow-hidden cursor-pointer hover:border-emerald-300 hover:shadow-md transition group flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-emerald-700 font-bold uppercase text-[10px] sm:text-[10.5px] tracking-wider font-mono truncate">
+                      Поступления сегодня
+                    </span>
+                    <span className="px-2 py-0.5 bg-emerald-100/80 text-emerald-800 font-extrabold text-[10.5px] sm:text-[11px] rounded-full shrink-0">
+                      {todayIncomeRecords.length} оплат
+                    </span>
+                  </div>
+                  <div className="text-xl md:text-2xl font-bold text-emerald-700 mt-1.5 tracking-tight whitespace-nowrap">
+                    {todayIncomeSum.toLocaleString("ru-RU")} ₽
+                  </div>
+                </div>
+                <MiniSparklineChart
+                  data={[
+                    0,
+                    Math.round(todayIncomeSum * 0.15),
+                    Math.round(todayIncomeSum * 0.35),
+                    Math.round(todayIncomeSum * 0.5),
+                    Math.round(todayIncomeSum * 0.72),
+                    Math.round(todayIncomeSum * 0.88),
+                    todayIncomeSum,
+                  ]}
+                  color="#059669"
+                  gradientId="sparkToday"
+                />
+              </div>
+
+              {/* Прибыль / Выручка за месяц */}
+              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-gray-400 font-bold uppercase text-[10px] sm:text-[10.5px] tracking-wider font-mono truncate">
+                      Прибыль месяца
+                    </span>
+                    <span className="px-2 py-0.5 bg-purple-50 text-purple-700 font-extrabold text-[10.5px] sm:text-[11px] rounded-full shrink-0">
+                      Рентабельность 26%
+                    </span>
+                  </div>
+                  <div className="text-xl md:text-2xl font-bold text-slate-900 mt-1.5 tracking-tight whitespace-nowrap">
+                    {monthRevenue.toLocaleString("ru-RU")} ₽
+                  </div>
+                </div>
+                <MiniSparklineChart
+                  data={[
+                    Math.round(monthRevenue * 0.15),
+                    Math.round(monthRevenue * 0.32),
+                    Math.round(monthRevenue * 0.52),
+                    Math.round(monthRevenue * 0.7),
+                    Math.round(monthRevenue * 0.85),
+                    monthRevenue,
+                  ]}
+                  color="#8b5cf6"
+                  gradientId="sparkRev"
+                />
+              </div>
+
+              {/* Активные дети */}
+              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-gray-400 font-bold uppercase text-[10px] sm:text-[10.5px] tracking-wider font-mono truncate">
+                      Активные дети
+                    </span>
+                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 font-extrabold text-[10.5px] sm:text-[11px] rounded-full shrink-0">
+                      86% от плана
+                    </span>
+                  </div>
+                  <div className="text-xl md:text-2xl font-bold text-slate-900 mt-1.5 tracking-tight">
+                    {activeClients.length}
+                  </div>
+                </div>
+                <MiniSparklineChart
+                  data={[
+                    Math.max(1, activeClients.length - 15),
+                    Math.max(1, activeClients.length - 11),
+                    Math.max(1, activeClients.length - 8),
+                    Math.max(1, activeClients.length - 5),
+                    Math.max(1, activeClients.length - 2),
+                    activeClients.length,
+                  ]}
+                  color="#3b82f6"
+                  gradientId="sparkClients"
+                />
+              </div>
+
+              {/* Новые заявки */}
+              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-gray-400 font-bold uppercase text-[10px] sm:text-[10.5px] tracking-wider font-mono truncate">
+                      Новые заявки
+                    </span>
+                    <span className="px-2 py-0.5 bg-amber-50 text-amber-700 font-extrabold text-[10.5px] sm:text-[11px] rounded-full shrink-0">
+                      {todayLeadsCount > 0 ? `${todayLeadsCount} сегодня` : "3 сегодня"}
+                    </span>
+                  </div>
+                  <div className="text-xl md:text-2xl font-bold text-slate-900 mt-1.5 tracking-tight">
+                    {leads.filter((l) => l.status === "new").length}
+                  </div>
+                </div>
+                <MiniSparklineChart
+                  data={[
+                    Math.max(1, leads.length - 12),
+                    Math.max(1, leads.length - 9),
+                    Math.max(1, leads.length - 6),
+                    Math.max(1, leads.length - 4),
+                    Math.max(1, leads.length - 1),
+                    leads.length,
+                  ]}
+                  color="#f59e0b"
+                  gradientId="sparkLeads"
+                />
+              </div>
+
+              {/* Долги родителей (Clickable) */}
+              <div
+                onClick={() => setShowDebtorsModal(true)}
+                className="bg-white p-4 rounded-2xl border border-rose-100 shadow-sm text-left relative overflow-hidden cursor-pointer hover:border-rose-300 hover:shadow-md transition group flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-rose-700 font-bold uppercase text-[10px] sm:text-[10.5px] tracking-wider font-mono truncate">
+                      Долги родителей
+                    </span>
+                    <span className="px-2 py-0.5 bg-rose-100 text-rose-800 font-extrabold text-[10.5px] sm:text-[11px] rounded-full shrink-0">
+                      {debtorsList.length} должн.
+                    </span>
+                  </div>
+                  <div className="text-xl md:text-2xl font-bold text-rose-600 mt-1.5 tracking-tight whitespace-nowrap">
+                    {totalDebtSum.toLocaleString("ru-RU")} ₽
+                  </div>
+                </div>
+                <MiniSparklineChart
+                  data={[
+                    totalDebtSum + 18000,
+                    totalDebtSum + 14000,
+                    totalDebtSum + 9000,
+                    totalDebtSum + 5000,
+                    totalDebtSum + 2000,
+                    totalDebtSum,
+                  ]}
+                  color="#f43f5e"
+                  gradientId="sparkDebts"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Блок "Требует внимания" */}
           <div className="bg-amber-50/60 border border-amber-200/80 rounded-2xl p-5 shadow-2xs text-left space-y-4">
@@ -2038,14 +2226,14 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                   </h3>
                   <p className="text-[11px] text-amber-800/80">
                     {currentRole === "manager"
-                      ? "Оперативные риски: окончания абонементов, долги"
+                      ? "Оперативные задачи: окончания абонементов, новые заявки, отчеты тренеров"
                       : "Оперативные риски: окончания абонементов, долги, отсутствие отчетов тренеров"}
                   </p>
                 </div>
               </div>
               <span className="bg-amber-200/80 text-amber-900 font-extrabold text-xs px-2.5 py-1 rounded-lg font-mono">
                 {currentRole === "manager"
-                  ? expiringSubscriptionClients.length + debtorsList.length
+                  ? expiringSubscriptionClients.length + leads.filter((l) => l.status === "new").length + missingTrainerReports.length
                   : expiringSubscriptionClients.length +
                     debtorsList.length +
                     missingTrainerReports.length}{" "}
@@ -2053,11 +2241,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
               </span>
             </div>
 
-            <div
-              className={`grid grid-cols-1 ${
-                currentRole === "manager" ? "md:grid-cols-2" : "md:grid-cols-3"
-              } gap-4`}
-            >
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Card 1: Заканчивается абонемент */}
               <div className="bg-white p-4 rounded-xl border border-amber-200/80 shadow-2xs space-y-2">
                 <div className="flex items-center justify-between">
@@ -2097,88 +2281,133 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                 )}
               </div>
 
-              {/* Card 2: Неоплаченные абонементы / Долги */}
-              <div className="bg-white p-4 rounded-xl border border-rose-200/80 shadow-2xs space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-extrabold text-rose-900 flex items-center gap-1.5">
-                    <UserX className="w-4 h-4 text-rose-600" />
-                    Неоплаченные абонементы / Долги
-                  </span>
-                  <span className="bg-rose-100 text-rose-800 font-bold text-xs px-2 py-0.5 rounded-full">
-                    {debtorsList.length}
-                  </span>
-                </div>
-                {debtorsList.length === 0 ? (
-                  <p className="text-[11px] text-gray-400 italic py-2">
-                    Долги и задолженности отсутствуют
-                  </p>
-                ) : (
-                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                    {debtorsList.map((c) => (
-                      <div
-                        key={c.id}
-                        className="p-2 bg-rose-50/50 border border-rose-100 rounded-lg flex items-center justify-between text-xs"
-                      >
-                        <div>
-                          <div className="font-bold text-slate-800">
-                            {c.childSurname} {c.childName}
-                          </div>
-                          <div className="text-[10px] text-rose-700">
-                            {c.parentName} ({c.parentPhone})
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => setShowDebtorsModal(true)}
-                          className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] px-2 py-1 rounded transition"
-                        >
-                          Долг
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Card 3: Не сдан отчет по тренировке */}
-              {currentRole !== "manager" && (
+              {/* Card 2: For Manager -> Новые необработанные заявки; For Director -> Неоплаченные абонементы / Долги */}
+              {currentRole === "manager" ? (
                 <div className="bg-white p-4 rounded-xl border border-amber-200/80 shadow-2xs space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-extrabold text-amber-900 flex items-center gap-1.5">
-                      <FileText className="w-4 h-4 text-amber-600" />
-                      Тренер не сдал отчет
+                      <PhoneCall className="w-4 h-4 text-amber-600" />
+                      Новые необработанные заявки
                     </span>
                     <span className="bg-amber-100 text-amber-800 font-bold text-xs px-2 py-0.5 rounded-full">
-                      {missingTrainerReports.length}
+                      {leads.filter((l) => l.status === "new").length}
                     </span>
                   </div>
-                  {missingTrainerReports.length === 0 ? (
+                  {leads.filter((l) => l.status === "new").length === 0 ? (
                     <p className="text-[11px] text-gray-400 italic py-2">
-                      Все прошедшие тренировки с зафиксированными табелями!
+                      Все новые заявки обработаны
                     </p>
                   ) : (
                     <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                      {missingTrainerReports.map((m) => (
+                      {leads
+                        .filter((l) => l.status === "new")
+                        .map((l) => (
+                          <div
+                            key={l.id}
+                            className="p-2 bg-amber-50/50 border border-amber-100 rounded-lg flex items-center justify-between text-xs"
+                          >
+                            <div>
+                              <div className="font-bold text-slate-800">
+                                {l.childSurname} {l.childName} {l.childAge ? `(${l.childAge} лет)` : ""}
+                              </div>
+                              <div className="text-[10px] text-amber-800">
+                                {l.parentName} • {l.parentPhone}
+                              </div>
+                            </div>
+                            {setActiveTab && (
+                              <button
+                                onClick={() => setActiveTab("hq_leads")}
+                                className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-[10px] px-2 py-1 rounded transition shrink-0"
+                              >
+                                В работу
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-white p-4 rounded-xl border border-rose-200/80 shadow-2xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-extrabold text-rose-900 flex items-center gap-1.5">
+                      <UserX className="w-4 h-4 text-rose-600" />
+                      Неоплаченные абонементы / Долги
+                    </span>
+                    <span className="bg-rose-100 text-rose-800 font-bold text-xs px-2 py-0.5 rounded-full">
+                      {debtorsList.length}
+                    </span>
+                  </div>
+                  {debtorsList.length === 0 ? (
+                    <p className="text-[11px] text-gray-400 italic py-2">
+                      Долги и задолженности отсутствуют
+                    </p>
+                  ) : (
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                      {debtorsList.map((c) => (
                         <div
-                          key={m.id}
-                          className="p-2 bg-amber-50/60 border border-amber-200/60 rounded-lg flex items-center justify-between text-xs"
+                          key={c.id}
+                          className="p-2 bg-rose-50/50 border border-rose-100 rounded-lg flex items-center justify-between text-xs"
                         >
                           <div>
                             <div className="font-bold text-slate-800">
-                              {m.groupName}
+                              {c.childSurname} {c.childName}
                             </div>
-                            <div className="text-[10px] text-amber-800 font-mono">
-                              {m.coachName} • {m.dateStr} ({m.slot})
+                            <div className="text-[10px] text-rose-700">
+                              {c.parentName} ({c.parentPhone})
                             </div>
                           </div>
-                          <span className="bg-amber-200 text-amber-900 text-[9px] font-bold px-1.5 py-0.5 rounded">
-                            Нет отчета
-                          </span>
+                          <button
+                            onClick={() => setShowDebtorsModal(true)}
+                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] px-2 py-1 rounded transition"
+                          >
+                            Долг
+                          </button>
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
               )}
+
+              {/* Card 3: Не сдан отчет по тренировке */}
+              <div className="bg-white p-4 rounded-xl border border-amber-200/80 shadow-2xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-amber-900 flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-amber-600" />
+                    Тренер не сдал отчет
+                  </span>
+                  <span className="bg-amber-100 text-amber-800 font-bold text-xs px-2 py-0.5 rounded-full">
+                    {missingTrainerReports.length}
+                  </span>
+                </div>
+                {missingTrainerReports.length === 0 ? (
+                  <p className="text-[11px] text-gray-400 italic py-2">
+                    Все прошедшие тренировки с зафиксированными табелями!
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {missingTrainerReports.map((m) => (
+                      <div
+                        key={m.id}
+                        className="p-2 bg-amber-50/60 border border-amber-200/60 rounded-lg flex items-center justify-between text-xs"
+                      >
+                        <div>
+                          <div className="font-bold text-slate-800">
+                            {m.groupName}
+                          </div>
+                          <div className="text-[10px] text-amber-800 font-mono">
+                            {m.coachName} • {m.dateStr} ({m.slot})
+                          </div>
+                        </div>
+                        <span className="bg-amber-200 text-amber-900 text-[9px] font-bold px-1.5 py-0.5 rounded">
+                          Нет отчета
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -2316,7 +2545,9 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                       Цели месяца ({currentMonthStr})
                     </h3>
                     <p className="text-[10px] text-gray-400">
-                      Отслеживание ключевых KPI футбольного клуба по набору и выручке
+                      {currentRole === "manager"
+                        ? "Отслеживание ключевых KPI по набору учеников и новым заявкам"
+                        : "Отслеживание ключевых KPI футбольного клуба по набору и выручке"}
                     </p>
                   </div>
                   {isEditingGoals ? (
@@ -2369,42 +2600,61 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                     </div>
                   </div>
 
-                  {/* Goal 2: Revenue */}
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 space-y-2">
-                    {(() => {
-                      const monthRevenue = finances
-                        .filter((f) => f.type === "income" && f.date.substring(0, 7) === currentMonthStr)
-                        .reduce((sum, item) => sum + Number(item.amount || 0), 0);
-                      const percent = Math.round((monthRevenue / targetRevenueGoal) * 100);
-                      return (
-                        <>
-                          <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-                            <span>Цель по выручке</span>
-                            {isEditingGoals ? (
-                              <input
-                                type="number"
-                                value={tempRevenueGoal}
-                                onChange={(e) => setTempRevenueGoal(Number(e.target.value))}
-                                className="w-28 border rounded px-2 py-0.5 text-xs text-right font-mono"
-                              />
-                            ) : (
-                              <span className="font-mono text-emerald-600">{monthRevenue.toLocaleString("ru-RU")} / {targetRevenueGoal.toLocaleString("ru-RU")} ₽</span>
-                            )}
-                          </div>
-                          <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
-                            <div
-                              className="bg-indigo-500 h-3 rounded-full transition-all duration-500"
-                              style={{ width: `${Math.min(100, percent)}%` }}
-                            ></div>
-                          </div>
-                          <div className="flex justify-between text-[10px] text-gray-500 font-mono">
-                            <span>Выполнение: {percent}%</span>
-                            <span>Осталось: {Math.max(0, targetRevenueGoal - monthRevenue).toLocaleString("ru-RU")} ₽</span>
-                          </div>
-                        </>
-                      );
-                    })()}
-                  </div>
+                  {/* Goal 2: Revenue for Director; Leads for Manager */}
+                  {currentRole === "manager" ? (
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 space-y-2">
+                      <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+                        <span>Цель по новым заявкам</span>
+                        <span className="font-mono text-amber-600">{leads.length} / 50 заявок</span>
+                      </div>
+                      <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+                        <div
+                          className="bg-amber-500 h-3 rounded-full transition-all duration-500"
+                          style={{ width: `${Math.min(100, Math.round((leads.length / 50) * 100))}%` }}
+                        ></div>
+                      </div>
+                      <div className="flex justify-between text-[10px] text-gray-500 font-mono">
+                        <span>Выполнение: {Math.round((leads.length / 50) * 100)}%</span>
+                        <span>Осталось: {Math.max(0, 50 - leads.length)} заявок</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 space-y-2">
+                      {(() => {
+                        const monthRevenue = finances
+                          .filter((f) => f.type === "income" && f.date.substring(0, 7) === currentMonthStr)
+                          .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+                        const percent = Math.round((monthRevenue / targetRevenueGoal) * 100);
+                        return (
+                          <>
+                            <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+                              <span>Цель по выручке</span>
+                              {isEditingGoals ? (
+                                <input
+                                  type="number"
+                                  value={tempRevenueGoal}
+                                  onChange={(e) => setTempRevenueGoal(Number(e.target.value))}
+                                  className="w-28 border rounded px-2 py-0.5 text-xs text-right font-mono"
+                                />
+                              ) : (
+                                <span className="font-mono text-emerald-600">{monthRevenue.toLocaleString("ru-RU")} / {targetRevenueGoal.toLocaleString("ru-RU")} ₽</span>
+                              )}
+                            </div>
+                            <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+                              <div
+                                className="bg-indigo-500 h-3 rounded-full transition-all duration-500"
+                                style={{ width: `${Math.min(100, percent)}%` }}
+                              ></div>
+                            </div>
+                            <div className="flex justify-between text-[10px] text-gray-500 font-mono">
+                              <span>Выполнение: {percent}%</span>
+                              <span>Осталось: {Math.max(0, targetRevenueGoal - monthRevenue).toLocaleString("ru-RU")} ₽</span>
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -2936,84 +3186,86 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
               </div>
 
               {/* БЛОК ФИНАНСЫ С ЦВЕТНОЙ ДИАГРАММОЙ (Органично под Лидерами успеваемости) */}
-              <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-left flex flex-col justify-between space-y-3">
-                <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                  <div className="flex items-center space-x-2">
-                    <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100">
-                      <DollarSign className="w-4 h-4" />
+              {currentRole !== "manager" && (
+                <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-left flex flex-col justify-between space-y-3">
+                  <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                    <div className="flex items-center space-x-2">
+                      <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100">
+                        <DollarSign className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-sm text-slate-800">Финансы</h3>
+                        <p className="text-[10px] text-gray-500 font-medium">Соотношение доходов и расходов</p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-bold text-sm text-slate-800">Финансы</h3>
-                      <p className="text-[10px] text-gray-500 font-medium">Соотношение доходов и расходов</p>
+                    <select
+                      value={financePeriod}
+                      onChange={(e) => setFinancePeriod(e.target.value)}
+                      className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-slate-700 font-medium outline-none cursor-pointer hover:border-slate-300 transition"
+                    >
+                      <option value="today">Сегодня</option>
+                      {availableFinanceMonths.map((ym) => (
+                        <option key={ym} value={ym}>
+                          {getMonthLabel(ym)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                    {/* Left indicators */}
+                    <div className="space-y-2.5">
+                      <div>
+                        <div className="flex items-center space-x-1.5 text-[11px] text-slate-600 font-medium">
+                          <span className="w-2.5 h-2.5 rounded-full inline-block shrink-0" style={{ backgroundColor: "#32cd32" }}></span>
+                          <span>Поступления</span>
+                        </div>
+                        <div className="text-base font-bold text-emerald-600 font-mono tracking-tight mt-0.5">
+                          {incomeVal.toLocaleString("ru-RU")} ₽
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center space-x-1.5 text-[11px] text-slate-600 font-medium">
+                          <span className="w-2.5 h-2.5 rounded-full inline-block shrink-0" style={{ backgroundColor: "#ff0000" }}></span>
+                          <span>Расходы</span>
+                        </div>
+                        <div className="text-base font-bold text-red-600 font-mono tracking-tight mt-0.5">
+                          {expenseVal.toLocaleString("ru-RU")} ₽
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-100">
+                        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Остаток на счетах</div>
+                        <div className="text-base font-black text-slate-800 font-mono tracking-tight mt-0.5">
+                          {totalBalance.toLocaleString("ru-RU")} ₽
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Ring Donut Chart */}
+                    <div className="h-32 relative flex items-center justify-center">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RechartsPieChart>
+                          <Pie
+                            data={financePieData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={28}
+                            outerRadius={44}
+                            paddingAngle={4}
+                            dataKey="value"
+                          >
+                            {financePieData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                        </RechartsPieChart>
+                      </ResponsiveContainer>
                     </div>
                   </div>
-                  <select
-                    value={financePeriod}
-                    onChange={(e) => setFinancePeriod(e.target.value)}
-                    className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-slate-700 font-medium outline-none cursor-pointer hover:border-slate-300 transition"
-                  >
-                    <option value="today">Сегодня</option>
-                    {availableFinanceMonths.map((ym) => (
-                      <option key={ym} value={ym}>
-                        {getMonthLabel(ym)}
-                      </option>
-                    ))}
-                  </select>
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
-                  {/* Left indicators */}
-                  <div className="space-y-2.5">
-                    <div>
-                      <div className="flex items-center space-x-1.5 text-[11px] text-slate-600 font-medium">
-                        <span className="w-2.5 h-2.5 rounded-full inline-block shrink-0" style={{ backgroundColor: "#32cd32" }}></span>
-                        <span>Поступления</span>
-                      </div>
-                      <div className="text-base font-bold text-emerald-600 font-mono tracking-tight mt-0.5">
-                        {incomeVal.toLocaleString("ru-RU")} ₽
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="flex items-center space-x-1.5 text-[11px] text-slate-600 font-medium">
-                        <span className="w-2.5 h-2.5 rounded-full inline-block shrink-0" style={{ backgroundColor: "#ff0000" }}></span>
-                        <span>Расходы</span>
-                      </div>
-                      <div className="text-base font-bold text-red-600 font-mono tracking-tight mt-0.5">
-                        {expenseVal.toLocaleString("ru-RU")} ₽
-                      </div>
-                    </div>
-
-                    <div className="pt-2 border-t border-slate-100">
-                      <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Остаток на счетах</div>
-                      <div className="text-base font-black text-slate-800 font-mono tracking-tight mt-0.5">
-                        {totalBalance.toLocaleString("ru-RU")} ₽
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Right Ring Donut Chart */}
-                  <div className="h-32 relative flex items-center justify-center">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <RechartsPieChart>
-                        <Pie
-                          data={financePieData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={28}
-                          outerRadius={44}
-                          paddingAngle={4}
-                          dataKey="value"
-                        >
-                          {financePieData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                      </RechartsPieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
