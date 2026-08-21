@@ -18,6 +18,7 @@ import {
 import { TrainingSessionProtocol } from "../types";
 import { HeaderDescription } from "./HeaderDescription";
 import { toYearMonthString, formatSessionDateDisplay } from "../utils/dateUtils";
+import { formatGroupNameDisplay } from "../utils/formatters";
 import { compressImage } from "../utils/image";
 
 export const TrainerSessions: React.FC = () => {
@@ -197,7 +198,7 @@ export const TrainerSessions: React.FC = () => {
               >
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-800">{session.groupName}</span>
+                    <span className="font-normal text-slate-800">{formatGroupNameDisplay(session.groupName)}</span>
                     <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500 px-2.5 py-0.5 rounded-full">
                       {formatSessionDateDisplay(session.date, session.dateString)}
                     </span>

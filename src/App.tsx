@@ -43,38 +43,71 @@ function DashboardContainer() {
     switch (currentRole) {
       case "admin":
       case "director":
-        if (currentTab === "director_home" || currentTab === "hq_home")
+        if (
+          currentTab === "director_home" ||
+          currentTab === "hq_home" ||
+          currentTab === "trainer_home"
+        )
           return <DirectorCRM setActiveTab={setCurrentTab} />;
-        if (currentTab === "director_finances" || currentTab === "hq_finances")
+        if (
+          currentTab === "director_finances" ||
+          currentTab === "hq_finances" ||
+          currentTab === "manager_finances"
+        )
           return <FinanceModule />;
-        if (currentTab === "director_coaches" || currentTab === "hq_coaches")
+        if (
+          currentTab === "director_coaches" ||
+          currentTab === "hq_coaches" ||
+          currentTab === "manager_coaches"
+        )
           return <CoachesList />;
-        if (currentTab === "director_sync" || currentTab === "hq_calendar_sync")
+        if (
+          currentTab === "director_sync" ||
+          currentTab === "hq_calendar_sync" ||
+          currentTab === "manager_sync"
+        )
           return <GoogleCalendarSync />;
-        if (currentTab === "hq_sessions") return <TrainerSessions />;
-        if (currentTab === "hq_attendance")
+        if (
+          currentTab === "hq_sessions" ||
+          currentTab === "trainer_sessions"
+        )
+          return <TrainerSessions />;
+        if (
+          currentTab === "hq_attendance" ||
+          currentTab === "trainer_attendance"
+        )
           return (
             <TrainerCRM
               activeTab="trainer_attendance"
               setActiveTab={setCurrentTab}
             />
           );
-        if (currentTab === "hq_messages")
+        if (
+          currentTab === "hq_messages" ||
+          currentTab === "trainer_messages"
+        )
           return (
             <TrainerCRM
               activeTab="trainer_messages"
               setActiveTab={setCurrentTab}
             />
           );
-        if (currentTab === "hq_clients" || currentTab === "hq_analytics") {
+        if (
+          currentTab === "hq_clients" ||
+          currentTab === "manager_clients" ||
+          currentTab === "hq_analytics"
+        ) {
           return (
             <ManagerCRM
-              activeTab={currentTab}
+              activeTab={currentTab === "manager_clients" ? "hq_clients" : currentTab}
               setActiveTab={(tab) => setCurrentTab(tab)}
             />
           );
         }
-        if (currentTab === "hq_leads") {
+        if (
+          currentTab === "hq_leads" ||
+          currentTab === "manager_leads"
+        ) {
           return (
             <ManagerCRM
               activeTab="hq_leads"
@@ -82,10 +115,50 @@ function DashboardContainer() {
             />
           );
         }
+        if (
+          currentTab === "trainer_schedule" ||
+          currentTab === "hq_schedule"
+        ) {
+          return (
+            <TrainerCRM
+              activeTab="trainer_schedule"
+              setActiveTab={setCurrentTab}
+            />
+          );
+        }
+        if (currentTab === "trainer_progress") {
+          return (
+            <TrainerCRM
+              activeTab="trainer_progress"
+              setActiveTab={setCurrentTab}
+            />
+          );
+        }
+        if (currentTab === "trainer_homeworks") {
+          return (
+            <TrainerCRM
+              activeTab="trainer_homeworks"
+              setActiveTab={setCurrentTab}
+            />
+          );
+        }
+        if (currentTab === "trainer_knowledge") {
+          return (
+            <TrainerCRM
+              activeTab="trainer_knowledge"
+              setActiveTab={setCurrentTab}
+            />
+          );
+        }
         if (currentTab === "hq_settings") return <HQSettings />;
         if (currentTab === "hq_store") return <AdminStore />;
         if (currentTab === "hq_tasks") return <TasksModule />;
-        if (currentTab === "director_groups" || currentTab === "hq_groups")
+        if (
+          currentTab === "director_groups" ||
+          currentTab === "hq_groups" ||
+          currentTab === "trainer_groups" ||
+          currentTab === "manager_groups"
+        )
           return <GroupsModule />;
         if (currentTab === "director_users") return <DirectorUsers />;
         return <DirectorCRM setActiveTab={setCurrentTab} />;
@@ -106,7 +179,7 @@ function DashboardContainer() {
         ) {
           return (
             <ManagerCRM
-              activeTab={currentTab}
+              activeTab={currentTab === "manager_clients" ? "hq_clients" : currentTab}
               setActiveTab={(tab) => setCurrentTab(tab)}
             />
           );
@@ -117,18 +190,40 @@ function DashboardContainer() {
           return <GoogleCalendarSync />;
         if (currentTab === "manager_coaches" || currentTab === "hq_coaches")
           return <CoachesList />;
-        if (currentTab === "manager_groups" || currentTab === "hq_groups")
+        if (
+          currentTab === "manager_groups" ||
+          currentTab === "hq_groups" ||
+          currentTab === "trainer_groups"
+        )
           return <GroupsModule />;
         if (currentTab === "hq_tasks") return <TasksModule />;
-        if (currentTab === "hq_sessions") return <TrainerSessions />;
-        if (currentTab === "hq_messages")
+        if (
+          currentTab === "hq_sessions" ||
+          currentTab === "trainer_sessions"
+        )
+          return <TrainerSessions />;
+        if (
+          currentTab === "hq_attendance" ||
+          currentTab === "trainer_attendance"
+        )
+          return (
+            <TrainerCRM
+              activeTab="trainer_attendance"
+              setActiveTab={setCurrentTab}
+            />
+          );
+        if (
+          currentTab === "hq_messages" ||
+          currentTab === "trainer_messages"
+        )
           return (
             <TrainerCRM
               activeTab="trainer_messages"
               setActiveTab={setCurrentTab}
             />
           );
-        if (currentTab === "hq_home")
+        if (currentTab === "hq_store") return <AdminStore />;
+        if (currentTab === "hq_home" || currentTab === "director_home")
           return <DirectorCRM setActiveTab={setCurrentTab} />;
         return (
           <ManagerCRM
@@ -138,11 +233,11 @@ function DashboardContainer() {
         );
 
       case "trainer":
-        if (currentTab === "trainer_home")
+        if (currentTab === "trainer_home" || currentTab === "hq_home")
           return (
             <TrainerCRM activeTab="trainer_home" setActiveTab={setCurrentTab} />
           );
-        if (currentTab === "trainer_schedule")
+        if (currentTab === "trainer_schedule" || currentTab === "hq_schedule")
           return (
             <TrainerCRM
               activeTab="trainer_schedule"
@@ -173,14 +268,20 @@ function DashboardContainer() {
               setActiveTab={setCurrentTab}
             />
           );
-        if (currentTab === "trainer_groups")
+        if (
+          currentTab === "trainer_groups" ||
+          currentTab === "hq_groups"
+        )
           return (
             <TrainerCRM
               activeTab="trainer_groups"
               setActiveTab={setCurrentTab}
             />
           );
-        if (currentTab === "trainer_sessions")
+        if (
+          currentTab === "trainer_sessions" ||
+          currentTab === "hq_sessions"
+        )
           return (
             <TrainerCRM
               activeTab="trainer_sessions"

@@ -138,6 +138,35 @@ export const DirectorUsers: React.FC = () => {
       await setDoc(doc(db, "systemUsers", idToSave as string), payload, {
         merge: true,
       });
+
+      if (formData.role === "trainer") {
+        const coachDoc = {
+          id: idToSave as string,
+          name: formData.fullName.trim(),
+          role: "Тренер",
+          phone: formData.phone?.trim() || "",
+          telegram: "",
+          status: "Активен",
+          joinedYear: new Date().getFullYear(),
+          rating: 5,
+          avatarUrl: "",
+          groupsCount: 0,
+          kidsCount: 0,
+          workload: 0,
+          paymentType: "per_session",
+          rate: 1000,
+          feedback: {
+            professionalism: 5,
+            communication: 5,
+            results: 5,
+            discipline: 5,
+          },
+        };
+        await setDoc(doc(db, "coaches", idToSave as string), coachDoc, {
+          merge: true,
+        }).catch((err) => console.warn("Failed to sync coach:", err));
+      }
+
       setIsModalOpen(false);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, "systemUsers");

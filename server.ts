@@ -273,6 +273,62 @@ async function startServer() {
     }
   });
 
+  app.post("/api/telegram/send", async (req, res) => {
+    try {
+      const { botToken, chatId, message, parseMode } = req.body;
+      let finalBotToken = botToken;
+      let finalChatId = chatId;
+
+      // If token/chatId not passed explicitly in body, try to fetch from stored CRM config
+      if (!finalBotToken || !finalChatId) {
+        const config = await getCRMConfig();
+        if (config) {
+          finalBotToken = finalBotToken || config.telegramBotToken;
+          finalChatId = finalChatId || config.telegramGroupChatId;
+        }
+      }
+
+      if (!finalBotToken || !finalChatId) {
+        return res.status(400).json({ status: "ERROR", message: "Telegram bot token or Chat ID not configured in CRM settings" });
+      }
+
+      const url = `https://api.telegram.org/bot${finalBotToken}/sendMessage`;
+      const tgRes = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: finalChatId,
+          text: message,
+          parse_mode: parseMode || "HTML",
+        }),
+      });
+
+      if (!tgRes.ok) {
+        const errText = await tgRes.text();
+        console.error("Server Telegram send failed:", errText);
+        if (errText.includes("can't parse entities")) {
+          const fallbackRes = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: finalChatId,
+              text: (message || "").replace(/<[^>]*>/g, ""),
+            }),
+          });
+          const fallbackData = await fallbackRes.json();
+          return res.json({ status: "OK", result: fallbackData });
+        }
+        return res.status(500).json({ status: "ERROR", error: errText });
+      }
+
+      const data = await tgRes.json();
+      res.json({ status: "OK", result: data });
+    } catch (e: any) {
+      console.error("Error in /api/telegram/send:", e);
+      res.status(500).json({ status: "ERROR", message: String(e) });
+    }
+  });
+
   app.get("/api/webhooks/poll", (req, res) => {
     res.json({ leads: (global as any).incomingLeads || [] });
     (global as any).incomingLeads = [];

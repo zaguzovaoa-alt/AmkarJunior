@@ -441,7 +441,7 @@ export const JoinPage: React.FC = () => {
             <div className="flex space-x-2 items-center text-slate-300">
               <MapPin className="w-4 h-4 text-red-500" />
               <span className="text-sm font-medium">
-                г. Пермь, манежи и залы
+                г. Пермь
               </span>
             </div>
             <a

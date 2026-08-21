@@ -33,6 +33,7 @@ import { TrainerSessions } from "./TrainerSessions";
 import { AttendanceTable } from "./AttendanceTable";
 import { parseScheduleString } from "../utils/scheduleParser";
 import { TrainingGroup } from "../types";
+import { formatGroupNameDisplay } from "../utils/formatters";
 
 const formatBirthDate = (dateString?: string, fallbackYear?: number) => {
   if (!dateString) return fallbackYear ? `${fallbackYear} г.р.` : "";
@@ -195,21 +196,31 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
     }
   };
 
-  const myGroups = groups.filter((g) => g.coachId === myCoach.id);
-  const myClients = clients
-    .filter(
-      (c) =>
-        myGroups.some(
-          (g) =>
-            g.name === c.groupName ||
-            (g.isSelectTeam && g.selectedClientIds?.includes(c.id)),
-        ) || c.coachId === myCoach.id,
-    )
-    .sort((a, b) => {
-      const nameA = `${a.childSurname} ${a.childName}`.trim().toLowerCase();
-      const nameB = `${b.childSurname} ${b.childName}`.trim().toLowerCase();
-      return nameA.localeCompare(nameB, "ru");
-    });
+  const isManagement =
+    currentRole === "director" ||
+    currentRole === "admin" ||
+    currentRole === "manager";
+
+  const myGroups = isManagement
+    ? groups
+    : groups.filter((g) => g.coachId === myCoach.id);
+
+  const relevantClients = isManagement
+    ? clients
+    : clients.filter(
+        (c) =>
+          myGroups.some(
+            (g) =>
+              g.name === c.groupName ||
+              (g.isSelectTeam && g.selectedClientIds?.includes(c.id)),
+          ) || c.coachId === myCoach.id,
+      );
+
+  const myClients = relevantClients.sort((a, b) => {
+    const nameA = `${a.childSurname} ${a.childName}`.trim().toLowerCase();
+    const nameB = `${b.childSurname} ${b.childName}`.trim().toLowerCase();
+    return nameA.localeCompare(nameB, "ru");
+  });
   const coachTasks = tasks.filter((t) => t.assignedTo === "trainer");
 
   const handleSendChat = (e: React.FormEvent) => {
@@ -247,14 +258,15 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
   );
 
   const startAttendanceMarking = (groupId: string) => {
-    setActiveTab("trainer_attendance");
+    const tabToSet = currentRole === "trainer" ? "trainer_attendance" : "hq_attendance";
+    setActiveTab(tabToSet);
     const groupObj = groups.find((g) => g.id === groupId || g.name === groupId);
     const resolvedName = groupObj ? groupObj.name : groupId;
     setSelectedGroupForAttendance(resolvedName);
     // Pre-populate actual client players in that group using case-insensitive trimmed matching
     const groupPlayersBase: any[] = groupObj?.isSelectTeam
-      ? myClients.filter((c) => groupObj.selectedClientIds?.includes(c.id))
-      : myClients.filter(
+      ? clients.filter((c) => groupObj.selectedClientIds?.includes(c.id))
+      : clients.filter(
           (c) =>
             c.groupName &&
             resolvedName &&
@@ -1200,12 +1212,12 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                         onClick={() => startAttendanceMarking(g.id)}
                       >
                         <div className="mb-4">
-                          <div className="font-black text-slate-900 text-lg">
-                            {g.name}
+                          <div className="font-normal text-slate-800 text-base leading-snug">
+                            {formatGroupNameDisplay(g.name)}
                           </div>
                           <p className="text-[11px] text-gray-500 mt-1 font-medium">
                             Обучается:{" "}
-                            <span className="font-black text-slate-700">
+                            <span className="font-semibold text-slate-700">
                               {g.playersCount}
                             </span>{" "}
                             воспитанников
@@ -1236,8 +1248,8 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
               <div className="space-y-6">
                 <div className="p-3 bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-150 flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    <span className="text-xs font-bold font-mono">
-                      Табель: {selectedGroupForAttendance}
+                    <span className="text-xs font-medium font-mono">
+                      Табель: {formatGroupNameDisplay(selectedGroupForAttendance)}
                     </span>
                     <input
                       type="date"
@@ -1959,11 +1971,11 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                     >
                       <div className="flex justify-between items-start mb-4">
                         <div>
-                          <h4 className="font-black text-slate-900 text-lg mb-1 flex items-center gap-1.5">
+                          <h4 className="font-normal text-slate-800 text-base mb-1 flex items-center gap-1.5 leading-snug">
                             {grp.isSelectTeam && (
-                              <Trophy className="w-4 h-4 text-orange-500" />
+                              <Trophy className="w-4 h-4 text-orange-500 shrink-0" />
                             )}
-                            {grp.name}
+                            <span>{formatGroupNameDisplay(grp.name)}</span>
                           </h4>
                           <p className="text-xs text-gray-500 font-medium">
                             Год рождения: {grp.year}
@@ -2055,8 +2067,8 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
 
                     <div className="flex flex-col sm:flex-row justify-between sm:items-center border-b pb-4 gap-3">
                       <div>
-                        <h3 className="text-xl font-black text-slate-900">
-                          {grp.name}
+                        <h3 className="text-xl font-normal text-slate-800">
+                          {formatGroupNameDisplay(grp.name)}
                         </h3>
                         <p className="text-xs text-gray-500 mt-1">
                           Год рождения: {grp.year} &bull; Тренер: {myCoach.name}

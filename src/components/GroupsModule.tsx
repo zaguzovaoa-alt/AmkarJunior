@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { parseScheduleString } from "../utils/scheduleParser";
 import { toISODateString, formatSessionDateDisplay, parseSessionDate } from "../utils/dateUtils";
+import { formatGroupNameDisplay } from "../utils/formatters";
 
 export const GroupsModule: React.FC = () => {
   const {
@@ -419,11 +420,11 @@ export const GroupsModule: React.FC = () => {
 
               return (
                 <div key={g.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-left hover:shadow-md transition">
-                  <div className="font-bold text-slate-900 border-b pb-2 tracking-tight flex justify-between items-center">
+                  <div className="text-slate-900 border-b pb-2 tracking-tight flex justify-between items-center">
                     <div className="flex flex-col">
-<span>{g.name}</span>
-<span className="text-[10px] text-gray-500 font-medium mt-0.5">Площадка: {g.venueId ? counterparties.find(c => c.id === g.venueId)?.name || 'Неизвестно' : 'Не назначена'}</span>
-</div>
+                      <span className="text-sm font-normal text-slate-800">{formatGroupNameDisplay(g.name)}</span>
+                      <span className="text-[10px] text-gray-500 font-medium mt-0.5">Площадка: {g.venueId ? counterparties.find(c => c.id === g.venueId)?.name || 'Неизвестно' : 'Не назначена'}</span>
+                    </div>
                     <span className="text-[10px] font-mono text-gray-400 bg-slate-100 px-2 py-0.5 rounded">Вместимость: {maxCap}</span>
                   </div>
                   <div className="pt-3 space-y-2">
@@ -547,10 +548,10 @@ export const GroupsModule: React.FC = () => {
                               </span>
                             </div>
                           </div>
-                          <h3 className="text-base font-black text-slate-900 tracking-tight text-left">
-                            {group.name}
+                          <h3 className="text-[15px] sm:text-base font-normal text-slate-800 leading-snug tracking-normal text-left">
+                            {formatGroupNameDisplay(group.name)}
                             {group.targetCompetition && (
-                              <span className="block text-xs font-semibold text-gray-500 mt-0.5">
+                              <span className="block text-xs font-normal text-gray-500 mt-0.5">
                                 {group.targetCompetition}
                               </span>
                             )}
@@ -708,7 +709,7 @@ export const GroupsModule: React.FC = () => {
                                 <option key={c.id} value={c.id}>
                                   {c.childName} {c.childSurname}{" "}
                                   {group.isSelectTeam && c.groupName
-                                    ? `(${c.groupName})`
+                                    ? `(${formatGroupNameDisplay(c.groupName)})`
                                     : ""}
                                 </option>
                               ))}
@@ -783,13 +784,13 @@ export const GroupsModule: React.FC = () => {
                           </div>
 
                           <span
-                            className={`px-2 py-0.5 text-[8px] font-black uppercase rounded ${
+                            className={`px-2 py-0.5 text-[9px] font-medium rounded ${
                               hasGroup
-                                ? "bg-slate-200 text-slate-600"
-                                : "bg-orange-100 text-orange-850 text-orange-700"
+                                ? "bg-slate-100 text-slate-700"
+                                : "bg-orange-100 text-orange-800"
                             }`}
                           >
-                            {hasGroup ? client.groupName : "Без группы"}
+                            {hasGroup ? formatGroupNameDisplay(client.groupName) : "Без группы"}
                           </span>
                         </div>
 
@@ -812,12 +813,12 @@ export const GroupsModule: React.FC = () => {
                                 selectedGName || null,
                               );
                             }}
-                            className="bg-slate-100 border rounded-lg py-1 px-2 text-[10px] font-bold text-slate-705 text-left focus:outline-none flex-1"
+                            className="bg-slate-100 border rounded-lg py-1 px-2 text-[10px] font-medium text-slate-700 text-left focus:outline-none flex-1"
                           >
                             <option value="">-- Выберите группу --</option>
                             {groups.map((g) => (
                               <option key={g.id} value={g.name}>
-                                {g.name}
+                                {formatGroupNameDisplay(g.name)}
                               </option>
                             ))}
                             {hasGroup && (
@@ -1355,8 +1356,8 @@ export const GroupsModule: React.FC = () => {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-lg font-black uppercase tracking-tight text-white">
-                      Табель посещаемости: {analyticsGroup.name}
+                    <h3 className="text-lg font-normal tracking-tight text-white">
+                      Табель посещаемости: {formatGroupNameDisplay(analyticsGroup.name)}
                     </h3>
                     {analyticsGroup.isSelectTeam && (
                       <span className="px-2 py-0.5 bg-red-500/30 text-red-300 text-[10px] font-bold uppercase rounded border border-red-500/40">

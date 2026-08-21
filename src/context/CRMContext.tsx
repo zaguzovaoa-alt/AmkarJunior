@@ -8,7 +8,6 @@ import {
   updateDoc,
   deleteDoc,
   writeBatch,
-  getDocFromServer,
   query,
   getDocs,
   where,
@@ -703,19 +702,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     const testConnectionAndInit = async () => {
       try {
-        await getDocFromServer(doc(db, "test", "connection"));
-      } catch (error) {
-        if (
-          error instanceof Error &&
-          error.message.includes("the client is offline")
-        ) {
-          console.warn(
-            "Firestore connection check: App is currently operating in offline/demo mode.",
-          );
-        }
-      }
-
-      try {
         const configDocRef = doc(db, "_config", "initialized");
         const configDoc = await getDoc(configDocRef);
 
@@ -893,6 +879,54 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       (err) => handleSnapshotErr(err, "coaches"),
     );
 
+    const unsubSystemUsers = onSnapshot(
+      collection(db, "systemUsers"),
+      (snapshot) => {
+        snapshot.forEach((docSnap) => {
+          const u = docSnap.data();
+          if (u.role === "trainer" && u.fullName) {
+            setCoaches((prev) => {
+              const cleanPhone = (p?: string) => (p || "").replace(/\D/g, "");
+              const exists = prev.some(
+                (c) =>
+                  c.id === docSnap.id ||
+                  (cleanPhone(c.phone) && cleanPhone(c.phone) === cleanPhone(u.phone)) ||
+                  (c.name.trim().toLowerCase() === u.fullName.trim().toLowerCase()),
+              );
+              if (!exists) {
+                const newC: Coach = {
+                  id: docSnap.id,
+                  name: u.fullName.trim(),
+                  role: "Тренер",
+                  phone: u.phone || "",
+                  telegram: "",
+                  status: "Активен",
+                  joinedYear: new Date().getFullYear(),
+                  rating: 5,
+                  avatarUrl: "",
+                  groupsCount: 0,
+                  kidsCount: 0,
+                  workload: 0,
+                  paymentType: "per_session",
+                  rate: 1000,
+                  feedback: {
+                    professionalism: 5,
+                    communication: 5,
+                    results: 5,
+                    discipline: 5,
+                  },
+                };
+                setDoc(doc(db, "coaches", docSnap.id), newC, { merge: true }).catch(() => {});
+                return [...prev, newC];
+              }
+              return prev;
+            });
+          }
+        });
+      },
+      (err) => handleSnapshotErr(err, "systemUsers"),
+    );
+
     const unsubGroups = onSnapshot(
       collection(db, "groups"),
       (snapshot) => {
@@ -1033,6 +1067,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       unsubClients();
       unsubTasks();
       unsubCoaches();
+      unsubSystemUsers();
       unsubGroups();
       unsubFinances();
       unsubTrainingSessions();

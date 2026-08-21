@@ -3,6 +3,7 @@ import { useCRM } from '../context/CRMContext';
 import { Camera, Calendar, User, Users, MapPin, X } from 'lucide-react';
 import { TrainingSessionProtocol } from '../types';
 import { formatSessionDateDisplay } from '../utils/dateUtils';
+import { formatGroupNameDisplay } from '../utils/formatters';
 
 export const TrainingSessionsViewer: React.FC = () => {
   const { trainingSessions } = useCRM();
@@ -15,7 +16,7 @@ export const TrainingSessionsViewer: React.FC = () => {
           <div key={session.id} className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition">
             <div className="flex justify-between items-start mb-3">
               <div>
-                <h4 className="font-bold text-slate-800 text-sm">{session.groupName}</h4>
+                <h4 className="font-normal text-slate-800 text-sm leading-snug">{formatGroupNameDisplay(session.groupName)}</h4>
                 <div className="text-xs text-gray-500 flex items-center space-x-1 mt-1">
                   <Calendar className="w-3 h-3" />
                   <span>{formatSessionDateDisplay(session.date, session.dateString)}</span>
@@ -75,7 +76,7 @@ export const TrainingSessionsViewer: React.FC = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 bg-slate-50 rounded-xl">
                    <div className="text-[10px] uppercase font-bold text-slate-500 mb-1">Группа</div>
-                   <div className="font-bold text-sm text-slate-900">{selectedSession.groupName}</div>
+                   <div className="font-normal text-sm text-slate-900">{formatGroupNameDisplay(selectedSession.groupName)}</div>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-xl">
                    <div className="text-[10px] uppercase font-bold text-slate-500 mb-1">Дата и время проведения</div>

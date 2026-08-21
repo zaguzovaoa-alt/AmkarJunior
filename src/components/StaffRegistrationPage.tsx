@@ -166,6 +166,35 @@ export const StaffRegistrationPage: React.FC = () => {
         createdAt: Date.now(),
       };
       await setDoc(doc(db, "systemUsers", idToSave), payload);
+
+      if (internalRole === "trainer") {
+        const coachDoc = {
+          id: idToSave,
+          name: fullName.trim(),
+          role: "Тренер",
+          phone: phone ? phone.trim() : "",
+          telegram: "",
+          status: "Активен",
+          joinedYear: new Date().getFullYear(),
+          rating: 5,
+          avatarUrl: "",
+          groupsCount: 0,
+          kidsCount: 0,
+          workload: 0,
+          paymentType: "per_session",
+          rate: 1000,
+          feedback: {
+            professionalism: 5,
+            communication: 5,
+            results: 5,
+            discipline: 5,
+          },
+        };
+        await setDoc(doc(db, "coaches", idToSave), coachDoc, {
+          merge: true,
+        }).catch((err) => console.warn("Failed to sync coach:", err));
+      }
+
       setCreatedUserId(idToSave);
       setVerifyingPhone(false);
       setIsPasswordStep(true);

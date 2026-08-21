@@ -1850,19 +1850,19 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
 
           {/* Top summary cards header row with dynamic colorful sparkline charts */}
           {currentRole === "manager" ? (
-            <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 md:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5 md:gap-4">
               {/* 1. Активные дети */}
-              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden flex flex-col justify-between">
+              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-xs text-left relative overflow-hidden flex flex-col justify-between min-h-[145px] hover:shadow-md transition">
                 <div>
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-gray-400 font-bold uppercase text-[10px] sm:text-[10.5px] tracking-wider font-mono truncate">
+                  <div className="flex items-start justify-between gap-1.5 mb-1">
+                    <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide leading-tight">
                       Активные дети
                     </span>
-                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 font-extrabold text-[10.5px] sm:text-[11px] rounded-full shrink-0">
+                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 font-bold text-[10.5px] rounded-full shrink-0 whitespace-nowrap">
                       86% от плана
                     </span>
                   </div>
-                  <div className="text-xl md:text-2xl font-bold text-slate-900 mt-1.5 tracking-tight">
+                  <div className="text-xl sm:text-2xl font-bold text-slate-900 mt-2 tracking-tight">
                     {activeClients.length}
                   </div>
                 </div>
@@ -1883,18 +1883,18 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
               {/* 2. Новые заявки */}
               <div
                 onClick={() => setActiveTab && setActiveTab("hq_leads")}
-                className="bg-white p-4 rounded-2xl border border-amber-100 shadow-sm text-left relative overflow-hidden cursor-pointer hover:border-amber-300 hover:shadow-md transition group flex flex-col justify-between"
+                className="bg-white p-4 rounded-2xl border border-amber-100 shadow-xs text-left relative overflow-hidden cursor-pointer hover:border-amber-300 hover:shadow-md transition group flex flex-col justify-between min-h-[145px]"
               >
                 <div>
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-amber-700 font-bold uppercase text-[10px] sm:text-[10.5px] tracking-wider font-mono truncate">
+                  <div className="flex items-start justify-between gap-1.5 mb-1">
+                    <span className="text-[11px] font-semibold text-amber-800 uppercase tracking-wide leading-tight">
                       Новые заявки
                     </span>
-                    <span className="px-2 py-0.5 bg-amber-100/80 text-amber-800 font-extrabold text-[10.5px] sm:text-[11px] rounded-full shrink-0">
+                    <span className="px-2 py-0.5 bg-amber-100/80 text-amber-800 font-bold text-[10.5px] rounded-full shrink-0 whitespace-nowrap">
                       {todayLeadsCount > 0 ? `${todayLeadsCount} сегодня` : "3 сегодня"}
                     </span>
                   </div>
-                  <div className="text-xl md:text-2xl font-bold text-amber-700 mt-1.5 tracking-tight">
+                  <div className="text-xl sm:text-2xl font-bold text-amber-700 mt-2 tracking-tight">
                     {leads.filter((l) => l.status === "new").length}
                   </div>
                 </div>
@@ -1915,18 +1915,18 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
               {/* 3. Задачи в работе */}
               <div
                 onClick={() => setActiveTab && setActiveTab("hq_tasks")}
-                className="bg-white p-4 rounded-2xl border border-indigo-100 shadow-sm text-left relative overflow-hidden cursor-pointer hover:border-indigo-300 hover:shadow-md transition group flex flex-col justify-between"
+                className="bg-white p-4 rounded-2xl border border-indigo-100 shadow-xs text-left relative overflow-hidden cursor-pointer hover:border-indigo-300 hover:shadow-md transition group flex flex-col justify-between min-h-[145px]"
               >
                 <div>
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-indigo-700 font-bold uppercase text-[10px] sm:text-[10.5px] tracking-wider font-mono truncate">
+                  <div className="flex items-start justify-between gap-1.5 mb-1">
+                    <span className="text-[11px] font-semibold text-indigo-800 uppercase tracking-wide leading-tight">
                       Задачи в работе
                     </span>
-                    <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 font-extrabold text-[10.5px] sm:text-[11px] rounded-full shrink-0">
+                    <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 font-bold text-[10.5px] rounded-full shrink-0 whitespace-nowrap">
                       {pendingTasksCount} активных
                     </span>
                   </div>
-                  <div className="text-xl md:text-2xl font-bold text-indigo-700 mt-1.5 tracking-tight">
+                  <div className="text-xl sm:text-2xl font-bold text-indigo-700 mt-2 tracking-tight">
                     {pendingTasksCount}
                   </div>
                 </div>
@@ -1947,18 +1947,18 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
               {/* 4. Заканчивается абонемент */}
               <div
                 onClick={() => setActiveTab && setActiveTab("hq_finances")}
-                className="bg-white p-4 rounded-2xl border border-amber-100 shadow-sm text-left relative overflow-hidden cursor-pointer hover:border-amber-300 hover:shadow-md transition group flex flex-col justify-between"
+                className="bg-white p-4 rounded-2xl border border-amber-100 shadow-xs text-left relative overflow-hidden cursor-pointer hover:border-amber-300 hover:shadow-md transition group flex flex-col justify-between min-h-[145px]"
               >
                 <div>
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-amber-700 font-bold uppercase text-[10px] sm:text-[10.5px] tracking-wider font-mono truncate">
+                  <div className="flex items-start justify-between gap-1.5 mb-1">
+                    <span className="text-[11px] font-semibold text-amber-800 uppercase tracking-wide leading-tight">
                       Продление абонемента
                     </span>
-                    <span className="px-2 py-0.5 bg-amber-50 text-amber-700 font-extrabold text-[10.5px] sm:text-[11px] rounded-full shrink-0">
+                    <span className="px-2 py-0.5 bg-amber-50 text-amber-700 font-bold text-[10.5px] rounded-full shrink-0 whitespace-nowrap">
                       {expiringSubscriptionClients.length} чел.
                     </span>
                   </div>
-                  <div className="text-xl md:text-2xl font-bold text-amber-800 mt-1.5 tracking-tight">
+                  <div className="text-xl sm:text-2xl font-bold text-amber-800 mt-2 tracking-tight">
                     {expiringSubscriptionClients.length}
                   </div>
                 </div>
@@ -1976,17 +1976,20 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
               </div>
 
               {/* 5. Посещаемость */}
-              <div className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm text-left relative overflow-hidden flex flex-col justify-between">
+              <div
+                onClick={() => setActiveTab && setActiveTab("hq_attendance")}
+                className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-xs text-left relative overflow-hidden flex flex-col justify-between min-h-[145px] cursor-pointer hover:border-emerald-300 hover:shadow-md transition group"
+              >
                 <div>
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-emerald-700 font-bold uppercase text-[10px] sm:text-[10.5px] tracking-wider font-mono truncate">
+                  <div className="flex items-start justify-between gap-1.5 mb-1">
+                    <span className="text-[11px] font-semibold text-emerald-800 uppercase tracking-wide leading-tight">
                       Посещаемость
                     </span>
-                    <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-extrabold text-[10.5px] sm:text-[11px] rounded-full shrink-0">
+                    <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-bold text-[10.5px] rounded-full shrink-0 whitespace-nowrap">
                       {avgAttendanceRate}% ср.
                     </span>
                   </div>
-                  <div className="text-xl md:text-2xl font-bold text-emerald-700 mt-1.5 tracking-tight">
+                  <div className="text-xl sm:text-2xl font-bold text-emerald-700 mt-2 tracking-tight">
                     {avgAttendanceRate}%
                   </div>
                 </div>
@@ -2000,18 +2003,18 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
               {/* 6. Всего групп */}
               <div
                 onClick={() => setActiveTab && setActiveTab("hq_groups")}
-                className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden cursor-pointer hover:border-slate-300 hover:shadow-md transition group flex flex-col justify-between"
+                className="bg-white p-4 rounded-2xl border border-gray-100 shadow-xs text-left relative overflow-hidden cursor-pointer hover:border-slate-300 hover:shadow-md transition group flex flex-col justify-between min-h-[145px]"
               >
                 <div>
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-gray-400 font-bold uppercase text-[10px] sm:text-[10.5px] tracking-wider font-mono truncate">
+                  <div className="flex items-start justify-between gap-1.5 mb-1">
+                    <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide leading-tight">
                       Группы клуба
                     </span>
-                    <span className="px-2 py-0.5 bg-purple-50 text-purple-700 font-extrabold text-[10.5px] sm:text-[11px] rounded-full shrink-0">
+                    <span className="px-2 py-0.5 bg-purple-50 text-purple-700 font-bold text-[10.5px] rounded-full shrink-0 whitespace-nowrap">
                       {groups.length} групп
                     </span>
                   </div>
-                  <div className="text-xl md:text-2xl font-bold text-slate-900 mt-1.5 tracking-tight">
+                  <div className="text-xl sm:text-2xl font-bold text-slate-900 mt-2 tracking-tight">
                     {groups.length}
                   </div>
                 </div>
@@ -2028,19 +2031,19 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 md:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5 md:gap-4">
               {/* Деньги на счетах */}
-              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden flex flex-col justify-between">
+              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-xs text-left relative overflow-hidden flex flex-col justify-between min-h-[145px] hover:shadow-md transition">
                 <div>
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-gray-400 font-bold uppercase text-[10px] sm:text-[10.5px] tracking-wider font-mono truncate">
+                  <div className="flex items-start justify-between gap-1.5 mb-1">
+                    <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide leading-tight">
                       Деньги на счетах
                     </span>
-                    <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-extrabold text-[10.5px] sm:text-[11px] rounded-full shrink-0 flex items-center gap-0.5">
+                    <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-bold text-[10.5px] rounded-full shrink-0 whitespace-nowrap flex items-center gap-0.5">
                       +18 300 ₽
                     </span>
                   </div>
-                  <div className="text-xl md:text-2xl font-bold text-slate-900 mt-1.5 tracking-tight whitespace-nowrap">
+                  <div className="text-xl sm:text-2xl font-bold text-slate-900 mt-2 tracking-tight">
                     {totalBalance.toLocaleString("ru-RU")} ₽
                   </div>
                 </div>
@@ -2062,18 +2065,18 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
               {/* Поступления сегодня (Clickable) */}
               <div
                 onClick={() => setShowTodayPaymentsModal(true)}
-                className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm text-left relative overflow-hidden cursor-pointer hover:border-emerald-300 hover:shadow-md transition group flex flex-col justify-between"
+                className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-xs text-left relative overflow-hidden cursor-pointer hover:border-emerald-300 hover:shadow-md transition group flex flex-col justify-between min-h-[145px]"
               >
                 <div>
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-emerald-700 font-bold uppercase text-[10px] sm:text-[10.5px] tracking-wider font-mono truncate">
+                  <div className="flex items-start justify-between gap-1.5 mb-1">
+                    <span className="text-[11px] font-semibold text-emerald-800 uppercase tracking-wide leading-tight">
                       Поступления сегодня
                     </span>
-                    <span className="px-2 py-0.5 bg-emerald-100/80 text-emerald-800 font-extrabold text-[10.5px] sm:text-[11px] rounded-full shrink-0">
+                    <span className="px-2 py-0.5 bg-emerald-100/80 text-emerald-800 font-bold text-[10.5px] rounded-full shrink-0 whitespace-nowrap">
                       {todayIncomeRecords.length} оплат
                     </span>
                   </div>
-                  <div className="text-xl md:text-2xl font-bold text-emerald-700 mt-1.5 tracking-tight whitespace-nowrap">
+                  <div className="text-xl sm:text-2xl font-bold text-emerald-700 mt-2 tracking-tight">
                     {todayIncomeSum.toLocaleString("ru-RU")} ₽
                   </div>
                 </div>
@@ -2093,17 +2096,17 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
               </div>
 
               {/* Прибыль / Выручка за месяц */}
-              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden flex flex-col justify-between">
+              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-xs text-left relative overflow-hidden flex flex-col justify-between min-h-[145px] hover:shadow-md transition">
                 <div>
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-gray-400 font-bold uppercase text-[10px] sm:text-[10.5px] tracking-wider font-mono truncate">
+                  <div className="flex items-start justify-between gap-1.5 mb-1">
+                    <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide leading-tight">
                       Прибыль месяца
                     </span>
-                    <span className="px-2 py-0.5 bg-purple-50 text-purple-700 font-extrabold text-[10.5px] sm:text-[11px] rounded-full shrink-0">
+                    <span className="px-2 py-0.5 bg-purple-50 text-purple-700 font-bold text-[10.5px] rounded-full shrink-0 whitespace-nowrap">
                       Рентабельность 26%
                     </span>
                   </div>
-                  <div className="text-xl md:text-2xl font-bold text-slate-900 mt-1.5 tracking-tight whitespace-nowrap">
+                  <div className="text-xl sm:text-2xl font-bold text-slate-900 mt-2 tracking-tight">
                     {monthRevenue.toLocaleString("ru-RU")} ₽
                   </div>
                 </div>
@@ -2122,17 +2125,17 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
               </div>
 
               {/* Активные дети */}
-              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden flex flex-col justify-between">
+              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-xs text-left relative overflow-hidden flex flex-col justify-between min-h-[145px] hover:shadow-md transition">
                 <div>
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-gray-400 font-bold uppercase text-[10px] sm:text-[10.5px] tracking-wider font-mono truncate">
+                  <div className="flex items-start justify-between gap-1.5 mb-1">
+                    <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide leading-tight">
                       Активные дети
                     </span>
-                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 font-extrabold text-[10.5px] sm:text-[11px] rounded-full shrink-0">
+                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 font-bold text-[10.5px] rounded-full shrink-0 whitespace-nowrap">
                       86% от плана
                     </span>
                   </div>
-                  <div className="text-xl md:text-2xl font-bold text-slate-900 mt-1.5 tracking-tight">
+                  <div className="text-xl sm:text-2xl font-bold text-slate-900 mt-2 tracking-tight">
                     {activeClients.length}
                   </div>
                 </div>
@@ -2151,17 +2154,17 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
               </div>
 
               {/* Новые заявки */}
-              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-left relative overflow-hidden flex flex-col justify-between">
+              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-xs text-left relative overflow-hidden flex flex-col justify-between min-h-[145px] hover:shadow-md transition">
                 <div>
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-gray-400 font-bold uppercase text-[10px] sm:text-[10.5px] tracking-wider font-mono truncate">
+                  <div className="flex items-start justify-between gap-1.5 mb-1">
+                    <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide leading-tight">
                       Новые заявки
                     </span>
-                    <span className="px-2 py-0.5 bg-amber-50 text-amber-700 font-extrabold text-[10.5px] sm:text-[11px] rounded-full shrink-0">
+                    <span className="px-2 py-0.5 bg-amber-50 text-amber-700 font-bold text-[10.5px] rounded-full shrink-0 whitespace-nowrap">
                       {todayLeadsCount > 0 ? `${todayLeadsCount} сегодня` : "3 сегодня"}
                     </span>
                   </div>
-                  <div className="text-xl md:text-2xl font-bold text-slate-900 mt-1.5 tracking-tight">
+                  <div className="text-xl sm:text-2xl font-bold text-slate-900 mt-2 tracking-tight">
                     {leads.filter((l) => l.status === "new").length}
                   </div>
                 </div>
@@ -2182,18 +2185,18 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
               {/* Долги родителей (Clickable) */}
               <div
                 onClick={() => setShowDebtorsModal(true)}
-                className="bg-white p-4 rounded-2xl border border-rose-100 shadow-sm text-left relative overflow-hidden cursor-pointer hover:border-rose-300 hover:shadow-md transition group flex flex-col justify-between"
+                className="bg-white p-4 rounded-2xl border border-rose-100 shadow-xs text-left relative overflow-hidden cursor-pointer hover:border-rose-300 hover:shadow-md transition group flex flex-col justify-between min-h-[145px]"
               >
                 <div>
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-rose-700 font-bold uppercase text-[10px] sm:text-[10.5px] tracking-wider font-mono truncate">
+                  <div className="flex items-start justify-between gap-1.5 mb-1">
+                    <span className="text-[11px] font-semibold text-rose-800 uppercase tracking-wide leading-tight">
                       Долги родителей
                     </span>
-                    <span className="px-2 py-0.5 bg-rose-100 text-rose-800 font-extrabold text-[10.5px] sm:text-[11px] rounded-full shrink-0">
+                    <span className="px-2 py-0.5 bg-rose-100 text-rose-800 font-bold text-[10.5px] rounded-full shrink-0 whitespace-nowrap">
                       {debtorsList.length} должн.
                     </span>
                   </div>
-                  <div className="text-xl md:text-2xl font-bold text-rose-600 mt-1.5 tracking-tight whitespace-nowrap">
+                  <div className="text-xl sm:text-2xl font-bold text-rose-600 mt-2 tracking-tight">
                     {totalDebtSum.toLocaleString("ru-RU")} ₽
                   </div>
                 </div>
