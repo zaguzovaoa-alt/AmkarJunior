@@ -48,7 +48,7 @@ export const JoinPage: React.FC = () => {
       childSurname: "",
       childAge: 0,
       source: "Лендинг",
-      note: `Заявка с посадочной страницы на бесплатную тренировку${refCode ? `. Пригласил: ${refCode}` : ''}`,
+      notes: `Заявка с посадочной страницы на бесплатную тренировку${refCode ? `. Пригласил: ${refCode}` : ''}`,
     });
 
     setSubmitted(true);
