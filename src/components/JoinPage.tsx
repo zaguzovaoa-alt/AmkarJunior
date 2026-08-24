@@ -23,8 +23,10 @@ export const JoinPage: React.FC = () => {
   const [parentName, setParentName] = useState("");
   const [parentPhone, setParentPhone] = useState("");
   const [childName, setChildName] = useState("");
+  const [childAge, setChildAge] = useState<string>("8");
   const [submitted, setSubmitted] = useState(false);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Generate Kids Football Image
   // Placeholders for local files.
@@ -33,24 +35,56 @@ export const JoinPage: React.FC = () => {
   const gallery2 = "/we.jpg";
   const gallery3 = "/ball.jpg";
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!parentName || !parentPhone) return;
 
+    setIsSubmitting(true);
     const params = new URLSearchParams(window.location.search);
     const refCode = params.get("ref");
 
-    // Add as a new lead
-    addLead({
-      parentName,
-      parentPhone,
-      childName: childName || "",
-      childSurname: "",
-      childAge: 0,
+    let parsedChildName = childName.trim();
+    let parsedChildSurname = "";
+    let parsedAge = parseInt(childAge, 10) || 0;
+
+    // Smart parsing for "Прохор, 8 лет" or "Быстрых Прохор"
+    if (parsedChildName) {
+      const ageMatch = parsedChildName.match(/(\d+)\s*(?:лет|год|года|г\.?р\.?)?/i);
+      if (ageMatch && !parsedAge) {
+        parsedAge = parseInt(ageMatch[1], 10);
+      }
+      parsedChildName = parsedChildName.replace(/,?\s*\d+\s*(?:лет|год|года|г\.?р\.?)?/i, "").trim();
+
+      const parts = parsedChildName.split(/\s+/).filter(Boolean);
+      if (parts.length >= 2) {
+        parsedChildSurname = parts[0];
+        parsedChildName = parts.slice(1).join(" ");
+      }
+    }
+
+    if (!parsedChildSurname && parentName.trim()) {
+      const pParts = parentName.trim().split(/\s+/).filter(Boolean);
+      if (pParts.length >= 2) {
+        parsedChildSurname = pParts[0];
+      }
+    }
+
+    const currentYear = new Date().getFullYear();
+    const childBirthYear = parsedAge > 0 ? currentYear - parsedAge : 2018;
+
+    // Add as a new lead in CRM
+    await addLead({
+      parentName: parentName.trim(),
+      parentPhone: parentPhone.trim(),
+      childName: parsedChildName || "Ребенок",
+      childSurname: parsedChildSurname,
+      childAge: parsedAge,
+      childBirthYear: childBirthYear,
       source: "Лендинг",
       notes: `Заявка с посадочной страницы на бесплатную тренировку${refCode ? `. Пригласил: ${refCode}` : ''}`,
     });
 
+    setIsSubmitting(false);
     setSubmitted(true);
   };
 
@@ -346,19 +380,38 @@ export const JoinPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
-                    Имя и возраст ребенка (опц.)
-                  </label>
-                  <div className="relative">
-                    <Trophy className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="text"
-                      value={childName}
-                      onChange={(e) => setChildName(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-4 text-base font-medium text-slate-900 focus:outline-none focus:border-red-500 focus:ring-4 focus:ring-red-100 transition shadow-sm"
-                      placeholder="Например: Артем, 8 лет"
-                    />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2 space-y-1.5">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
+                      Имя ребенка
+                    </label>
+                    <div className="relative">
+                      <Trophy className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        value={childName}
+                        onChange={(e) => setChildName(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-4 text-base font-medium text-slate-900 focus:outline-none focus:border-red-500 focus:ring-4 focus:ring-red-100 transition shadow-sm"
+                        placeholder="Например: Прохор"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
+                      Возраст
+                    </label>
+                    <select
+                      value={childAge}
+                      onChange={(e) => setChildAge(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-4 text-base font-medium text-slate-900 focus:outline-none focus:border-red-500 focus:ring-4 focus:ring-red-100 transition shadow-sm"
+                    >
+                      {[3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16].map((age) => (
+                        <option key={age} value={age}>
+                          {age} {age >= 5 ? "лет" : "года"}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 

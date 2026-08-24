@@ -1,4 +1,4 @@
-// Service Worker for AMKAR JUNIOR CRM Push Notifications
+// Service Worker for AMKAR JUNIOR CRM Background Web Push
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
@@ -7,10 +7,10 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-// Handle incoming Web Push
+// Handle incoming Web Push (received even when the tab / browser is in background or closed)
 self.addEventListener('push', (event) => {
   let data = {
-    title: '⚡ Новая заявка! - АМКАР ЮНИОР',
+    title: '⚡ Новая заявка! — АМКАР ЮНИОР',
     body: 'Поступила новая заявка в CRM',
     icon: '/favicon.png',
     badge: '/favicon.png',
@@ -27,21 +27,23 @@ self.addEventListener('push', (event) => {
     }
   }
 
-  event.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
-      icon: data.icon || '/favicon.png',
-      badge: data.badge || '/favicon.png',
-      tag: data.tag,
-      data: data.data || { url: '/crm' },
-      vibrate: [200, 100, 200],
-      requireInteraction: true,
-      actions: [
-        { action: 'open_leads', title: 'Открыть заявку' },
-        { action: 'dismiss', title: 'Закрыть' }
-      ]
-    })
-  );
+  const title = data.title;
+  const options = {
+    body: data.body,
+    icon: data.icon || '/favicon.png',
+    badge: data.badge || '/favicon.png',
+    tag: data.tag || 'amkar-notif-' + Date.now(),
+    renotify: false,
+    requireInteraction: true,
+    data: data.data || { url: '/crm' },
+    vibrate: [300, 100, 300, 100, 300],
+    actions: [
+      { action: 'open_crm', title: '👀 Открыть заявку' },
+      { action: 'dismiss', title: 'Закрыть' },
+    ],
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
 });
 
 // Handle notification clicks
@@ -56,7 +58,6 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // If a window client is already open, focus it and navigate
       for (const client of clientList) {
         if ('focus' in client) {
           client.focus();
@@ -66,7 +67,6 @@ self.addEventListener('notificationclick', (event) => {
           return;
         }
       }
-      // If not open, open a new window
       if (self.clients.openWindow) {
         return self.clients.openWindow(targetUrl);
       }

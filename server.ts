@@ -4,6 +4,22 @@ import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { WebSocketServer } from "ws";
 import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
+import webpush from "web-push";
+
+// VAPID Configuration for Real Background Web Push
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "BBOoYURPv6mnX1R9OA2sppgEwLz4kbfFOrF0vuR0_BGGYpkHYwBOjLt7kMPGz6HI7iOz_nxBUe6l8skAjRveOgE";
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "D693vH7b61Bc2p0WqV5L-Q_yQME0QkWM_a1I5Gzw6sM";
+const VAPID_SUBJECT = "mailto:admin@amkarjunior.ru";
+
+try {
+  webpush.setVapidDetails(
+    VAPID_SUBJECT,
+    VAPID_PUBLIC_KEY,
+    VAPID_PRIVATE_KEY
+  );
+} catch (e) {
+  console.error("VAPID setup warning:", e);
+}
 
 // Read Firebase applet configuration
 let firebaseConfig: any = {};
@@ -18,60 +34,109 @@ try {
 
 async function getCRMConfig() {
   if (!firebaseConfig.projectId || !firebaseConfig.firestoreDatabaseId || !firebaseConfig.apiKey) {
-    return null;
+    return {
+      telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || "",
+      telegramGroupChatId: process.env.TELEGRAM_CHAT_ID || "",
+      telegramAlerts: { newLead: true, newOrder: true, churnRisk: true, scheduleConflict: true }
+    };
   }
   try {
     const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.firestoreDatabaseId}/documents/_config/initialized?key=${firebaseConfig.apiKey}`;
     const res = await fetch(url);
-    if (!res.ok) return null;
+    if (!res.ok) {
+      return {
+        telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || "",
+        telegramGroupChatId: process.env.TELEGRAM_CHAT_ID || "",
+        telegramAlerts: { newLead: true, newOrder: true, churnRisk: true, scheduleConflict: true }
+      };
+    }
     const data = await res.json();
-    const fields = data?.fields?.crmConfig?.mapValue?.fields;
-    if (!fields) return null;
+    const docFields = data?.fields || {};
+    const crmFields = docFields?.crmConfig?.mapValue?.fields || {};
+
+    const rawBotToken = crmFields.telegramBotToken?.stringValue || docFields.telegramBotToken?.stringValue || process.env.TELEGRAM_BOT_TOKEN || "";
+    let rawChatId = crmFields.telegramGroupChatId?.stringValue || docFields.telegramGroupChatId?.stringValue || process.env.TELEGRAM_CHAT_ID || "";
+
+    // Clean up Chat ID if full URL was accidentally pasted
+    if (rawChatId.includes("t.me/")) {
+      rawChatId = "@" + rawChatId.split("t.me/")[1].replace(/\//g, "");
+    }
 
     return {
-      telegramBotToken: fields.telegramBotToken?.stringValue || "",
-      telegramGroupChatId: fields.telegramGroupChatId?.stringValue || "",
+      telegramBotToken: rawBotToken.trim(),
+      telegramGroupChatId: rawChatId.trim(),
       telegramAlerts: {
-        newLead: fields.telegramAlerts?.mapValue?.fields?.newLead?.booleanValue ?? true,
+        newLead: crmFields.telegramAlerts?.mapValue?.fields?.newLead?.booleanValue ?? true,
+        newOrder: crmFields.telegramAlerts?.mapValue?.fields?.newOrder?.booleanValue ?? true,
+        churnRisk: crmFields.telegramAlerts?.mapValue?.fields?.churnRisk?.booleanValue ?? true,
+        scheduleConflict: crmFields.telegramAlerts?.mapValue?.fields?.scheduleConflict?.booleanValue ?? true,
       }
     };
   } catch (e) {
     console.error("Failed to fetch CRM config from Firestore:", e);
-    return null;
+    return {
+      telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || "",
+      telegramGroupChatId: process.env.TELEGRAM_CHAT_ID || "",
+      telegramAlerts: { newLead: true, newOrder: true, churnRisk: true, scheduleConflict: true }
+    };
   }
 }
 
 async function sendTelegramAlertServer(botToken: string, chatId: string, text: string) {
-  if (!botToken || !chatId) return;
+  const cleanToken = (botToken || "").trim();
+  let cleanChatId = (chatId || "").trim();
+
+  if (cleanChatId.includes("t.me/")) {
+    cleanChatId = "@" + cleanChatId.split("t.me/")[1].replace(/\//g, "");
+  }
+
+  if (!cleanToken || !cleanChatId) {
+    console.warn("Telegram alert skipped: botToken or chatId missing.");
+    return { success: false, error: "Токен бота или ID чата не указан" };
+  }
+
   try {
-    const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+    const url = `https://api.telegram.org/bot${cleanToken}/sendMessage`;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        chat_id: chatId,
+        chat_id: cleanChatId,
         text: text,
         parse_mode: "HTML",
+        disable_web_page_preview: true,
       }),
     });
+
     if (!res.ok) {
-      const errText = await res.text();
+      const errData = await res.json().catch(async () => ({ description: await res.text() }));
+      const errText = errData.description || JSON.stringify(errData);
       console.error("Telegram send alert failed:", errText);
+
+      // Fallback without HTML formatting if parsing error
       if (errText.includes("can't parse entities")) {
-        await fetch(url, {
+        const plainText = text.replace(/<[^>]*>/g, "");
+        const fallbackRes = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            chat_id: chatId,
-            text: text.replace(/<[^>]*>/g, ""),
+            chat_id: cleanChatId,
+            text: plainText,
           }),
         });
+        if (fallbackRes.ok) {
+          return { success: true, fallback: true };
+        }
       }
-    } else {
-      console.log("Telegram alert sent successfully to chatId:", chatId);
+      return { success: false, error: errText };
     }
-  } catch (e) {
-    console.error("Telegram error on server:", e);
+
+    const data = await res.json();
+    console.log("Telegram alert delivered successfully to chatId:", cleanChatId);
+    return { success: true, result: data };
+  } catch (e: any) {
+    console.error("Telegram network/fetch error on server:", e);
+    return { success: false, error: e.message || String(e) };
   }
 }
 
@@ -121,13 +186,112 @@ async function saveFirestoreDoc(collectionName: string, docId: string, fields: R
   }
 }
 
+// In-Memory & Firestore Push Subscriptions Store
+const inMemoryPushSubscriptions = new Map<string, any>();
+
+async function getPushSubscriptions(): Promise<any[]> {
+  const localList = Array.from(inMemoryPushSubscriptions.values());
+  if (localList.length > 0) return localList;
+
+  if (!firebaseConfig.projectId || !firebaseConfig.firestoreDatabaseId || !firebaseConfig.apiKey) {
+    return localList;
+  }
+
+  try {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.firestoreDatabaseId}/documents/push_subscriptions?key=${firebaseConfig.apiKey}`;
+    const res = await fetch(url);
+    if (!res.ok) return localList;
+    const data = await res.json();
+    if (data.documents && Array.isArray(data.documents)) {
+      for (const doc of data.documents) {
+        const fields = doc.fields || {};
+        const rawJson = fields.subscriptionJson?.stringValue;
+        if (rawJson) {
+          try {
+            const sub = JSON.parse(rawJson);
+            inMemoryPushSubscriptions.set(sub.endpoint, sub);
+          } catch {}
+        }
+      }
+    }
+  } catch (e) {
+    console.error("Error fetching push subscriptions from Firestore:", e);
+  }
+
+  return Array.from(inMemoryPushSubscriptions.values());
+}
+
+async function savePushSubscription(sub: any, role: string = "all", userPhone: string = "") {
+  if (!sub || !sub.endpoint) return;
+  inMemoryPushSubscriptions.set(sub.endpoint, sub);
+
+  // Generate safe document ID from endpoint hash
+  const docId = "sub_" + Buffer.from(sub.endpoint).toString("base64url").slice(0, 50);
+  await saveFirestoreDoc("push_subscriptions", docId, {
+    endpoint: sub.endpoint,
+    subscriptionJson: JSON.stringify(sub),
+    role: role,
+    userPhone: userPhone,
+    updatedAt: new Date().toISOString(),
+  });
+  console.log(`[WebPush] Subscription saved successfully (${docId})`);
+}
+
+async function sendPushNotificationToAll(data: {
+  title: string;
+  body: string;
+  url?: string;
+  tag?: string;
+  icon?: string;
+}) {
+  const payload = JSON.stringify({
+    title: data.title,
+    body: data.body,
+    icon: data.icon || "/favicon.png",
+    badge: "/favicon.png",
+    tag: data.tag || `amkar-${Date.now()}`,
+    data: { url: data.url || "/crm" },
+  });
+
+  const subs = await getPushSubscriptions();
+  if (subs.length === 0) {
+    console.log("[WebPush] No active push subscriptions found on server.");
+    return { sent: 0, failed: 0 };
+  }
+
+  console.log(`[WebPush] Dispatching native push notification to ${subs.length} device(s): ${data.title}`);
+
+  let sent = 0;
+  let failed = 0;
+
+  for (const sub of subs) {
+    try {
+      await webpush.sendNotification(sub, payload, {
+        TTL: 60 * 60 * 24, // 24 hours
+        urgency: "high",
+      });
+      sent++;
+    } catch (err: any) {
+      failed++;
+      console.warn(`[WebPush] Push failed for endpoint ${sub.endpoint?.substring(0, 35)}... (Status: ${err.statusCode || err.message})`);
+      if (err.statusCode === 410 || err.statusCode === 404) {
+        inMemoryPushSubscriptions.delete(sub.endpoint);
+      }
+    }
+  }
+
+  return { sent, failed };
+}
+
 async function processIncomingLead(payload: any) {
   let parentPhone = "Не указан";
-  let parentName = "Родитель (из формы)";
+  let parentName = "Родитель";
   let childName = "Ребенок";
   let childSurname = "";
+  let childAge = 0;
+  let childBirthYear = 0;
   let notesList: string[] = [];
-  let formSource = "Веб-форма";
+  let formSource = "Лендинг";
 
   if (payload && typeof payload === "object") {
     const entries = Object.entries(payload);
@@ -146,7 +310,7 @@ async function processIncomingLead(payload: any) {
         k.includes("parent_name") ||
         k.includes("имя родителя") ||
         k.includes("ваше имя") ||
-        (k === "name" && parentName === "Родитель (из формы)")
+        (k === "name" && parentName === "Родитель")
       ) {
         parentName = v;
       } else if (
@@ -157,24 +321,62 @@ async function processIncomingLead(payload: any) {
         childName = v;
       } else if (k.includes("child_surname") || k.includes("фамилия")) {
         childSurname = v;
+      } else if (k.includes("child_age") || k.includes("возраст")) {
+        const parsedAge = parseInt(v.replace(/\D/g, ""), 10);
+        if (!isNaN(parsedAge) && parsedAge > 0) childAge = parsedAge;
       } else if (k.includes("source") || k.includes("источник")) {
         formSource = v;
-      } else {
+      } else if (k !== "notes" && k !== "utm_source") {
         notesList.push(`${key}: ${v}`);
       }
     });
   }
 
-  const parentNameFinal = payload.parentName || payload.name || parentName;
+  let parentNameFinal = payload.parentName || payload.name || parentName;
   const parentPhoneFinal = payload.parentPhone || payload.phone || payload.contact || parentPhone;
-  const childNameFinal = payload.childName || payload.child || childName;
-  const childSurnameFinal = payload.childSurname || payload.surname || childSurname;
-  const sourceFinal = payload.utm_source || payload.source || formSource || "Веб-форма";
-  const childAgeFinal = Number(payload.childAge || payload.age) || 8;
-  const notesFinal = notesList.join("\n") || payload.notes || "Заявка из веб-формы";
+  let childNameFinal = payload.childName || payload.child || childName;
+  let childSurnameFinal = payload.childSurname || payload.surname || childSurname;
+  const sourceFinal = payload.utm_source || payload.source || formSource || "Лендинг";
+  let childAgeFinal = Number(payload.childAge || payload.age) || childAge;
+
+  // Smart parsing: e.g. "Прохор, 8 лет" or "Быстрых Прохор"
+  if (childNameFinal) {
+    // Check if age is inside childName (e.g. "Прохор, 8 лет")
+    const ageMatch = childNameFinal.match(/(\d+)\s*(?:лет|год|года|г\.?р\.?)?/i);
+    if (ageMatch && !childAgeFinal) {
+      childAgeFinal = parseInt(ageMatch[1], 10);
+    }
+    // Clean child name
+    childNameFinal = childNameFinal.replace(/,?\s*\d+\s*(?:лет|год|года|г\.?р\.?)?/i, "").trim();
+
+    // Check if both surname and name are in childName (e.g. "Быстрых Прохор")
+    const parts = childNameFinal.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2 && !childSurnameFinal) {
+      childSurnameFinal = parts[0];
+      childNameFinal = parts.slice(1).join(" ");
+    }
+  }
+
+  // If child surname is missing but parent has full name (e.g. "Быстрых Юрий Анатольевич"), use parent's surname
+  if (!childSurnameFinal && parentNameFinal) {
+    const parentParts = parentNameFinal.trim().split(/\s+/).filter(Boolean);
+    if (parentParts.length >= 2) {
+      childSurnameFinal = parentParts[0];
+    }
+  }
+
+  const currentYear = new Date().getFullYear();
+  if (childAgeFinal > 0) {
+    childBirthYear = currentYear - childAgeFinal;
+  } else if (payload.childBirthYear || payload.year) {
+    childBirthYear = Number(payload.childBirthYear || payload.year);
+    childAgeFinal = currentYear - childBirthYear;
+  }
+
+  const notesFinal = payload.notes || notesList.join("\n") || "Заявка на бесплатную тренировку";
 
   const now = new Date();
-  const leadId = `l_${Date.now()}`;
+  const leadId = payload.id || `l_${Date.now()}`;
   const timeString = now.toTimeString().substring(0, 5);
 
   const newLead = {
@@ -184,8 +386,8 @@ async function processIncomingLead(payload: any) {
     parentEmail: payload.parentEmail || payload.email || "",
     childName: childNameFinal,
     childSurname: childSurnameFinal,
-    childBirthYear: Number(payload.childBirthYear || payload.year) || 2017,
-    childAge: childAgeFinal,
+    childBirthYear: childBirthYear || 2018,
+    childAge: childAgeFinal || 0,
     source: sourceFinal,
     notes: notesFinal,
     timeString: timeString,
@@ -193,13 +395,17 @@ async function processIncomingLead(payload: any) {
     status: "new",
   };
 
-  const ageText = childAgeFinal > 0 ? ` (${childAgeFinal} лет)` : "";
+  const ageText = childAgeFinal > 0 ? ` (${childAgeFinal} лет, ${childBirthYear || currentYear - childAgeFinal} г.р.)` : "";
 
   // 1. Fetch config and send Telegram notification IMMEDIATELY from server
+  let tgResult: { success: boolean; error?: string } = { success: false };
   const config = await getCRMConfig();
   if (config && config.telegramAlerts.newLead !== false && config.telegramBotToken && config.telegramGroupChatId) {
-    const telegramMessage = `🚨 <b>НОВАЯ ЗАЯВКА</b>\n<b>Имя:</b> ${childSurnameFinal} ${childNameFinal}${ageText}\n<b>Источник:</b> ${sourceFinal}\n<b>Родитель:</b> ${parentNameFinal}\n<b>Телефон:</b> ${parentPhoneFinal}`;
-    await sendTelegramAlertServer(config.telegramBotToken, config.telegramGroupChatId, telegramMessage);
+    const childDisplayName = [childSurnameFinal, childNameFinal].filter(Boolean).join(" ") || "Не указано";
+    const telegramMessage = `🚨 <b>НОВАЯ ЗАЯВКА (АМКАР ЮНИОР)</b>\n\n👤 <b>Родитель:</b> ${parentNameFinal}\n📞 <b>Телефон:</b> <code>${parentPhoneFinal}</code>\n⚽ <b>Ребенок:</b> ${childDisplayName}${ageText}\n📍 <b>Источник:</b> ${sourceFinal}\n📝 <b>Детали:</b> ${notesFinal}\n\n⏰ <i>${now.toLocaleDateString("ru-RU")} ${timeString}</i>`;
+    tgResult = await sendTelegramAlertServer(config.telegramBotToken, config.telegramGroupChatId, telegramMessage);
+  } else {
+    console.warn("Telegram alert not sent: token/chatId missing in config", config);
   }
 
   // 2. Save lead directly to Firestore
@@ -207,13 +413,14 @@ async function processIncomingLead(payload: any) {
 
   // 3. Create Manager Task in Firestore
   const managerTaskId = `t_${Date.now()}_m`;
+  const childFullTitle = [childSurnameFinal, childNameFinal].filter(Boolean).join(" ");
   const managerTask = {
     id: managerTaskId,
-    title: `⚡ НОВАЯ ЗАЯВКА: ${childSurnameFinal} ${childNameFinal}`,
+    title: `⚡ НОВАЯ ЗАЯВКА: ${childFullTitle}`,
     assignedTo: "manager",
     status: "new",
     dueDate: now.toLocaleDateString("ru-RU"),
-    description: `🔥 Внимание! Поступила новая заявка из канала [${sourceFinal}].\nРодитель: ${parentNameFinal}\nТелефон: ${parentPhoneFinal}\n🔔 НЕОБХОДИМО: Связаться в ближайшее время, уточнить детали и ЗАПИСАТЬ в расписание на пробную тренировку!`,
+    description: `🔥 Внимание! Поступила новая заявка из канала [${sourceFinal}].\nРодитель: ${parentNameFinal}\nТелефон: ${parentPhoneFinal}\nРебенок: ${childFullTitle}${ageText}\n🔔 НЕОБХОДИМО: Связаться в ближайшее время, уточнить детали и ЗАПИСАТЬ в расписание на пробную тренировку!`,
     relatedLeadId: leadId,
   };
   await saveFirestoreDoc("tasks", managerTaskId, managerTask);
@@ -226,22 +433,41 @@ async function processIncomingLead(payload: any) {
     assignedTo: "director",
     status: "new",
     dueDate: now.toLocaleDateString("ru-RU"),
-    description: `Новый потенциальный клиент: ${childSurnameFinal} ${childNameFinal}${ageText}. Источник: ${sourceFinal}`,
+    description: `Новый потенциальный клиент: ${childFullTitle}${ageText}. Источник: ${sourceFinal}. Телефон: ${parentPhoneFinal}`,
   };
   await saveFirestoreDoc("tasks", directorTaskId, directorTask);
 
-  // 5. Create System Notification in Firestore (triggers push notification on all active clients via onSnapshot)
+  // 5. Create System Notification in Firestore (triggers in-app sync on active clients)
   const notifId = `notif_${Date.now()}`;
   const notification = {
     id: notifId,
-    title: "Новая заявка!",
-    body: `Поступила новая заявка: ${childSurnameFinal} ${childNameFinal}. Источник: ${sourceFinal}`,
+    title: `Новая заявка: ${childFullTitle}`,
+    body: `Родитель: ${parentNameFinal} (${parentPhoneFinal}). Источник: ${sourceFinal}`,
     type: "system",
     targetRole: ["director", "admin", "manager"],
     isRead: false,
     dateString: now.toISOString(),
   };
   await saveFirestoreDoc("notifications", notifId, notification);
+
+  // 6. Broadcast Real Web Push Notification (arrives even if CRM tab is closed or in background)
+  try {
+    await sendPushNotificationToAll({
+      title: `⚡ Новая заявка: ${childFullTitle}`,
+      body: `Родитель: ${parentNameFinal} (${parentPhoneFinal}). Источник: ${sourceFinal}`,
+      tag: `lead-${leadId}`,
+      url: "/crm",
+    });
+  } catch (e) {
+    console.warn("Background webpush broadcast error:", e);
+  }
+
+  return {
+    leadId,
+    lead: newLead,
+    telegramSent: tgResult.success,
+    telegramError: tgResult.error,
+  };
 }
 
 async function startServer() {
@@ -253,6 +479,71 @@ async function startServer() {
 
   const SMS_RU_API_ID = '9FB08C14-577B-E243-D5D1-E97A00106226';
 
+  // Push Notification VAPID Public Key Endpoint
+  app.get("/api/push/vapid-public-key", (req, res) => {
+    res.json({ publicKey: VAPID_PUBLIC_KEY });
+  });
+
+  // Push Subscription Endpoint (Saves browser push subscription)
+  app.post("/api/push/subscribe", async (req, res) => {
+    try {
+      const { subscription, role, userPhone } = req.body;
+      if (!subscription || !subscription.endpoint) {
+        return res.status(400).json({ status: "ERROR", message: "Invalid subscription payload" });
+      }
+      await savePushSubscription(subscription, role, userPhone);
+      res.json({ status: "OK", message: "Push subscription registered successfully" });
+    } catch (e: any) {
+      console.error("Error subscribing push:", e);
+      res.status(500).json({ status: "ERROR", message: e.message || String(e) });
+    }
+  });
+
+  // Push Broadcast Endpoint (Sends Web Push to all devices)
+  app.post("/api/push/broadcast", async (req, res) => {
+    try {
+      const { title, body, url, tag } = req.body;
+      const result = await sendPushNotificationToAll({
+        title: title || "⚡ Оповещение CRM",
+        body: body || "Новое событие в системе",
+        url: url || "/crm",
+        tag: tag || `msg-${Date.now()}`,
+      });
+      res.json({ status: "OK", ...result });
+    } catch (e: any) {
+      console.error("Error broadcasting push:", e);
+      res.status(500).json({ status: "ERROR", message: e.message || String(e) });
+    }
+  });
+
+  // Test Push Endpoint
+  app.post("/api/push/test", async (req, res) => {
+    try {
+      const result = await sendPushNotificationToAll({
+        title: "🔔 Тестовое Push-уведомление (АМКАР ЮНИОР)",
+        body: "Web Push работает в фоновом режиме! Оповещения будут приходить даже при закрытой вкладке CRM.",
+        url: "/crm",
+        tag: `test-push-${Date.now()}`,
+      });
+      res.json({ status: "OK", ...result });
+    } catch (e: any) {
+      res.status(500).json({ status: "ERROR", message: e.message || String(e) });
+    }
+  });
+
+  // Dedicated endpoint for leads from landing page and web forms
+  app.post("/api/leads/submit", async (req, res) => {
+    try {
+      const payload = req.body;
+      console.log("Received lead submission via /api/leads/submit:", payload);
+      const result = await processIncomingLead(payload);
+      res.json({ status: "OK", ...result });
+    } catch (e: any) {
+      console.error("Error in /api/leads/submit:", e);
+      res.status(500).json({ status: "ERROR", message: String(e) });
+    }
+  });
+
   app.post(["/api/webhooks/forms", "/api/webhooks/lead", "/api/webhooks/yandex"], async (req, res) => {
     try {
       const payload = req.body;
@@ -262,22 +553,55 @@ async function startServer() {
       (global as any).incomingLeads.push(payload);
 
       // Process immediately on server (Telegram alert + Firestore save + Push notification trigger)
-      processIncomingLead(payload).catch((err) => {
-        console.error("Error processing lead on server:", err);
-      });
+      const result = await processIncomingLead(payload);
 
-      res.json({ status: "OK" });
+      res.json({ status: "OK", ...result });
     } catch (e: any) {
       console.error(e);
       res.status(500).json({ status: "ERROR", message: String(e) });
     }
   });
 
+  // Test Telegram endpoint
+  app.post("/api/telegram/test", async (req, res) => {
+    try {
+      const { botToken, chatId } = req.body;
+      let finalBotToken = (botToken || "").trim();
+      let finalChatId = (chatId || "").trim();
+
+      if (!finalBotToken || !finalChatId) {
+        const config = await getCRMConfig();
+        if (config) {
+          finalBotToken = finalBotToken || config.telegramBotToken;
+          finalChatId = finalChatId || config.telegramGroupChatId;
+        }
+      }
+
+      if (!finalBotToken || !finalChatId) {
+        return res.status(400).json({ 
+          status: "ERROR", 
+          message: "Укажите Токен Бота и ID Группы чата для проверки." 
+        });
+      }
+
+      const testMsg = `🔔 <b>ТЕСТОВОЕ ОПОВЕЩЕНИЕ CRM "АМКАР ЮНИОР"</b>\n\n✅ Интеграция с Telegram успешно настроена!\n🤖 Бот подключен и имеет права на отправку в этот чат.\n⏰ Время: ${new Date().toLocaleTimeString("ru-RU")}`;
+      const result = await sendTelegramAlertServer(finalBotToken, finalChatId, testMsg);
+
+      if (result.success) {
+        res.json({ status: "OK", message: "Тестовое сообщение успешно доставлено в Telegram!" });
+      } else {
+        res.status(400).json({ status: "ERROR", message: result.error || "Не удалось отправить сообщение" });
+      }
+    } catch (e: any) {
+      res.status(500).json({ status: "ERROR", message: e.message || String(e) });
+    }
+  });
+
   app.post("/api/telegram/send", async (req, res) => {
     try {
       const { botToken, chatId, message, parseMode } = req.body;
-      let finalBotToken = botToken;
-      let finalChatId = chatId;
+      let finalBotToken = (botToken || "").trim();
+      let finalChatId = (chatId || "").trim();
 
       // If token/chatId not passed explicitly in body, try to fetch from stored CRM config
       if (!finalBotToken || !finalChatId) {
@@ -292,37 +616,12 @@ async function startServer() {
         return res.status(400).json({ status: "ERROR", message: "Telegram bot token or Chat ID not configured in CRM settings" });
       }
 
-      const url = `https://api.telegram.org/bot${finalBotToken}/sendMessage`;
-      const tgRes = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: finalChatId,
-          text: message,
-          parse_mode: parseMode || "HTML",
-        }),
-      });
-
-      if (!tgRes.ok) {
-        const errText = await tgRes.text();
-        console.error("Server Telegram send failed:", errText);
-        if (errText.includes("can't parse entities")) {
-          const fallbackRes = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              chat_id: finalChatId,
-              text: (message || "").replace(/<[^>]*>/g, ""),
-            }),
-          });
-          const fallbackData = await fallbackRes.json();
-          return res.json({ status: "OK", result: fallbackData });
-        }
-        return res.status(500).json({ status: "ERROR", error: errText });
+      const result = await sendTelegramAlertServer(finalBotToken, finalChatId, message);
+      if (result.success) {
+        res.json({ status: "OK", result: result.result });
+      } else {
+        res.status(500).json({ status: "ERROR", error: result.error });
       }
-
-      const data = await tgRes.json();
-      res.json({ status: "OK", result: data });
     } catch (e: any) {
       console.error("Error in /api/telegram/send:", e);
       res.status(500).json({ status: "ERROR", message: String(e) });

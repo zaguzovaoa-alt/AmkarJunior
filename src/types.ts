@@ -1,4 +1,4 @@
-export type LeadSource = 'MAX' | 'telegram' | 'vk' | 'листовка' | 'рекомендация';
+export type LeadSource = 'MAX' | 'telegram' | 'vk' | 'листовка' | 'рекомендация' | 'Лендинг' | 'сайт' | 'самозапись' | 'другое';
 
 export interface Lead {
   id: string;

@@ -21,10 +21,12 @@ import {
   Users,
   BellRing,
   Check,
+  Send,
 } from "lucide-react";
 import { CredentialsSettings } from "./CredentialsSettings";
 import { useAuth } from "../context/AuthContext";
 import firebaseConfig from "../../firebase-applet-config.json";
+import { testTelegramConnection } from "../utils/telegram";
 
 export const HQSettings: React.FC = () => {
   const {
@@ -94,10 +96,28 @@ export const HQSettings: React.FC = () => {
     }
   }, [crmConfig]);
 
+  const [testingTelegram, setTestingTelegram] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
   const handleSaveTelegram = () => {
     updateCRMConfig({ telegramBotToken, telegramGroupChatId, telegramAlerts, reports: telegramReports });
     setSuccessMsg("Настройки Telegram сохранены");
     setTimeout(() => setSuccessMsg(null), 3000);
+  };
+
+  const handleTestTelegram = async () => {
+    setTestingTelegram(true);
+    setTestResult(null);
+    try {
+      // First save to make sure config is persisted
+      await updateCRMConfig({ telegramBotToken, telegramGroupChatId, telegramAlerts, reports: telegramReports });
+      const result = await testTelegramConnection(telegramBotToken, telegramGroupChatId);
+      setTestResult(result);
+    } catch (err: any) {
+      setTestResult({ success: false, message: err.message || "Ошибка отправки тестового сообщения" });
+    } finally {
+      setTestingTelegram(false);
+    }
   };
 
 
@@ -683,8 +703,39 @@ export const HQSettings: React.FC = () => {
                   })}
                 </div>
 
-                <div className="pt-2 border-t text-right">
-                  <button onClick={handleSaveTelegram} className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold uppercase rounded-xl tracking-wider transition">Сохранить</button>
+                {testResult && (
+                  <div className={`p-3 rounded-xl text-xs flex items-start space-x-2 ${
+                    testResult.success ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
+                  }`}>
+                    {testResult.success ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 shrink-0" />
+                    )}
+                    <div className="flex-1">
+                      <p className="font-bold">{testResult.success ? "Успешно отправлено!" : "Ошибка отправки в Telegram"}</p>
+                      <p className="mt-0.5 leading-relaxed">{testResult.message}</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="pt-2 border-t flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    disabled={testingTelegram}
+                    onClick={handleTestTelegram}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl flex items-center space-x-1.5 transition shadow-sm"
+                  >
+                    <Send className={`w-3.5 h-3.5 ${testingTelegram ? 'animate-pulse' : ''}`} />
+                    <span>{testingTelegram ? "Отправка..." : "Проверить отправку в чат"}</span>
+                  </button>
+
+                  <button 
+                    onClick={handleSaveTelegram} 
+                    className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold uppercase rounded-xl tracking-wider transition"
+                  >
+                    Сохранить
+                  </button>
                 </div>
               </div>
             </div>

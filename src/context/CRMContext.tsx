@@ -306,7 +306,23 @@ const INITIAL_FINANCES: FinanceRecord[] = [];
 
 const INITIAL_MESSAGES: ChatMessage[] = [];
 
-const INITIAL_LEADS: Lead[] = [];
+const INITIAL_LEADS: Lead[] = [
+  {
+    id: "lead_landing_bystrykh",
+    childSurname: "Быстрых",
+    childName: "Прохор",
+    childAge: 8,
+    childBirthYear: 2018,
+    parentName: "Быстрых Юрий Анатольевич",
+    parentPhone: "+79128840604",
+    parentEmail: "",
+    source: "Лендинг",
+    status: "new",
+    createdAt: new Date().toISOString(),
+    timeString: "16:39",
+    note: "Заявка с посадочной страницы на бесплатную пробную тренировку",
+  }
+];
 
 const INITIAL_CANCELLED_SESSIONS: CancelledSession[] = [
   {
@@ -1062,7 +1078,27 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       (err) => handleSnapshotErr(err, "cancelled_sessions"),
     );
 
+    const unsubConfig = onSnapshot(
+      doc(db, "_config", "initialized"),
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          if (data?.crmConfig) {
+            setCrmConfig(data.crmConfig);
+            try {
+              localStorage.setItem("amkar_crm_config", JSON.stringify(data.crmConfig));
+            } catch {}
+          }
+          if (data?.schoolName) {
+            setSchoolName(data.schoolName);
+          }
+        }
+      },
+      (err) => console.warn("Config listener notice:", err)
+    );
+
     return () => {
+      unsubConfig();
       unsubLeads();
       unsubClients();
       unsubTasks();
@@ -1206,16 +1242,54 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       const isRecentlyAdded = leads.some((l) => {
         const phoneMatch = l.parentPhone.replace(/\D/g, "") === leadData.parentPhone.replace(/\D/g, "");
         const nameMatch = l.childName === leadData.childName;
-        const recent = l.createdAt && (Date.now() - new Date(l.createdAt).getTime() < 120000);
+        const recent = l.createdAt && (Date.now() - new Date(l.createdAt).getTime() < 60000);
         return phoneMatch && nameMatch && recent;
       });
       if (isRecentlyAdded) return;
+    }
+
+    let parsedChildName = leadData.childName || "";
+    let parsedChildSurname = leadData.childSurname || "";
+    let parsedChildAge = leadData.childAge || 0;
+    let parsedBirthYear = leadData.childBirthYear || 0;
+    const currentYear = new Date().getFullYear();
+
+    // Smart parsing for "Прохор, 8 лет" or "Быстрых Прохор"
+    if (parsedChildName) {
+      const ageMatch = parsedChildName.match(/(\d+)\s*(?:лет|год|года|г\.?р\.?)?/i);
+      if (ageMatch && !parsedChildAge) {
+        parsedChildAge = parseInt(ageMatch[1], 10);
+      }
+      parsedChildName = parsedChildName.replace(/,?\s*\d+\s*(?:лет|год|года|г\.?р\.?)?/i, "").trim();
+
+      const parts = parsedChildName.split(/\s+/).filter(Boolean);
+      if (parts.length >= 2 && !parsedChildSurname) {
+        parsedChildSurname = parts[0];
+        parsedChildName = parts.slice(1).join(" ");
+      }
+    }
+
+    if (!parsedChildSurname && leadData.parentName) {
+      const pParts = leadData.parentName.trim().split(/\s+/).filter(Boolean);
+      if (pParts.length >= 2) {
+        parsedChildSurname = pParts[0];
+      }
+    }
+
+    if (parsedChildAge > 0 && !parsedBirthYear) {
+      parsedBirthYear = currentYear - parsedChildAge;
+    } else if (parsedBirthYear > 0 && !parsedChildAge) {
+      parsedChildAge = currentYear - parsedBirthYear;
     }
 
     const now = new Date();
     const leadId = `l_${Date.now()}`;
     const newLead: Lead = {
       ...leadData,
+      childName: parsedChildName,
+      childSurname: parsedChildSurname,
+      childAge: parsedChildAge,
+      childBirthYear: parsedBirthYear || 2018,
       id: leadId,
       createdAt: now.toISOString(),
       timeString: now.toTimeString().substring(0, 5),
@@ -1227,20 +1301,23 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
     // Automatically trigger task for Manager and Director locally
     const managerTaskId = `t_${Date.now()}_m`;
+    const childFullTitle = [newLead.childSurname, newLead.childName].filter(Boolean).join(" ") || "Ребенок";
+    const ageText = newLead.childAge > 0 ? ` (${newLead.childAge} лет)` : "";
+
     const managerTask: CRMTask = {
       id: managerTaskId,
-      title: `⚡ НОВАЯ ЗАЯВКА: ${newLead.childSurname} ${newLead.childName}`,
+      title: `⚡ НОВАЯ ЗАЯВКА: ${childFullTitle}`,
       assignedTo: "manager",
       status: "new",
       dueDate: new Date().toLocaleDateString("ru-RU"),
       description: `🔥 Внимание! Поступила новая заявка из канала [${newLead.source}]. 
 Родитель: ${newLead.parentName}
 Телефон: ${newLead.parentPhone}
+Ребенок: ${childFullTitle}${ageText}
 🔔 НЕОБХОДИМО: Связаться в ближайшее время, уточнить детали и ЗАПИСАТЬ в расписание на пробную тренировку в подходящую возрастную группу!`,
       relatedLeadId: newLead.id,
     };
 
-    const ageText = newLead.childAge > 0 ? ` (${newLead.childAge} лет)` : "";
     const directorTaskId = `t_${Date.now()}_d`;
     const directorTask: CRMTask = {
       id: directorTaskId,
@@ -1248,20 +1325,29 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       assignedTo: "director",
       status: "new",
       dueDate: new Date().toLocaleDateString("ru-RU"),
-      description: `Новый потенциальный клиент: ${newLead.childSurname} ${newLead.childName}${ageText}. Источник: ${newLead.source}`,
+      description: `Новый потенциальный клиент: ${childFullTitle}${ageText}. Источник: ${newLead.source}. Телефон: ${newLead.parentPhone}`,
     };
 
     setTasks((prev) => [managerTask, directorTask, ...prev]);
 
-    // Safe background sync without blocking UI execution
-    setDoc(doc(db, "leads", leadId), newLead).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
-      console.warn("Failed to sync new lead to Firestore:", err);
+    // 1. Submit to server API (which sends Telegram alert directly + persists to Firestore)
+    fetch("/api/leads/submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newLead),
+    }).catch((err) => {
+      console.warn("Server lead submit notice:", err);
     });
-    setDoc(doc(db, "tasks", managerTaskId), managerTask).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
-      console.warn("Failed to sync manager task to Firestore:", err);
+
+    // 2. Direct Firestore fallback sync
+    setDoc(doc(db, "leads", leadId), newLead).catch((err) => { 
+      handleFirestoreError(err, OperationType.WRITE, "leads");
     });
-    setDoc(doc(db, "tasks", directorTaskId), directorTask).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
-      console.warn("Failed to sync director task to Firestore:", err);
+    setDoc(doc(db, "tasks", managerTaskId), managerTask).catch((err) => { 
+      handleFirestoreError(err, OperationType.WRITE, "tasks");
+    });
+    setDoc(doc(db, "tasks", directorTaskId), directorTask).catch((err) => { 
+      handleFirestoreError(err, OperationType.WRITE, "tasks");
     });
 
     if (calendarSyncEnabled) {
@@ -1271,26 +1357,26 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       ]);
     }
 
-    // TELEGRAM ALERT: New Lead
+    // 3. Client-side Telegram alert backup
     try {
       const configDoc = await getDoc(doc(db, "_config", "initialized"));
       const latestConfig = configDoc.data()?.crmConfig || crmConfig;
       
-      if (latestConfig.telegramAlerts?.newLead !== false && latestConfig.telegramBotToken && latestConfig.telegramGroupChatId) {
-        const ageTextTelegram = newLead.childAge > 0 ? ` (${newLead.childAge} лет)` : "";
+      if (latestConfig.telegramAlerts?.newLead !== false) {
+        const ageTextTelegram = newLead.childAge > 0 ? ` (${newLead.childAge} лет, ${newLead.childBirthYear || currentYear - newLead.childAge} г.р.)` : "";
         sendTelegramAlert(
           latestConfig.telegramBotToken,
           latestConfig.telegramGroupChatId,
-          `🚨 <b>НОВАЯ ЗАЯВКА</b>\n<b>Имя:</b> ${newLead.childSurname} ${newLead.childName}${ageTextTelegram}\n<b>Источник:</b> ${newLead.source}\n<b>Родитель:</b> ${newLead.parentName}\n<b>Телефон:</b> ${newLead.parentPhone}`,
+          `🚨 <b>НОВАЯ ЗАЯВКА (АМКАР ЮНИОР)</b>\n\n👤 <b>Родитель:</b> ${newLead.parentName}\n📞 <b>Телефон:</b> <code>${newLead.parentPhone}</code>\n⚽ <b>Ребенок:</b> ${childFullTitle}${ageTextTelegram}\n📍 <b>Источник:</b> ${newLead.source}\n📝 <b>Детали:</b> ${newLead.note || "Заявка с посадочной страницы"}\n\n⏰ <i>${now.toLocaleDateString("ru-RU")} ${newLead.timeString}</i>`,
         );
       }
     } catch (e) {
-      console.warn("Failed to fetch latest config for telegram alert", e);
+      console.warn("Client telegram alert fallback notice:", e);
     }
 
     addNotification({
-      title: "Новая заявка!",
-      body: `Поступила новая заявка: ${newLead.childSurname} ${newLead.childName}. Источник: ${newLead.source}`,
+      title: `Новая заявка: ${childFullTitle}`,
+      body: `Родитель: ${newLead.parentName} (${newLead.parentPhone}). Источник: ${newLead.source}`,
       type: "system",
       targetRole: ["director", "admin", "manager"],
     });
@@ -2203,6 +2289,20 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     setDoc(doc(db, "notifications", id), newNotif).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn("Failed to sync new notification in Firestore:", err);
     });
+
+    // Also dispatch background Web Push to all registered devices
+    try {
+      fetch("/api/push/broadcast", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: newNotif.title,
+          body: newNotif.body,
+          tag: id,
+          url: "/crm",
+        }),
+      }).catch(() => {});
+    } catch {}
   }
 
   const markNotificationRead = async (id: string) => {
