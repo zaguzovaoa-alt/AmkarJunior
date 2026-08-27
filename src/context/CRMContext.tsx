@@ -1330,14 +1330,16 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
     setTasks((prev) => [managerTask, directorTask, ...prev]);
 
-    // 1. Submit to server API (which sends Telegram alert directly + persists to Firestore)
-    fetch("/api/leads/submit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newLead),
-    }).catch((err) => {
+    // 1. Submit to server API (sends Telegram alert server-side, broadcasts OS Web Push, and writes to Firestore)
+    try {
+      await fetch("/api/leads/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newLead),
+      });
+    } catch (err) {
       console.warn("Server lead submit notice:", err);
-    });
+    }
 
     // 2. Direct Firestore fallback sync
     setDoc(doc(db, "leads", leadId), newLead).catch((err) => { 

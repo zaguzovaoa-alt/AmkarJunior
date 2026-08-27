@@ -164,6 +164,27 @@ export const RegistrationPage: React.FC = () => {
       }
       const clientToSave = { ...newClientData, password };
       await appendClients([clientToSave]);
+
+      // Dispatch Telegram & Push notification for new client registration
+      try {
+        await fetch("/api/leads/submit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            parentName: clientToSave.parentName,
+            parentPhone: clientToSave.parentPhone,
+            parentEmail: clientToSave.parentEmail,
+            childName: clientToSave.childName,
+            childSurname: clientToSave.childSurname,
+            childBirthYear: clientToSave.childBirthYear,
+            childAge: clientToSave.childAge,
+            source: "Регистрация (Портал)",
+            notes: `Самостоятельная регистрация на портале. Реферальный код: ${clientToSave.referralCode || "нет"}${clientToSave.referredBy ? `, по приглашению: ${clientToSave.referredBy}` : ""}`,
+          }),
+        });
+      } catch (notifErr) {
+        console.warn("Registration notification notice:", notifErr);
+      }
       
       // Automatically log the parent in after successful registration
       try {
