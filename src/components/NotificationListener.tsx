@@ -250,7 +250,7 @@ export const NotificationListener: React.FC = () => {
           await subscribeToWebPush(swRegistration);
         }
         sendNativePush(
-          "🔔 Push-уведомления включены!",
+          "Push-уведомления включены!",
           "Оповещения о новых заявках будут приходить вовремя и без повторов."
         );
       } else if (permission === "denied") {
@@ -351,7 +351,7 @@ export const NotificationListener: React.FC = () => {
       sendNativePush(n.title, n.body, n.id);
 
       // 3. Flash document title if in another tab
-      flashTabTitle(`🚨 ${n.title} | АМКАР ЮНИОР`);
+      flashTabTitle(`${n.title} | АМКАР ЮНИОР`);
 
       // 4. Auto-dismiss in-app toast after 8 seconds
       setTimeout(() => {

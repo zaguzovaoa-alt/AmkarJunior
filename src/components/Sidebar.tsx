@@ -17,7 +17,8 @@ import {
   Trophy,
   Share2,
   ShoppingCart,
-  Camera
+  Camera,
+  ShieldCheck
 } from "lucide-react";
 import { useCRM } from "../context/CRMContext";
 import { AmkarLogo } from "./AmkarLogo";
@@ -68,6 +69,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             badge: finalMessageCount || undefined,
           },
           { id: "parent_knowledge", label: "База знаний", icon: BookOpen },
+          { id: "parent_offer", label: "Договор-оферта", icon: ShieldCheck },
           { id: "parent_gamification", label: "Награды и Цели", icon: Trophy },
           { id: "parent_settings", label: "Настройки", icon: Settings },
         ];

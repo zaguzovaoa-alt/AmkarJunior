@@ -23,6 +23,12 @@ import {
   Trash,
   CreditCard,
   Trophy,
+  Crown,
+  Briefcase,
+  GraduationCap,
+  Paperclip,
+  X,
+  Link,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { compressImage } from "../utils/image";
@@ -34,6 +40,7 @@ import { AttendanceTable } from "./AttendanceTable";
 import { parseScheduleString } from "../utils/scheduleParser";
 import { TrainingGroup } from "../types";
 import { formatGroupNameDisplay } from "../utils/formatters";
+import { AIProgressReportCard } from "./AIProgressReportCard";
 
 const formatBirthDate = (dateString?: string, fallbackYear?: number) => {
   if (!dateString) return fallbackYear ? `${fallbackYear} г.р.` : "";
@@ -136,7 +143,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
   const [chatInput, setChatInput] = useState("");
   const [chatVisibility, setChatVisibility] = useState<
     ("manager" | "trainer" | "parent" | "director" | "admin")[]
-  >(["manager", "director", "trainer", "admin"]);
+  >(["trainer", "manager", "director"]);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editMessageText, setEditMessageText] = useState("");
 
@@ -1338,8 +1345,8 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                   <div className="text-xs font-mono text-gray-500 py-1 flex items-center justify-between">
                     <span>
                       {uploadedAttendancePhoto
-                        ? "✅ Фото с тренировки загружено и прикреплено к отчету"
-                        : "⚠️ Отчет не может быть отправлен без фотоподтверждения"}
+                        ? "Фото с тренировки загружено и прикреплено к отчету"
+                        : "Отчет не может быть отправлен без фотоподтверждения"}
                     </span>
                   </div>
                 </div>
@@ -1768,169 +1775,349 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
 
         {/* TAB 8: MESSAGES CHAT */}
         {activeTab === "trainer_messages" && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col h-[520px] overflow-hidden">
-            <div className="p-4 bg-slate-50 border-b flex items-center justify-between">
-              <div className="flex items-center space-x-2.5">
-                <div className="h-10 w-10 bg-emerald-500/10 text-emerald-600 border rounded-full flex items-center justify-center font-bold">
-                  Ч
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col h-[580px] overflow-hidden">
+            <div className="p-4 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="h-10 w-10 bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 rounded-xl flex items-center justify-center font-bold">
+                  <MessageSquare className="w-5 h-5" />
                 </div>
                 <div className="text-left">
-                  <h3 className="font-bold text-slate-800 text-sm">
-                    Общий чат тренеров и администрации
+                  <h3 className="font-bold text-white text-sm flex items-center gap-2">
+                    <span>Корпоративный чат школы</span>
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold">
+                      Online
+                    </span>
                   </h3>
-                  <p className="text-[10px] text-gray-500 font-medium">
-                    Безопасный корпоративный канал связи
+                  <p className="text-[11px] text-slate-300 font-medium">
+                    Связь тренеров, дирекции, менеджеров и родителей
                   </p>
                 </div>
               </div>
-              <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded font-semibold text-[10px]">
-                В сети
-              </span>
+              <div className="hidden sm:flex items-center space-x-1.5 text-[10px] text-slate-300 bg-white/10 px-2.5 py-1 rounded-lg">
+                <span>Ваша роль:</span>
+                <span className="font-bold text-white uppercase tracking-wider">
+                  {currentRole === "trainer"
+                    ? "Тренер"
+                    : currentRole === "director"
+                      ? "Директор"
+                      : currentRole === "manager"
+                        ? "Менеджер"
+                        : "Администратор"}
+                </span>
+              </div>
             </div>
 
-            <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-slate-50/50 text-xs">
-              {visibleMessages.map((ms, id) => {
-                const isMe = ms.senderRole === currentRole;
-                return (
-                  <div
-                    key={id}
-                    className={`flex ${isMe ? "justify-end" : "justify-start"}`}
-                  >
+            {/* Messages list */}
+            <div className="flex-1 p-4 overflow-y-auto space-y-3.5 bg-slate-50/70 text-xs">
+              {visibleMessages.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-gray-400 space-y-2 py-12">
+                  <MessageSquare className="w-8 h-8 text-gray-300" />
+                  <p className="text-xs font-medium">Сообщений пока нет. Начните обсуждение первым!</p>
+                </div>
+              ) : (
+                visibleMessages.map((ms, id) => {
+                  const isMe = ms.senderRole === currentRole;
+                  const senderBadge =
+                    ms.senderRole === "trainer"
+                      ? { label: "Тренер", bg: "bg-emerald-100 text-emerald-800 border-emerald-200" }
+                      : ms.senderRole === "director"
+                        ? { label: "Директор", bg: "bg-purple-100 text-purple-800 border-purple-200" }
+                        : ms.senderRole === "manager"
+                          ? { label: "Менеджер", bg: "bg-blue-100 text-blue-800 border-blue-200" }
+                          : ms.senderRole === "parent"
+                            ? { label: "Родитель", bg: "bg-amber-100 text-amber-800 border-amber-200" }
+                            : { label: "Админ", bg: "bg-slate-100 text-slate-800 border-slate-200" };
+
+                  return (
                     <div
-                      className={`max-w-xs sm:max-w-md p-3 rounded-2xl group ${
-                        isMe
-                          ? "bg-indigo-600 text-white rounded-br-none"
-                          : "bg-white text-gray-800 border rounded-bl-none"
-                      }`}
+                      key={id}
+                      className={`flex ${isMe ? "justify-end" : "justify-start"}`}
                     >
-                      <div className="flex justify-between items-center mb-1 text-[9px] opacity-80 font-bold">
-                        <span>{ms.senderName}</span>
-                        <div className="flex items-center space-x-2">
-                          {isMe && (
-                            <div className="hidden group-hover:flex items-center space-x-1 mr-2 bg-indigo-500/50 rounded px-1">
+                      <div
+                        className={`max-w-xs sm:max-w-md md:max-w-lg p-3.5 rounded-2xl group shadow-2xs ${
+                          isMe
+                            ? "bg-gradient-to-br from-indigo-600 to-indigo-700 text-white rounded-br-xs"
+                            : "bg-white text-gray-800 border border-gray-200/80 rounded-bl-xs"
+                        }`}
+                      >
+                        <div className="flex justify-between items-center mb-1.5 gap-2">
+                          <div className="flex items-center space-x-1.5 flex-wrap">
+                            <span className="font-bold text-[11px]">{ms.senderName}</span>
+                            <span
+                              className={`text-[9px] px-1.5 py-0.2 rounded border font-semibold ${
+                                isMe ? "bg-white/20 text-white border-white/30" : senderBadge.bg
+                              }`}
+                            >
+                              {senderBadge.label}
+                            </span>
+                          </div>
+                          <div className="flex items-center space-x-1.5 shrink-0">
+                            {isMe && (
+                              <div className="hidden group-hover:flex items-center space-x-1 bg-white/20 rounded px-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingMessageId(ms.id);
+                                    setEditMessageText(ms.text);
+                                  }}
+                                  className="p-0.5 hover:text-white transition"
+                                  title="Редактировать"
+                                >
+                                  <Edit2 className="w-2.5 h-2.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteChatMessage(ms.id)}
+                                  className="p-0.5 hover:text-rose-200 transition"
+                                  title="Удалить"
+                                >
+                                  <Trash className="w-2.5 h-2.5" />
+                                </button>
+                              </div>
+                            )}
+                            <span className="font-mono text-[9px] opacity-75">{ms.timestamp}</span>
+                          </div>
+                        </div>
+
+                        {editingMessageId === ms.id ? (
+                          <div className="flex flex-col space-y-2 mt-2">
+                            <input
+                              type="text"
+                              className="text-xs px-2.5 py-1.5 bg-white text-gray-800 rounded-lg outline-none w-full border"
+                              value={editMessageText}
+                              onChange={(e) => setEditMessageText(e.target.value)}
+                            />
+                            <div className="flex justify-end space-x-2">
                               <button
-                                onClick={() => {
-                                  setEditingMessageId(ms.id);
-                                  setEditMessageText(ms.text);
-                                }}
-                                className="p-1 hover:text-white transition"
+                                type="button"
+                                onClick={() => setEditingMessageId(null)}
+                                className="text-[10px] bg-white/20 px-2 py-1 rounded"
                               >
-                                <Edit2 className="w-2.5 h-2.5" />
+                                Отмена
                               </button>
                               <button
                                 type="button"
-                                onClick={() => deleteChatMessage(ms.id)}
-                                className="p-1 hover:text-rose-200 transition"
+                                onClick={() => {
+                                  updateChatMessage(ms.id, editMessageText);
+                                  setEditingMessageId(null);
+                                }}
+                                className="text-[10px] bg-white text-indigo-600 font-bold px-2 py-1 rounded shadow-xs"
                               >
-                                <Trash className="w-2.5 h-2.5" />
+                                Сохранить
                               </button>
                             </div>
-                          )}
-                          <span className="font-mono">{ms.timestamp}</span>
-                        </div>
-                      </div>
-
-                      {editingMessageId === ms.id ? (
-                        <div className="flex flex-col space-y-2 mt-2">
-                          <input
-                            type="text"
-                            className="text-xs px-2 py-1 bg-white text-gray-800 rounded outline-none w-full"
-                            value={editMessageText}
-                            onChange={(e) => setEditMessageText(e.target.value)}
-                          />
-                          <div className="flex justify-end space-x-2">
-                            <button
-                              onClick={() => setEditingMessageId(null)}
-                              className="text-[10px] bg-white/20 px-2 py-1 rounded"
-                            >
-                              Отмена
-                            </button>
-                            <button
-                              onClick={() => {
-                                updateChatMessage(ms.id, editMessageText);
-                                setEditingMessageId(null);
-                              }}
-                              className="text-[10px] bg-white text-indigo-600 font-bold px-2 py-1 rounded"
-                            >
-                              Сохр.
-                            </button>
                           </div>
-                        </div>
-                      ) : (
-                        <p className="leading-relaxed text-left">{ms.text}</p>
-                      )}
+                        ) : (
+                          <p className="leading-relaxed text-left whitespace-pre-wrap">{ms.text}</p>
+                        )}
 
-                      {isMe && ms.visibleTo && (
-                        <div className="mt-1 text-[8px] opacity-60 text-left">
-                          Видно:{" "}
-                          {ms.visibleTo
-                            .map((r) =>
-                              r === "director"
-                                ? "Директор"
-                                : r === "manager"
-                                  ? "Менеджер"
-                                  : r === "trainer"
-                                    ? "Тренер"
-                                    : r === "parent"
-                                      ? "Родители"
-                                      : r,
-                            )
-                            .join(", ")}
-                        </div>
-                      )}
+                        {ms.visibleTo && ms.visibleTo.length > 0 && (
+                          <div className={`mt-2 pt-1.5 border-t text-[9px] flex items-center gap-1 flex-wrap ${
+                            isMe ? "border-white/20 text-white/80" : "border-gray-100 text-gray-500"
+                          }`}>
+                            <span className="font-semibold">Видят:</span>
+                            {ms.visibleTo.map((r) => {
+                              const rLabel =
+                                r === "trainer"
+                                  ? "Тренеры"
+                                  : r === "manager"
+                                    ? "Менеджеры"
+                                    : r === "director"
+                                      ? "Директор"
+                                      : r === "parent"
+                                        ? "Родители"
+                                        : r;
+                              return (
+                                <span
+                                  key={r}
+                                  className={`px-1.5 py-0.2 rounded text-[8px] font-medium ${
+                                    isMe
+                                      ? "bg-white/15 text-white"
+                                      : "bg-slate-100 text-slate-700 border border-slate-200"
+                                  }`}
+                                >
+                                  {rLabel}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
 
-            <div className="bg-white border-t">
-              <div className="px-3 py-2 flex items-center space-x-3 text-[10px] text-slate-500 border-b border-gray-50 overflow-x-auto">
-                <span className="font-semibold shrink-0">Видят:</span>
-                {(["manager", "parent", "director"] as const).map((role) => (
-                  <label
-                    key={role}
-                    className="flex items-center space-x-1 cursor-pointer whitespace-nowrap"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={chatVisibility.includes(role)}
-                      onChange={(e) => {
-                        if (e.target.checked)
-                          setChatVisibility([...chatVisibility, role]);
-                        else
-                          setChatVisibility(
-                            chatVisibility.filter((r) => r !== role),
-                          );
-                      }}
-                      className="rounded text-indigo-500 focus:ring-indigo-500"
-                    />
-                    <span>
-                      {role === "manager"
-                        ? "Менеджеры"
-                        : role === "parent"
-                          ? "Родители"
-                          : "Директор"}
+            {/* Chat write panel with Recipient Selector */}
+            <div className="bg-white border-t border-gray-200">
+              {/* Recipient selectors bar */}
+              <div className="px-3.5 py-2.5 bg-slate-50/90 border-b border-gray-200 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center space-x-2">
+                    <span className="font-bold text-[11px] text-slate-700 flex items-center gap-1">
+                      <Users className="w-3.5 h-3.5 text-indigo-600" />
+                      Получатели сообщения:
                     </span>
-                  </label>
-                ))}
+                  </div>
+
+                  {/* Quick preset buttons */}
+                  <div className="flex items-center space-x-1">
+                    <button
+                      type="button"
+                      onClick={() => setChatVisibility(["trainer", "manager", "director", "parent"])}
+                      className="px-2 py-0.5 text-[10px] font-bold rounded bg-slate-200 hover:bg-slate-300 text-slate-700 transition"
+                      title="Выбрать всех получателей"
+                    >
+                      Всем
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChatVisibility(["trainer"])}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded transition ${
+                        chatVisibility.length === 1 && chatVisibility[0] === "trainer"
+                          ? "bg-emerald-600 text-white"
+                          : "bg-emerald-100 hover:bg-emerald-200 text-emerald-800"
+                      }`}
+                      title="Отправить только тренерам"
+                    >
+                      Только тренерам
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChatVisibility(["trainer", "manager", "director"])}
+                      className="px-2 py-0.5 text-[10px] font-bold rounded bg-indigo-100 hover:bg-indigo-200 text-indigo-800 transition"
+                      title="Отправить всему штабу (тренеры, менеджеры, директор)"
+                    >
+                      Штабу школы
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChatVisibility(["parent"])}
+                      className="px-2 py-0.5 text-[10px] font-bold rounded bg-amber-100 hover:bg-amber-200 text-amber-800 transition"
+                      title="Отправить родителям"
+                    >
+                      Родителям
+                    </button>
+                  </div>
+                </div>
+
+                {/* Role checkboxes with icons */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                  {[
+                    {
+                      id: "trainer" as const,
+                      label: "Тренеры",
+                      sub: "Тренерский состав",
+                      icon: GraduationCap,
+                      activeColor: "bg-emerald-50 border-emerald-300 text-emerald-900 ring-emerald-500",
+                      badgeColor: "bg-emerald-600 text-white",
+                    },
+                    {
+                      id: "manager" as const,
+                      label: "Менеджеры",
+                      sub: "Отдел заботы и продаж",
+                      icon: Briefcase,
+                      activeColor: "bg-blue-50 border-blue-300 text-blue-900 ring-blue-500",
+                      badgeColor: "bg-blue-600 text-white",
+                    },
+                    {
+                      id: "director" as const,
+                      label: "Директор",
+                      sub: "Руководство школы",
+                      icon: Crown,
+                      activeColor: "bg-purple-50 border-purple-300 text-purple-900 ring-purple-500",
+                      badgeColor: "bg-purple-600 text-white",
+                    },
+                    {
+                      id: "parent" as const,
+                      label: "Родители",
+                      sub: "Родительский портал",
+                      icon: User,
+                      activeColor: "bg-amber-50 border-amber-300 text-amber-900 ring-amber-500",
+                      badgeColor: "bg-amber-600 text-white",
+                    },
+                  ].map((item) => {
+                    const isChecked = chatVisibility.includes(item.id);
+                    const Icon = item.icon;
+                    return (
+                      <label
+                        key={item.id}
+                        className={`flex items-center space-x-2 p-1.5 rounded-lg border cursor-pointer select-none transition ${
+                          isChecked
+                            ? `${item.activeColor} border-current shadow-2xs font-semibold`
+                            : "bg-white border-gray-200 text-gray-500 hover:bg-gray-100/70"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setChatVisibility([...chatVisibility, item.id]);
+                            } else {
+                              const remaining = chatVisibility.filter((r) => r !== item.id);
+                              setChatVisibility(remaining.length > 0 ? remaining : [item.id]);
+                            }
+                          }}
+                          className="rounded text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 cursor-pointer"
+                        />
+                        <Icon className={`w-3.5 h-3.5 shrink-0 ${isChecked ? "text-current" : "text-gray-400"}`} />
+                        <span className="text-[11px] truncate">{item.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
+
+              {/* Form write message */}
               <form
                 onSubmit={handleSendChat}
                 className="p-3 flex items-center space-x-2"
               >
+                <button
+                  type="button"
+                  onClick={() => {
+                    const sampleFiles = [
+                      "План_тренировки_на_неделю.pdf",
+                      "Протокол_матча_Амкар.pdf",
+                      "Список_экипировки_сборов.pdf",
+                      "Фото_отчет_тренировки.jpg",
+                    ];
+                    const picked =
+                      sampleFiles[Math.floor(Math.random() * sampleFiles.length)];
+                    const targetVisibility = chatVisibility.length > 0 ? chatVisibility : ["trainer", "manager", "director"];
+                    addChatMessage({
+                      senderRole: currentRole,
+                      senderName:
+                        currentRole === "trainer"
+                          ? `Тренер ${myCoach.name}`
+                          : currentRole === "director"
+                            ? `Директор ${userProfile.name || ""}`.trim()
+                            : `Менеджер ${userProfile.name || ""}`.trim(),
+                      text: `[Прикреплен материал]: ${picked}`,
+                      visibleTo: targetVisibility,
+                    });
+                  }}
+                  title="Прикрепить материал/файл"
+                  className="p-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl text-gray-500 hover:text-gray-800 transition cursor-pointer"
+                >
+                  <Paperclip className="w-4 h-4" />
+                </button>
                 <input
                   type="text"
-                  placeholder="Обсудить спортивные показатели, задолженности или планы тренировок..."
+                  placeholder="Напишите сообщение (для выбранных получателей)..."
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
-                  className="flex-1 px-4 py-2 bg-slate-100 focus:bg-white border rounded-xl text-xs outline-none"
+                  className="flex-1 px-4 py-2.5 bg-slate-100 focus:bg-white border focus:border-indigo-500 rounded-xl text-xs outline-none transition"
                 />
                 <button
                   type="submit"
-                  className="p-2.5 bg-indigo-600 hover:bg-indigo-700 rounded-xl text-white transition-all shadow-sm"
+                  disabled={!chatInput.trim()}
+                  className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:hover:bg-indigo-600 rounded-xl text-white font-semibold text-xs transition-all shadow-sm flex items-center space-x-1.5 cursor-pointer"
                 >
-                  <Send className="w-4 h-4" />
+                  <span>Отправить</span>
+                  <Send className="w-3.5 h-3.5" />
                 </button>
               </form>
             </div>
@@ -1957,10 +2144,11 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                           "/register\nОтправьте её родителям для создания профиля.",
                       );
                     }}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-[10px] uppercase tracking-wider font-bold transition-all shadow-sm flex items-center space-x-1"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-[10px] uppercase tracking-wider font-bold transition-all shadow-sm flex items-center space-x-1.5"
                     title="Скопировать ссылку-приглашение для родителей"
                   >
-                    <span>🔗 Пригласить родителей</span>
+                    <Link className="w-3.5 h-3.5" />
+                    <span>Пригласить родителей</span>
                   </button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2371,8 +2559,9 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                         <button
                           onClick={() => setSelectedClientDetailsId(null)}
                           className="absolute top-4 right-4 z-10 w-8 h-8 flex items-center justify-center bg-white rounded-full shadow-md text-gray-500 hover:text-red-500 hover:bg-red-50 transition border"
+                          title="Закрыть"
                         >
-                          ✕
+                          <X className="w-4 h-4" />
                         </button>
                         
                         <div className="flex-1 overflow-y-auto bg-slate-50 p-6 flex flex-col sm:flex-row gap-6">
@@ -2441,7 +2630,8 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                                       <div className="bg-slate-50 p-4 rounded-xl border border-slate-150 text-sm">
                                         {selectedClient.medicalCertificateUrl ? (
                                            <div className="flex items-center gap-2 text-emerald-700 font-bold">
-                                              <span>✅ Прикреплена</span>
+                                              <Check className="w-4 h-4 text-emerald-600" />
+                                              <span>Прикреплена</span>
                                               <a href={selectedClient.medicalCertificateUrl} target="_blank" rel="noreferrer" className="text-xs bg-white border border-emerald-200 px-2 py-1 rounded-lg hover:bg-emerald-50">Скачать/Посмотреть</a>
                                            </div>
                                         ) : (
@@ -2456,7 +2646,8 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                                       <div className="bg-slate-50 p-4 rounded-xl border border-slate-150 text-sm">
                                         {selectedClient.insuranceUrl ? (
                                            <div className="flex items-center gap-2 text-emerald-700 font-bold">
-                                              <span>✅ Прикреплена</span>
+                                              <Check className="w-4 h-4 text-emerald-600" />
+                                              <span>Прикреплена</span>
                                               <a href={selectedClient.insuranceUrl} target="_blank" rel="noreferrer" className="text-xs bg-white border border-emerald-200 px-2 py-1 rounded-lg hover:bg-emerald-50">Скачать/Посмотреть</a>
                                            </div>
                                         ) : (
@@ -2538,6 +2729,10 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                                            <div className="h-full bg-emerald-500 rounded-full" style={{ width: ((selectedClient.progress?.discipline || 0) / 5) * 100 + "%" }}></div>
                                         </div>
                                      </div>
+                                  </div>
+
+                                  <div className="pt-2">
+                                    <AIProgressReportCard client={selectedClient} canGenerate={true} />
                                   </div>
                                </div>
                             )}

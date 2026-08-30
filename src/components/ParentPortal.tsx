@@ -28,8 +28,17 @@ import {
   Tag,
   FileText,
   FileCheck,
+  ShieldCheck,
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
+  GraduationCap,
+  Briefcase,
+  Crown,
+  Paperclip,
+  Target,
+  Heart,
+  X,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import amkarUniform from "../assets/images/amkar_uniform.jpg";
@@ -37,8 +46,10 @@ import { isBirthdayToday } from "../utils/dateUtils";
 import { PaymentModal } from "./PaymentModal";
 import { CredentialsSettings } from "./CredentialsSettings";
 import { ChildSettings } from "./ChildSettings";
+import { OfferAgreement } from "./OfferAgreement";
 import { useAuth } from "../context/AuthContext";
 import { Product } from "../types";
+import { AIProgressReportCard } from "./AIProgressReportCard";
 
 interface ParentPortalProps {
   activeTab: string;
@@ -570,6 +581,14 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
       content:
         "Игровая форма школы АМКАР ЮНИОР разработана с учетом анатомии юных спортсменов из гипоаллергенной дышащей ткани. В комплект входят футболка, шорты и брендированные гетры. Стирать форму рекомендуется при температуре не более 30 градусов без агрессивных отбеливателей.",
     },
+    {
+      id: "art6",
+      title: "Договор публичной оферты и правила школы",
+      category: "Родителям",
+      views: 1842,
+      content:
+        "Официальный договор публичной оферты ИП Тюкалов Е.Е. регулирует права и обязанности родителей и детской футбольной школы «Амкар Юниор». Он доступен круглосуточно во вкладке «Договор-оферта» меню, а также в разделе «Настройки». В договоре подробно описаны правила посещения, расписания, отработки пропусков по болезни и безопасность.",
+    },
   ];
 
   if (!myClient || !myClient.id) {
@@ -602,10 +621,14 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
       <div className="p-6 bg-white border-b border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center"><h1 className="text-2xl font-bold text-slate-950 font-sans tracking-tight">
-            {activeTab === "parent_knowledge"
+            {activeTab === "parent_offer"
+              ? "Договор публичной оферты"
+              : activeTab === "parent_knowledge"
               ? "База знаний"
               : `Добрый день, ${myClient.parentName ? myClient.parentName.split(" ")[1] || myClient.parentName.split(" ")[0] || "Родитель" : "Родитель"}!`}
-          </h1><HeaderDescription text={<>{activeTab === "parent_knowledge"
+          </h1><HeaderDescription text={<>{activeTab === "parent_offer"
+              ? "Официальный договор на оказание физкультурно-оздоровительных (спортивных) услуг. Всегда доступен для ознакомления, скачивания и печати."
+              : activeTab === "parent_knowledge"
               ? "Полезные статьи, инструкции и ответы на частые вопросы для заботливых родителей."
               : "Вы находитесь в удобном интерактивном кабинете родителя школы АМКАР ЮНИОР."}</>} /></div>
         </div>
@@ -711,13 +734,13 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                     </div>
                     <div className="text-center md:text-left">
                       <h2 className="text-3xl font-black tracking-tight drop-shadow-md pb-1">
-                        С Днём Рождения, {myClient.childName}! 🎉
+                        С Днём Рождения, {myClient.childName}!
                       </h2>
                       <p className="text-orange-50 font-medium text-sm md:text-base max-w-2xl mt-1 leading-relaxed drop-shadow">
                         Команда «АМКАР ЮНИОР» от всей души поздравляет юного
                         чемпиона с днём рождения! Желаем крепкого здоровья,
                         ярких побед, красивых голов и отличного настроения.
-                        Пусть футбол приносит только радость! ⚽🏆
+                        Пусть футбол приносит только радость!
                       </p>
                     </div>
                   </div>
@@ -803,7 +826,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                         <Clock className="w-3.5 h-3.5 flex-shrink-0" />
                         <span>
                           Не забудьте сменную форму, гетры, бутсы, защитные
-                          щитки и бутылочку воды. 💧
+                          щитки и бутылочку воды.
                         </span>
                       </div>
                     </div>
@@ -1014,6 +1037,37 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                       допуске к физическим нагрузкам, а также наличие спортивной
                       страховки.
                     </p>
+
+                    {/* Official Offer Agreement Card */}
+                    <div className="p-3.5 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm border border-slate-700/60">
+                      <div className="flex items-start sm:items-center space-x-3">
+                        <div className="w-9 h-9 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                          <ShieldCheck className="w-5 h-5" />
+                        </div>
+                        <div className="text-left space-y-0.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-xs text-white">
+                              Договор публичной оферты
+                            </span>
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase">
+                              <Check className="w-2.5 h-2.5" /> Действует
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-300">
+                            ИП Тюкалов Е.Е. • Оказание спортивных услуг • Постоянный доступ
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2 shrink-0 self-end sm:self-auto">
+                        <button
+                          onClick={() => setActiveTab("parent_offer")}
+                          className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold transition flex items-center space-x-1 cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Читать договор</span>
+                        </button>
+                      </div>
+                    </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                       <div className="p-3 bg-slate-50 border border-gray-200 rounded-xl space-y-2 flex flex-col justify-between">
@@ -1284,6 +1338,9 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                     </div>
                   </div>
 
+                  {/* AI 3-Month Progress Report Card */}
+                  <AIProgressReportCard client={myClient} canGenerate={true} />
+
                   {/* Calendar/Attendance Grid */}
                   <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 pb-3">
@@ -1463,7 +1520,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                         onClick={handleCopyReferral}
                         className={`w-full py-2 ${copiedReferral ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-orange-500 hover:bg-orange-600'} text-white rounded-xl text-xs font-bold uppercase transition`}
                       >
-                        {copiedReferral ? "Ссылка скопирована! ✅" : "Копировать ссылку"}
+                        {copiedReferral ? "Ссылка скопирована" : "Копировать ссылку"}
                       </button>
                     </div>
                   </div>
@@ -1865,7 +1922,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                               </td>
                               <td className="p-3 text-slate-400 font-medium">
                                 {att.status === "present"
-                                  ? "📸 Присутствует в фотоотчете"
+                                  ? "Присутствует в фотоотчете"
                                   : "—"}
                               </td>
                             </tr>
@@ -1943,8 +2000,8 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
 
                 {/* Unearned achievement placeholders */}
                 <div className="bg-slate-50 border-2 border-dashed border-gray-200 rounded-xl p-4 flex items-center space-x-4 opacity-60">
-                  <div className="h-16 w-16 rounded-xl bg-slate-200 text-3xl flex items-center justify-center border flex-shrink-0 grayscale">
-                    🎯
+                  <div className="h-16 w-16 rounded-xl bg-slate-200 flex items-center justify-center border flex-shrink-0">
+                    <Target className="w-8 h-8 text-slate-500" />
                   </div>
                   <div className="space-y-1 text-left">
                     <div className="font-extrabold text-gray-400 text-sm">
@@ -1960,8 +2017,8 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                 </div>
 
                 <div className="bg-slate-50 border-2 border-dashed border-gray-200 rounded-xl p-4 flex items-center space-x-4 opacity-60">
-                  <div className="h-16 w-16 rounded-xl bg-slate-200 text-3xl flex items-center justify-center border flex-shrink-0 grayscale">
-                    ❤️
+                  <div className="h-16 w-16 rounded-xl bg-slate-200 flex items-center justify-center border flex-shrink-0">
+                    <Heart className="w-8 h-8 text-slate-500" />
                   </div>
                   <div className="space-y-1">
                     <div className="font-extrabold text-gray-400 text-sm">
@@ -1997,6 +2054,23 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                 >
                   <CreditCard className="w-4 h-4" />
                   <span>Оплатить абонемент</span>
+                </button>
+              </div>
+
+              {/* Offer Agreement Notice */}
+              <div className="p-3.5 bg-emerald-50/70 border border-emerald-200/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-emerald-950">
+                <div className="flex items-center gap-2.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-650 shrink-0" />
+                  <span className="text-slate-700 font-medium">
+                    Все финансовые операции и продление абонементов осуществляются по правилам{" "}
+                    <strong className="text-slate-900 font-bold">Договора публичной оферты</strong>.
+                  </span>
+                </div>
+                <button
+                  onClick={() => setActiveTab("parent_offer")}
+                  className="text-xs font-bold text-emerald-700 hover:text-emerald-800 underline underline-offset-2 shrink-0 cursor-pointer self-start sm:self-auto"
+                >
+                  Ознакомиться с офертой →
                 </button>
               </div>
 
@@ -2138,25 +2212,6 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                             {msg.text}
                           </p>
                         )}
-
-                        {isMe && msg.visibleTo && (
-                          <div className="mt-1 text-[8px] opacity-60">
-                            Видно:{" "}
-                            {msg.visibleTo
-                              .map((r) =>
-                                r === "director"
-                                  ? "Директор"
-                                  : r === "manager"
-                                    ? "Менеджер"
-                                    : r === "trainer"
-                                      ? "Тренер"
-                                      : r === "parent"
-                                        ? "Родители"
-                                        : r,
-                              )
-                              .join(", ")}
-                          </div>
-                        )}
                       </div>
                     </div>
                   );
@@ -2164,39 +2219,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
               </div>
 
               {/* Chat write panel */}
-              <div className="bg-white border-t">
-                <div className="px-3 py-2 flex items-center space-x-3 text-[10px] text-slate-500 border-b border-gray-50 overflow-x-auto">
-                  <span className="font-semibold shrink-0">
-                    Видят сообщение:
-                  </span>
-                  {(["manager", "trainer", "director"] as const).map((role) => (
-                    <label
-                      key={role}
-                      className="flex items-center space-x-1 cursor-pointer whitespace-nowrap"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={chatVisibility.includes(role)}
-                        onChange={(e) => {
-                          if (e.target.checked)
-                            setChatVisibility([...chatVisibility, role]);
-                          else
-                            setChatVisibility(
-                              chatVisibility.filter((r) => r !== role),
-                            );
-                        }}
-                        className="rounded text-emerald-500 focus:ring-emerald-500"
-                      />
-                      <span>
-                        {role === "manager"
-                          ? "Менеджеры"
-                          : role === "trainer"
-                            ? "Тренеры"
-                            : "Директор"}
-                      </span>
-                    </label>
-                  ))}
-                </div>
+              <div className="bg-white border-t border-gray-200">
                 <form
                   onSubmit={handleSendChat}
                   className="p-3 flex items-center space-x-2"
@@ -2217,26 +2240,28 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                         senderRole: "parent",
                         senderName: `${myClient.parentName || "Родитель"} (Родитель: ${myClient.childName || "Ученик"})`,
                         text: `[Прикреплен файл]: ${picked}`,
-                        visibleTo: chatVisibility,
+                        visibleTo: ["trainer", "manager", "director"],
                       });
                     }}
-                    title="Прикрепить файл/фото"
-                    className="p-2.5 bg-slate-150 hover:bg-slate-200 rounded-xl text-gray-500 hover:text-gray-700 transition"
+                    title="Прикреплен файл/фото"
+                    className="p-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl text-gray-500 hover:text-gray-700 transition cursor-pointer"
                   >
                     <Upload className="w-4 h-4" />
                   </button>
                   <input
                     type="text"
-                    placeholder="Напишите сообщение..."
+                    placeholder="Напишите сообщение в школу..."
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
                     className="flex-1 px-4 py-2.5 bg-slate-100 focus:bg-white border focus:border-emerald-500 rounded-xl text-xs text-gray-800 outline-none transition"
                   />
                   <button
                     type="submit"
-                    className="p-2.5 bg-emerald-500 hover:bg-emerald-600 rounded-xl text-white transition-all shadow-sm"
+                    disabled={!chatInput.trim()}
+                    className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 rounded-xl text-white font-semibold text-xs transition-all shadow-sm flex items-center space-x-1.5 cursor-pointer"
                   >
-                    <Send className="w-4 h-4" />
+                    <span>Отправить</span>
+                    <Send className="w-3.5 h-3.5" />
                   </button>
                 </form>
               </div>
@@ -2349,31 +2374,61 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                       Полезные материалы
                     </h3>
 
+                    {/* Featured Offer Agreement Item */}
+                    <div
+                      onClick={() => setActiveTab("parent_offer")}
+                      className="p-3.5 bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-xl shadow-xs transition text-left space-y-2 cursor-pointer hover:shadow-md border border-slate-700"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="font-bold text-xs text-white flex items-center gap-1.5">
+                          <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                          <span>Договор-оферта</span>
+                        </div>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 uppercase">
+                          Активен
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-300 leading-relaxed font-medium">
+                        Официальный договор на оказание услуг. Доступен для чтения, печати и скачивания.
+                      </p>
+                      <div className="text-[10px] font-bold text-emerald-400 flex items-center space-x-1">
+                        <Eye className="w-3 h-3" />
+                        <span>Открыть и читать</span>
+                      </div>
+                    </div>
+
                     {[
                       {
                         title: "Памятка/Правила Клуба",
                         desc: "Ценности и культура нашей школы.",
-                        file: "Скачать PDF",
+                        file: "Читать правила",
+                        action: () => setActiveTab("parent_offer"),
                       },
                       {
                         title: "Календарь Сезона 2025/2026",
                         desc: "Даты турниров, выездов и вех.",
                         file: "Смотреть график",
+                        action: () => setActiveTab("parent_schedule"),
                       },
                       {
                         title: "Инструкция по питанию игроков",
                         desc: "Рацион питания для спортсменов 4-12 лет.",
                         file: "Открыть PDF",
+                        action: undefined,
                       },
                       {
                         title: "Контакты тренеров и медицина",
                         desc: "Телефоны дежурной помощи клиники.",
                         file: "Показать контакты",
+                        action: () => setActiveTab("parent_messages"),
                       },
                     ].map((mat, id) => (
                       <div
                         key={id}
-                        className="p-3 bg-slate-50 border rounded-xl hover:shadow-xs transition text-left space-y-1.5"
+                        onClick={mat.action}
+                        className={`p-3 bg-slate-50 border rounded-xl hover:shadow-xs transition text-left space-y-1.5 ${
+                          mat.action ? "cursor-pointer hover:bg-slate-100/80" : ""
+                        }`}
                       >
                         <div className="font-bold text-xs text-slate-800">
                           {mat.title}
@@ -2406,9 +2461,10 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                       </div>
                       <button
                         onClick={() => setSelectedArticle(null)}
-                        className="p-1 text-gray-400 hover:text-gray-600 font-bold ml-2"
+                        className="p-1 text-gray-400 hover:text-gray-600 transition ml-2"
+                        title="Закрыть"
                       >
-                        ✕
+                        <X className="w-5 h-5" />
                       </button>
                     </div>
                     <div className="p-5 sm:p-6 text-xs text-slate-700 leading-relaxed whitespace-pre-line text-left overflow-y-auto flex-1">
@@ -2691,6 +2747,105 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
               </div>
 
               <ChildSettings client={myClient} />
+
+              {/* Legal documents section */}
+              <div className="pt-4 border-t border-gray-100 space-y-3">
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                  Правовые документы и соглашения
+                </h4>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => setActiveTab("parent_offer")}
+                    className="w-full p-3 bg-slate-50 hover:bg-slate-100 border border-gray-200 rounded-xl flex items-center justify-between transition text-left cursor-pointer"
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <div>
+                        <div className="text-xs font-bold text-slate-800">
+                          Договор публичной оферты
+                        </div>
+                        <div className="text-[10px] text-gray-500">
+                          ИП Тюкалов Е.Е. • Действующая редакция
+                        </div>
+                      </div>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-gray-400" />
+                  </button>
+
+                  <a
+                    href="/privacy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full p-3 bg-slate-50 hover:bg-slate-100 border border-gray-200 rounded-xl flex items-center justify-between transition text-left block"
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <FileText className="w-4 h-4 text-blue-600 shrink-0" />
+                      <div>
+                        <div className="text-xs font-bold text-slate-800">
+                          Политика конфиденциальности
+                        </div>
+                        <div className="text-[10px] text-gray-500">
+                          Правила обработки персональных данных
+                        </div>
+                      </div>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-gray-400" />
+                  </a>
+
+                  <a
+                    href="/safety"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full p-3 bg-slate-50 hover:bg-slate-100 border border-gray-200 rounded-xl flex items-center justify-between transition text-left block"
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <FileCheck className="w-4 h-4 text-amber-600 shrink-0" />
+                      <div>
+                        <div className="text-xs font-bold text-slate-800">
+                          Согласие на обработку данных
+                        </div>
+                        <div className="text-[10px] text-gray-500">
+                          В соответствии с 152-ФЗ
+                        </div>
+                      </div>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-gray-400" />
+                  </a>
+
+                  <a
+                    href="/photo"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full p-3 bg-slate-50 hover:bg-slate-100 border border-gray-200 rounded-xl flex items-center justify-between transition text-left block"
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <FileCheck className="w-4 h-4 text-purple-600 shrink-0" />
+                      <div>
+                        <div className="text-xs font-bold text-slate-800">
+                          Согласие на фото/видеосъемку
+                        </div>
+                        <div className="text-[10px] text-gray-500">
+                          Материалы с тренировок и турниров
+                        </div>
+                      </div>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-gray-400" />
+                  </a>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* 9. OFFER AGREEMENT TAB */}
+          {activeTab === "parent_offer" && (
+            <motion.div
+              key="parent_offer"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="space-y-6"
+            >
+              <OfferAgreement onBack={() => setActiveTab("parent_home")} />
             </motion.div>
           )}
         </AnimatePresence>

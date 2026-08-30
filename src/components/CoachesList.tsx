@@ -25,6 +25,7 @@ import {
   Edit2,
   Save,
   MessageSquare,
+  Upload,
 } from "lucide-react";
 
 import { compressImage } from "../utils/image";
@@ -997,8 +998,9 @@ export const CoachesList: React.FC = () => {
 
                   <div className="flex-1 space-y-2">
                     <div>
-                      <label className="inline-flex items-center px-2.5 py-1.5 bg-white border border-slate-200 hover:border-slate-300 rounded-lg text-[10px] font-bold text-slate-700 cursor-pointer shadow-xs hover:bg-slate-50 transition">
-                        <span>📁 Загрузить файл с ПК</span>
+                      <label className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 bg-white border border-slate-200 hover:border-slate-300 rounded-lg text-[10px] font-bold text-slate-700 cursor-pointer shadow-xs hover:bg-slate-50 transition">
+                        <Upload className="w-3.5 h-3.5 text-slate-600" />
+                        <span>Загрузить файл с ПК</span>
                         <input
                           type="file"
                           accept="image/*"
@@ -1339,8 +1341,9 @@ export const CoachesList: React.FC = () => {
 
                   <div className="flex-1 space-y-2">
                     <div>
-                      <label className="inline-flex items-center px-2.5 py-1.5 bg-white border border-slate-200 hover:border-slate-300 rounded-lg text-[10px] font-bold text-slate-700 cursor-pointer shadow-xs hover:bg-slate-50 transition">
-                        <span>📁 Изменить файл с ПК</span>
+                      <label className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 bg-white border border-slate-200 hover:border-slate-300 rounded-lg text-[10px] font-bold text-slate-700 cursor-pointer shadow-xs hover:bg-slate-50 transition">
+                        <Upload className="w-3.5 h-3.5 text-slate-600" />
+                        <span>Изменить файл с ПК</span>
                         <input
                           type="file"
                           accept="image/*"

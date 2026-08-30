@@ -10,6 +10,7 @@ import {
   Sliders,
   Settings2,
   AlertCircle,
+  Link2,
 } from "lucide-react";
 import { ScheduleCalendar } from "./ScheduleCalendar";
 
@@ -55,13 +56,14 @@ export const GoogleCalendarSync: React.FC = () => {
         <div className="flex space-x-2 select-none self-start sm:self-auto">
           <button
             onClick={() => setActiveSubTab("calendar")}
-            className={`px-4 py-2.5 text-xs font-extrabold uppercase tracking-wider rounded-t-xl transition border-b-2 font-sans ${
+            className={`px-4 py-2.5 text-xs font-extrabold uppercase tracking-wider rounded-t-xl transition border-b-2 font-sans flex items-center gap-1.5 ${
               activeSubTab === "calendar"
                 ? "border-red-600 text-red-650 bg-red-50/20"
                 : "border-transparent text-gray-500 hover:text-gray-900 hover:bg-slate-50"
             }`}
           >
-            📅 Расписание занятий
+            <Calendar className="w-3.5 h-3.5" />
+            <span>Расписание занятий</span>
           </button>
 
           <button
@@ -72,7 +74,8 @@ export const GoogleCalendarSync: React.FC = () => {
                 : "border-transparent text-gray-500 hover:text-gray-900 hover:bg-slate-50"
             }`}
           >
-            <span>🔗 Настройки Google Sync</span>
+            <Link2 className="w-3.5 h-3.5" />
+            <span>Настройки Google Sync</span>
             {calendarSyncEnabled && (
               <span className="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></span>
             )}

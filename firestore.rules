@@ -187,6 +187,10 @@ service cloud.firestore {
       allow read, write: if isSignedIn();
     }
 
+    match /progress_reports/{reportId} {
+      allow read, write: if isSignedIn();
+    }
+
     match /cancelled_sessions/{sessionId} {
       allow read, write: if isSignedIn();
     }

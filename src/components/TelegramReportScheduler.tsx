@@ -175,22 +175,22 @@ export const TelegramReportScheduler: React.FC = () => {
       })
       .filter(Boolean) as any[];
 
-    let text = `📊 <b>НЕДЕЛЬНЫЙ ОТЧЕТ</b>\n\n`;
+    let text = `<b>НЕДЕЛЬНЫЙ ОТЧЕТ</b>\n\n`;
     text += `Период: ${getWeekRangeStr()}\n\n`;
-    text += `👩💼 <b>МЕНЕДЖЕР</b>\n`;
+    text += `<b>МЕНЕДЖЕР</b>\n`;
     text += `Продления: ${renewals}\n`;
     text += `Новые игроки: ${newPlayers}\n`;
     text += `Форма: ${formSales}\n`;
     text += `Страховка: ${insuranceSales}\n\n`;
 
-    text += `👟 <b>ТРЕНЕРЫ</b>\n`;
+    text += `<b>ТРЕНЕРЫ</b>\n`;
     coachesStats.forEach((c) => {
       text += `${c.name}: ${c.sessions} тренировок\n`;
     });
     if (coachesStats.length === 0) text += `Нет тренировок за период\n`;
     text += `\n`;
 
-    text += `👥 <b>ГРУППЫ</b>\n`;
+    text += `<b>ГРУППЫ</b>\n`;
     groupsStats.forEach((g) => {
       text += `${g.name}\n`;
       text += `Тренировок: ${g.sessions}\n`;
@@ -224,7 +224,7 @@ export const TelegramReportScheduler: React.FC = () => {
 
     const conversion = total > 0 ? Math.round((closed / total) * 100) : 0;
 
-    let text = `📊 <b>ОТЧЕТ МЕНЕДЖЕРА</b>\n\n`;
+    let text = `<b>ОТЧЕТ МЕНЕДЖЕРА</b>\n\n`;
     text += `Всего задач: ${total}\n`;
     text += `Новые: ${newTasks}\n`;
     text += `В работе: ${inProgress}\n`;
@@ -295,7 +295,7 @@ export const TelegramReportScheduler: React.FC = () => {
     const periodStr = `${startDate.toLocaleDateString("ru-RU")} — ${endDate.toLocaleDateString("ru-RU")}`;
     const monthStr = `${year}-${String(month + 1).padStart(2, "0")}`;
 
-    let text = `💰 <b>ЗАРПЛАТА ТРЕНЕРОВ И АССИСТЕНТОВ</b>\n\n`;
+    let text = `<b>ЗАРПЛАТА ТРЕНЕРОВ И АССИСТЕНТОВ</b>\n\n`;
     text += `Период: ${periodStr}\n`;
     text += `Месяц: ${monthStr}\n\n`;
 

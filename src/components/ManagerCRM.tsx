@@ -42,6 +42,7 @@ import { compressImage } from "../utils/image";
 import { ConfirmModal } from "./ConfirmModal";
 import { BirthdaysBanner } from "./BirthdaysBanner";
 import { ProcessPaymentModal } from "./ProcessPaymentModal";
+import { AIProgressReportCard } from "./AIProgressReportCard";
 
 const formatBirthDate = (dateString?: string, fallbackYear?: number) => {
   if (!dateString) return fallbackYear ? `${fallbackYear} г.р.` : "";
@@ -288,6 +289,8 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
   const [editStatus, setEditStatus] = useState<ClientStatus>("active");
   const [editAbonement, setEditAbonement] =
     useState<Client["abonement"]>("none");
+  const [editAbonementStatus, setEditAbonementStatus] =
+    useState<Client["abonementStatus"]>("Оплачено");
   const [editAbonementSessions, setEditAbonementSessions] = useState(0);
   const [editAvatarUrl, setEditAvatarUrl] = useState("");
 
@@ -405,6 +408,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
     setEditEmail(client.parentEmail || "");
     setEditStatus(client.status || "active");
     setEditAbonement(client.abonement || "none");
+    setEditAbonementStatus(client.abonementStatus || "Оплачено");
     setEditAbonementSessions(client.abonementSessionsLeft || 0);
     setEditAvatarUrl(client.avatarUrl || "");
     setEditGroup(client.groupName || "");
@@ -436,6 +440,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
         parentEmail: editEmail,
         status: editStatus,
         abonement: editAbonement,
+        abonementStatus: editAbonementStatus,
         abonementSessionsLeft: editAbonementSessions,
         avatarUrl: editAvatarUrl,
         relationshipRisk: editRelationshipRisk,
@@ -471,6 +476,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
         parentEmail: editEmail,
         status: editStatus,
         abonement: editAbonement,
+        abonementStatus: editAbonementStatus,
         abonementSessionsLeft: editAbonementSessions,
         avatarUrl: editAvatarUrl,
         relationshipNotes: editRelationshipNotes,
@@ -498,21 +504,21 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
   };
 
   const PRESET_AVATARS = [
-    { emoji: "⚽", bg: "bg-emerald-500 text-white" },
-    { emoji: "👟", bg: "bg-amber-500 text-white" },
-    { emoji: "🏆", bg: "bg-blue-500 text-white" },
-    { emoji: "⭐", bg: "bg-indigo-500 text-white" },
-    { emoji: "🔥", bg: "bg-rose-500 text-white" },
-    { emoji: "🦁", bg: "bg-teal-500 text-white" },
+    { label: "10", bg: "bg-emerald-500 text-white" },
+    { label: "7", bg: "bg-amber-500 text-white" },
+    { label: "PRO", bg: "bg-blue-500 text-white" },
+    { label: "AM", bg: "bg-indigo-500 text-white" },
+    { label: "№1", bg: "bg-rose-500 text-white" },
+    { label: "FK", bg: "bg-teal-500 text-white" },
   ];
 
-  // Helper to construct SVG/base64 avatar from emoji
+  // Helper to construct SVG/base64 avatar from label
   const selectPresetAvatar = (preset: (typeof PRESET_AVATARS)[0]) => {
     // Generate an SVG data url with the preset
     const svgCode = `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
         <rect width="100%" height="100%" fill="${preset.bg.includes("emerald") ? "#10b981" : preset.bg.includes("amber") ? "#f59e0b" : preset.bg.includes("blue") ? "#3b82f6" : preset.bg.includes("indigo") ? "#6366f1" : preset.bg.includes("rose") ? "#f43f5e" : "#14b8a6"}"/>
-        <text x="50%" y="65%" font-size="50" text-anchor="middle" dominant-baseline="middle">${preset.emoji}</text>
+        <text x="50%" y="62%" font-size="36" font-weight="900" font-family="sans-serif" fill="white" text-anchor="middle" dominant-baseline="middle">${preset.label}</text>
       </svg>
     `;
     const base64Svg = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgCode)))}`;
@@ -892,7 +898,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
       c.status === "active" &&
       c.abonement &&
       c.abonement !== "none" &&
-      (c.abonementSessionsLeft <= 2 || c.abonementStatus === "Ожидает оплаты"),
+      (c.abonementSessionsLeft <= 3 || c.abonementStatus === "Ожидает оплаты" || c.abonementStatus === "unpaid"),
   ).length;
 
   return (
@@ -1205,10 +1211,11 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                           "/register\nОтправьте её родителям для создания профиля.",
                       );
                     }}
-                    className="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-3 md:px-5 py-2 rounded-full text-xs font-bold transition-all shadow-md shadow-emerald-200 whitespace-nowrap text-center justify-center"
+                    className="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-3 md:px-5 py-2 rounded-full text-xs font-bold transition-all shadow-md shadow-emerald-200 whitespace-nowrap text-center justify-center inline-flex items-center space-x-1.5"
                     title="Скопировать ссылку-приглашение для родителей"
                   >
-                    🔗 Пригласить
+                    <Link className="w-3.5 h-3.5" />
+                    <span>Пригласить</span>
                   </button>
                 </div>
                 <div className="relative sm:ml-auto xl:ml-2 flex justify-end w-full sm:w-auto mt-2 sm:mt-0">
@@ -1866,14 +1873,17 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                                     ✓ Оплачено
                                   </span>
-                                ) : (client.attendance && client.attendance.some((a) => a.status === "present")) ||
-                                  (client.notes && client.notes.includes("отработано")) ? (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-200">
-                                    Не оплачено (после пробной)
+                                ) : client.status === "trial" ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                                    {client.abonementStatus || "Не оплачено"}
+                                  </span>
+                                ) : client.abonementStatus === "Ожидает оплаты" ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                    Ожидает оплаты
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-200">
-                                    Не оплачено (без пробной)
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                                    {client.abonementStatus || "Не оплачено"}
                                   </span>
                                 )}
                                 <div className="text-[9px] text-gray-400 mt-0.5">
@@ -1985,6 +1995,9 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                     setEditStatus(client.status || "active");
                                     setEditAbonement(
                                       client.abonement || "none",
+                                    );
+                                    setEditAbonementStatus(
+                                      client.abonementStatus || "Оплачено",
                                     );
                                     setEditAbonementSessions(
                                       client.abonementSessionsLeft || 0,
@@ -2192,12 +2205,12 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                   key={i}
                                   type="button"
                                   onClick={() => {
-                                    const svgCode = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><rect width="100%" height="100%" fill="${ps.bg.includes("emerald") ? "%2310b981" : ps.bg.includes("amber") ? "%23f59e0b" : ps.bg.includes("blue") ? "%233b82f6" : ps.bg.includes("indigo") ? "%236366f1" : ps.bg.includes("rose") ? "%23f43f5e" : "%2314b8a6"}"/><text x="50%" y="65%" font-size="50" text-anchor="middle" dominant-baseline="middle">${ps.emoji}</text></svg>`;
+                                    const svgCode = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><rect width="100%" height="100%" fill="${ps.bg.includes("emerald") ? "%2310b981" : ps.bg.includes("amber") ? "%23f59e0b" : ps.bg.includes("blue") ? "%233b82f6" : ps.bg.includes("indigo") ? "%236366f1" : ps.bg.includes("rose") ? "%23f43f5e" : "%2314b8a6"}"/><text x="50%" y="62%" font-size="36" font-weight="900" font-family="sans-serif" fill="white" text-anchor="middle" dominant-baseline="middle">${ps.label}</text></svg>`;
                                     setEditAvatarUrl(svgCode);
                                   }}
-                                  className={`h-6 w-6 rounded-full ${ps.bg} border flex items-center justify-center text-xs hover:scale-105 active:scale-95 transition shadow-sm`}
+                                  className={`h-6 w-6 rounded-full ${ps.bg} border flex items-center justify-center text-[10px] font-black hover:scale-105 active:scale-95 transition shadow-sm`}
                                 >
-                                  {ps.emoji}
+                                  {ps.label}
                                 </button>
                               ))}
                             </div>
@@ -2374,7 +2387,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                               onChange={(e: any) =>
                                 setEditAbonement(e.target.value)
                               }
-                              className="w-full p-2 bg-slate-50 border rounded-lg outline-none text-[11px] font-semibold text-slate-705 appearance-none cursor-pointer"
+                              className="w-full p-2 bg-slate-50 border rounded-lg outline-none text-[11px] font-semibold text-slate-700 appearance-none cursor-pointer"
                               style={{
                                 backgroundImage:
                                   "url(\"data:image/svg+xml,%3Csvg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")",
@@ -2383,28 +2396,53 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                               }}
                             >
                               <option value="none">Нет пакета</option>
-                              <option value="basic">Базовый</option>
-                              <option value="standard">Стандарт</option>
-                              <option value="premium">Премиум</option>
+                              <option value="12_sessions">12 занятий</option>
+                              <option value="8_sessions">8 занятий</option>
+                              <option value="4_sessions">4 занятия</option>
+                              <option value="1_session">Разовое</option>
                             </select>
                           </div>
                           <div className="space-y-1">
                             <label className="text-[9px] font-extrabold uppercase text-gray-400 tracking-wider">
-                              Баланс занятий
+                              Оплата
                             </label>
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              value={editAbonementSessions}
-                              onChange={(e) =>
-                                setEditAbonementSessions(
-                                  parseInt(e.target.value) || 0,
-                                )
+                            <select
+                              value={editAbonementStatus}
+                              onChange={(e: any) =>
+                                setEditAbonementStatus(e.target.value)
                               }
-                              className="w-full p-2 bg-slate-50 rounded-lg outline-none focus:bg-white text-[11px] font-semibold text-slate-900 border"
-                            />
+                              className="w-full p-2 bg-slate-50 border rounded-lg outline-none text-[11px] font-semibold text-slate-700 appearance-none cursor-pointer"
+                              style={{
+                                backgroundImage:
+                                  "url(\"data:image/svg+xml,%3Csvg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")",
+                                backgroundRepeat: "no-repeat",
+                                backgroundPosition: "right 8px center",
+                              }}
+                            >
+                              <option value="Оплачено">Оплачено</option>
+                              <option value="Ожидает оплаты">Ожидает оплаты</option>
+                              <option value="Не оплачено">Не оплачено</option>
+                              <option value="Нет абонемента">Нет абонемента</option>
+                            </select>
                           </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-extrabold uppercase text-gray-400 tracking-wider">
+                            Баланс занятий (остаток)
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={editAbonementSessions}
+                            onChange={(e) =>
+                              setEditAbonementSessions(
+                                parseInt(e.target.value) || 0,
+                              )
+                            }
+                            className="w-full p-2 bg-slate-50 rounded-lg outline-none focus:bg-white text-[11px] font-semibold text-slate-900 border"
+                          />
                         </div>
 
                         {/* Risk Management dropdowns in sidebar */}
@@ -2543,9 +2581,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                 <Phone className="w-3.5 h-3.5" />
                               </button>
                               <button className="text-blue-500 hover:text-blue-600 transition-colors">
-                                <span className="font-bold cursor-pointer text-xs">
-                                  💬
-                                </span>
+                                <MessageSquare className="w-3.5 h-3.5" />
                               </button>
                               <button
                                 onClick={() => {
@@ -2625,6 +2661,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                         <div className="flex space-x-4 border-b border-gray-100 overflow-x-auto pb-[1px]">
                           {[
                             { id: "info", label: "Информация" },
+                            { id: "ai_reports", label: "ИИ-Отчет (3 мес)" },
                             { id: "abos", label: "Абонементы" },
                             { id: "visits", label: "Посещения" },
                             { id: "payments", label: "Платежи" },
@@ -2675,17 +2712,23 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                 </span>
                               </div>
                               <div className="flex justify-between items-start pt-1">
-                                <span className="text-gray-500 font-medium w-1/2 flex items-center mt-0.5">
+                                <span className="text-gray-500 font-medium w-1/3 flex items-center mt-0.5">
                                   <BookOpen className="w-3.5 h-3.5 mr-2 text-gray-400" />{" "}
                                   Абонемент
                                 </span>
-                                <div className="flex-1 ml-4 text-right">
+                                <div className="flex-1 ml-2 text-right">
                                   <span className="font-bold text-gray-900 block">
                                     {selectedClient.abonement === "none"
                                       ? "Нет пакета"
-                                      : selectedClient.abonement === "basic"
-                                        ? "Базовый"
-                                        : "Стандарт"}
+                                      : selectedClient.abonement === "12_sessions"
+                                        ? "12 занятий"
+                                        : selectedClient.abonement === "8_sessions"
+                                          ? "8 занятий"
+                                          : selectedClient.abonement === "4_sessions"
+                                            ? "4 занятия"
+                                            : selectedClient.abonement === "1_session"
+                                              ? "Разовое"
+                                              : selectedClient.abonement}
                                   </span>
                                   <span className="text-[9px] text-gray-400 font-medium">
                                     {selectedClient.abonementExpirationDate
@@ -2695,17 +2738,42 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                 </div>
                               </div>
                               <div className="flex justify-between items-center pt-2">
-                                <span className="text-gray-500 font-medium w-1/2 flex items-center">
+                                <span className="text-gray-500 font-medium w-1/3 flex items-center">
                                   <span className="w-3.5 mr-2 flex justify-center text-gray-400 font-bold">
                                     $
                                   </span>{" "}
                                   Оплата
                                 </span>
-                                <div className="flex flex-1 justify-end items-center ml-4">
-                                  <span className="font-bold text-emerald-500">
-                                    {selectedClient.abonementStatus ||
-                                      "Не оплачено"}
+                                <div className="flex flex-1 justify-end items-center ml-2 gap-2">
+                                  <span
+                                    className={`font-bold px-2 py-0.5 rounded text-[10px] ${
+                                      selectedClient.abonementStatus === "Оплачено"
+                                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                        : selectedClient.abonementStatus === "Ожидает оплаты"
+                                          ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                          : "bg-rose-50 text-rose-700 border border-rose-200"
+                                    }`}
+                                  >
+                                    {selectedClient.abonementStatus || "Не оплачено"}
                                   </span>
+                                  {selectedClient.abonementStatus !== "Оплачено" && (
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        try {
+                                          await updateClient(selectedClient.id, {
+                                            abonementStatus: "Оплачено",
+                                          });
+                                        } catch (e: any) {
+                                          alert("Ошибка: " + e.message);
+                                        }
+                                      }}
+                                      className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold shadow-xs transition-colors"
+                                      title="Отметить абонемент как оплаченный"
+                                    >
+                                      ✓ Оплачено
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                               <div className="flex justify-between items-center">
@@ -2735,6 +2803,15 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                   )}
                                 </div>
                               </div>
+                            </div>
+                          )}
+
+                          {clientDetailTab === "ai_reports" && (
+                            <div className="space-y-4">
+                              <AIProgressReportCard
+                                client={selectedClient}
+                                canGenerate={true}
+                              />
                             </div>
                           )}
 
@@ -3002,7 +3079,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                 currentRole === "manager") && (
                                 <div className="border-t pt-3 mt-2 space-y-3">
                                   <div className="flex items-center space-x-1.5">
-                                    <span className="text-lg">✍️</span>
+                                    <Edit2 className="w-3.5 h-3.5 text-slate-600" />
                                     <h4 className="text-xs font-black uppercase text-slate-700 tracking-wider">
                                       Внести платёж вручную{" "}
                                       <span className="text-[10px] text-red-600 lowercase font-medium">
@@ -3016,13 +3093,15 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                     className="space-y-3 p-3 bg-slate-50 border border-slate-150 rounded-xl"
                                   >
                                     {manualPaymentSuccess && (
-                                      <div className="p-2 text-[10px] bg-emerald-50 border border-emerald-100 text-emerald-800 rounded-lg font-medium">
-                                        ✅ {manualPaymentSuccess}
+                                      <div className="p-2 text-[10px] bg-emerald-50 border border-emerald-100 text-emerald-800 rounded-lg font-medium flex items-center space-x-1.5">
+                                        <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+                                        <span>{manualPaymentSuccess}</span>
                                       </div>
                                     )}
                                     {manualPaymentError && (
-                                      <div className="p-2 text-[10px] bg-red-50 border border-red-100 text-red-800 rounded-lg font-medium">
-                                        ❌ {manualPaymentError}
+                                      <div className="p-2 text-[10px] bg-red-50 border border-red-100 text-red-800 rounded-lg font-medium flex items-center space-x-1.5">
+                                        <X className="w-3 h-3 text-red-600 shrink-0" />
+                                        <span>{manualPaymentError}</span>
                                       </div>
                                     )}
 
@@ -4070,7 +4149,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                 {/* Preset circles */}
                 <div className="space-y-1.5 pt-1.5 border-t border-slate-200/60 text-left">
                   <span className="block text-[10px] font-semibold text-slate-400">
-                    Или выберите быстрый футбольный стикер:
+                    Или выберите быстрый аватар:
                   </span>
                   <div className="flex flex-wrap gap-2">
                     {PRESET_AVATARS.map((ps, i) => (
@@ -4078,10 +4157,10 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                         key={i}
                         type="button"
                         onClick={() => selectPresetAvatar(ps)}
-                        className={`h-8 w-8 rounded-full ${ps.bg} border flex items-center justify-center text-base hover:scale-105 active:scale-95 transition shadow-sm`}
+                        className={`h-8 w-8 rounded-full ${ps.bg} border flex items-center justify-center text-xs font-black hover:scale-105 active:scale-95 transition shadow-sm`}
                         title="Нажмите, чтобы применить"
                       >
-                        {ps.emoji}
+                        {ps.label}
                       </button>
                     ))}
                   </div>
@@ -4216,13 +4295,13 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
               </div>
 
               {/* Abonement details */}
-              <div className="grid grid-cols-2 gap-3.5 pb-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 pb-2">
                 <div className="space-y-1">
-                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">
-                    Пакет занятий (абонемент)
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider text-[11px]">
+                    Пакет занятий
                   </label>
                   <select
-                    className="w-full p-2.5 bg-slate-50 border rounded-xl focus:bg-white outline-none"
+                    className="w-full p-2.5 bg-slate-50 border rounded-xl focus:bg-white outline-none text-xs"
                     value={editAbonement}
                     onChange={(e: any) => setEditAbonement(e.target.value)}
                   >
@@ -4230,18 +4309,33 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                     <option value="12_sessions">Пакет на 12 тренировок</option>
                     <option value="8_sessions">Пакет на 8 тренировок</option>
                     <option value="4_sessions">Пакет на 4 тренировки</option>
-                    <option value="1_session">Разовое пробное занятие</option>
+                    <option value="1_session">Разовое занятие</option>
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="block text-gray-500 font-semibold uppercase tracking-wider">
-                    Баланс занятий (остаток)
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider text-[11px]">
+                    Статус оплаты
+                  </label>
+                  <select
+                    className="w-full p-2.5 bg-slate-50 border rounded-xl focus:bg-white outline-none text-xs font-semibold"
+                    value={editAbonementStatus}
+                    onChange={(e: any) => setEditAbonementStatus(e.target.value)}
+                  >
+                    <option value="Оплачено">Оплачено</option>
+                    <option value="Ожидает оплаты">Ожидает оплаты</option>
+                    <option value="Не оплачено">Не оплачено</option>
+                    <option value="Нет абонемента">Нет абонемента</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-gray-500 font-semibold uppercase tracking-wider text-[11px]">
+                    Остаток занятий
                   </label>
                   <input
                     type="number"
                     min="0"
                     max="100"
-                    className="w-full p-2.5 bg-slate-50 font-mono border rounded-xl focus:bg-white focus:ring-1 focus:ring-emerald-500 outline-none"
+                    className="w-full p-2.5 bg-slate-50 font-mono border rounded-xl focus:bg-white focus:ring-1 focus:ring-emerald-500 outline-none text-xs"
                     value={editAbonementSessions}
                     onChange={(e) =>
                       setEditAbonementSessions(parseInt(e.target.value) || 0)
@@ -4756,7 +4850,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
           }
         }}
         title="Удалить ученика?"
-        message={`⚠️ ВНИМАНИЕ: Вы действительно хотите окончательно УДАЛИТЬ ученика "${deleteClientModal?.clientName || ""}" из базы данных школы? Это действие необратимо и удалит всю связанную историю, абонементы и платежи.`}
+        message={`ВНИМАНИЕ: Вы действительно хотите окончательно УДАЛИТЬ ученика "${deleteClientModal?.clientName || ""}" из базы данных школы? Это действие необратимо и удалит всю связанную историю, абонементы и платежи.`}
         confirmText="Удалить ученика"
       />
 

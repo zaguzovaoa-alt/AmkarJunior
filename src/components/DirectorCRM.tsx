@@ -348,6 +348,9 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
   const [tempChildrenGoal, setTempChildrenGoal] = useState(targetChildrenGoal);
   const [tempRevenueGoal, setTempRevenueGoal] = useState(targetRevenueGoal);
 
+  // Expiring Subscriptions Filter State (All, 3, 2, 1 sessions left)
+  const [directorExpiringFilter, setDirectorExpiringFilter] = useState<"all" | 3 | 2 | 1 | 0>("all");
+
   // New Cancel Form State
   const [newCancelGroup, setNewCancelGroup] = useState("");
   const [newCancelDate, setNewCancelDate] = useState(todayISO);
@@ -446,15 +449,40 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
     return monthlySalaryRecords.reduce((sum, f) => sum + Number(f.amount || 0), 0);
   }, [monthlySalaryRecords]);
 
-  // Expiring Subscriptions (1 or 2 sessions left)
+  // Expiring Subscriptions (1, 2, 3 sessions left or overdue/0)
   const expiringSubscriptionClients = useMemo(() => {
     return clients.filter(
       (c) =>
         c.status === "active" &&
+        c.abonement &&
+        c.abonement !== "none" &&
         typeof c.abonementSessionsLeft === "number" &&
-        c.abonementSessionsLeft <= 2
+        c.abonementSessionsLeft <= 3
     );
   }, [clients]);
+
+  const expiringCount3 = useMemo(
+    () => expiringSubscriptionClients.filter((c) => c.abonementSessionsLeft === 3).length,
+    [expiringSubscriptionClients]
+  );
+  const expiringCount2 = useMemo(
+    () => expiringSubscriptionClients.filter((c) => c.abonementSessionsLeft === 2).length,
+    [expiringSubscriptionClients]
+  );
+  const expiringCount1 = useMemo(
+    () => expiringSubscriptionClients.filter((c) => c.abonementSessionsLeft === 1).length,
+    [expiringSubscriptionClients]
+  );
+  const expiringCount0 = useMemo(
+    () =>
+      expiringSubscriptionClients.filter(
+        (c) =>
+          c.abonementSessionsLeft === 0 ||
+          c.abonementStatus === "Ожидает оплаты" ||
+          c.abonementStatus === "unpaid"
+      ).length,
+    [expiringSubscriptionClients]
+  );
 
   // Scheduled sessions without trainer report
   const missingTrainerReports = useMemo(() => {
@@ -1663,7 +1691,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
         applyMappings(grid, mappings, false, "clients");
         setErrorMessage(null);
         setSuccessMessage(
-          `✨ Формат карточек AkratoPRIME успешно распознан и разобран! Импортировано учеников: ${blocks.length}.`,
+          `Формат карточек AkratoPRIME успешно распознан и разобран! Импортировано учеников: ${blocks.length}.`,
         );
         setTimeout(() => setSuccessMessage(null), 5000);
         return;
@@ -1716,7 +1744,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
     };
 
     const confirm1 = window.confirm(
-      `⚠️ ВНИМАНИЕ: Вы действительно хотите ПОЛНОСТЬЮ СТЕРЕТЬ все существующие записи в CRM по разделу "${targetNames[importType]}"?`,
+      `ВНИМАНИЕ: Вы действительно хотите ПОЛНОСТЬЮ СТЕРЕТЬ все существующие записи в CRM по разделу "${targetNames[importType]}"?`,
     );
     if (!confirm1) return;
 
@@ -1891,7 +1919,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                       Новые заявки
                     </span>
                     <span className="px-2 py-0.5 bg-amber-100/80 text-amber-800 font-bold text-[10.5px] rounded-full shrink-0 whitespace-nowrap">
-                      {todayLeadsCount > 0 ? `${todayLeadsCount} сегодня` : "3 сегодня"}
+                      {todayLeadsCount} сегодня
                     </span>
                   </div>
                   <div className="text-xl sm:text-2xl font-black text-amber-700 mt-1 tracking-tight">
@@ -1952,7 +1980,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                 <div>
                   <div className="flex items-start justify-between gap-1.5 mb-1.5 flex-wrap">
                     <span className="text-xs font-bold text-amber-900 uppercase tracking-wide">
-                      Продление
+                      Заканчивается абонемент (2-3 зан.)
                     </span>
                     <span className="px-2 py-0.5 bg-amber-50 text-amber-700 font-bold text-[10.5px] rounded-full shrink-0 whitespace-nowrap">
                       {expiringSubscriptionClients.length} чел.
@@ -1960,6 +1988,17 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                   </div>
                   <div className="text-xl sm:text-2xl font-black text-amber-800 mt-1 tracking-tight">
                     {expiringSubscriptionClients.length}
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-2 flex-wrap text-[10.5px]">
+                    <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 font-bold rounded border border-blue-100">
+                      3 зан: {expiringCount3}
+                    </span>
+                    <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 font-bold rounded border border-amber-100">
+                      2 зан: {expiringCount2}
+                    </span>
+                    <span className="px-1.5 py-0.5 bg-rose-50 text-rose-700 font-bold rounded border border-rose-100">
+                      1 зан: {expiringCount1}
+                    </span>
                   </div>
                 </div>
                 <MiniSparklineChart
@@ -2161,7 +2200,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                       Новые заявки
                     </span>
                     <span className="px-2 py-0.5 bg-amber-50 text-amber-700 font-bold text-[10.5px] rounded-full shrink-0 whitespace-nowrap">
-                      {todayLeadsCount > 0 ? `${todayLeadsCount} сегодня` : "3 сегодня"}
+                      {todayLeadsCount} сегодня
                     </span>
                   </div>
                   <div className="text-xl sm:text-2xl font-black text-slate-900 mt-1 tracking-tight">
@@ -2246,41 +2285,144 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Card 1: Заканчивается абонемент */}
-              <div className="bg-white p-4 rounded-xl border border-amber-200/80 shadow-2xs space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-extrabold text-amber-900 flex items-center gap-1.5">
-                    <Clock className="w-4 h-4 text-amber-600" />
-                    Заканчивается абонемент (1-2 зан.)
-                  </span>
-                  <span className="bg-amber-100 text-amber-800 font-bold text-xs px-2 py-0.5 rounded-full">
-                    {expiringSubscriptionClients.length}
-                  </span>
-                </div>
-                {expiringSubscriptionClients.length === 0 ? (
-                  <p className="text-[11px] text-gray-400 italic py-2">
-                    Нет клиентов с истекающим абонементом
-                  </p>
-                ) : (
-                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                    {expiringSubscriptionClients.map((c) => (
-                      <div
-                        key={c.id}
-                        className="p-2 bg-slate-50 border border-slate-100 rounded-lg flex items-center justify-between text-xs"
-                      >
-                        <div>
-                          <div className="font-bold text-slate-800">
-                            {c.childSurname} {c.childName}
-                          </div>
-                          <div className="text-[10px] text-slate-500">
-                            {c.groupName || "Без группы"} • {c.parentPhone}
-                          </div>
-                        </div>
-                        <span className="bg-amber-100 text-amber-900 font-black text-[10px] px-1.5 py-0.5 rounded">
-                          {c.abonementSessionsLeft} зан.
-                        </span>
-                      </div>
-                    ))}
+              <div className="bg-white p-4 rounded-xl border border-amber-200/80 shadow-2xs space-y-2.5 flex flex-col justify-between">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-extrabold text-amber-900 flex items-center gap-1.5">
+                      <Clock className="w-4 h-4 text-amber-600" />
+                      Заканчивается абонемент (2-3 зан.)
+                    </span>
+                    <span className="bg-amber-100 text-amber-800 font-bold text-xs px-2 py-0.5 rounded-full">
+                      {expiringSubscriptionClients.length}
+                    </span>
                   </div>
+
+                  {/* Filter pills: 3, 2, 1 sessions */}
+                  <div className="flex items-center gap-1 flex-wrap pt-0.5 pb-1">
+                    <button
+                      type="button"
+                      onClick={() => setDirectorExpiringFilter("all")}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition ${
+                        directorExpiringFilter === "all"
+                          ? "bg-amber-600 text-white shadow-xs"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      Все ({expiringSubscriptionClients.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDirectorExpiringFilter(3)}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition ${
+                        directorExpiringFilter === 3
+                          ? "bg-blue-600 text-white shadow-xs"
+                          : "bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200/50"
+                      }`}
+                    >
+                      3 зан. ({expiringCount3})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDirectorExpiringFilter(2)}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition ${
+                        directorExpiringFilter === 2
+                          ? "bg-amber-600 text-white shadow-xs"
+                          : "bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200/50"
+                      }`}
+                    >
+                      2 зан. ({expiringCount2})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDirectorExpiringFilter(1)}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition ${
+                        directorExpiringFilter === 1
+                          ? "bg-rose-600 text-white shadow-xs"
+                          : "bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200/50"
+                      }`}
+                    >
+                      1 зан. ({expiringCount1})
+                    </button>
+                    {expiringCount0 > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setDirectorExpiringFilter(0)}
+                        className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition ${
+                          directorExpiringFilter === 0
+                            ? "bg-red-600 text-white shadow-xs"
+                            : "bg-red-50 text-red-700 hover:bg-red-100 border border-red-200/50"
+                        }`}
+                      >
+                        0 зан. ({expiringCount0})
+                      </button>
+                    )}
+                  </div>
+
+                  {expiringSubscriptionClients.length === 0 ? (
+                    <p className="text-[11px] text-gray-400 italic py-2">
+                      Нет клиентов с истекающим абонементом
+                    </p>
+                  ) : (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                      {expiringSubscriptionClients
+                        .filter((c) => {
+                          if (directorExpiringFilter === "all") return true;
+                          if (directorExpiringFilter === 0) {
+                            return (
+                              c.abonementSessionsLeft === 0 ||
+                              c.abonementStatus === "Ожидает оплаты" ||
+                              c.abonementStatus === "unpaid"
+                            );
+                          }
+                          return c.abonementSessionsLeft === directorExpiringFilter;
+                        })
+                        .map((c) => (
+                          <div
+                            key={c.id}
+                            className="p-2 bg-slate-50 hover:bg-amber-50/50 border border-slate-100 rounded-lg flex items-center justify-between text-xs transition"
+                          >
+                            <div className="min-w-0 pr-2">
+                              <div className="font-bold text-slate-800 truncate">
+                                {c.childSurname} {c.childName}
+                              </div>
+                              <div className="text-[10px] text-slate-500 truncate">
+                                {c.groupName || "Без группы"} • {c.parentPhone}
+                              </div>
+                            </div>
+                            <span
+                              className={`font-black text-[10px] px-2 py-0.5 rounded-full shrink-0 border whitespace-nowrap ${
+                                c.abonementSessionsLeft === 3
+                                  ? "bg-blue-50 text-blue-700 border-blue-200"
+                                  : c.abonementSessionsLeft === 2
+                                    ? "bg-amber-50 text-amber-800 border-amber-200"
+                                    : c.abonementSessionsLeft === 1
+                                      ? "bg-rose-50 text-rose-700 border-rose-200 font-extrabold"
+                                      : "bg-red-50 text-red-700 border-red-200"
+                              }`}
+                            >
+                              {c.abonementSessionsLeft === 1
+                                ? "1 занятие (срочно)"
+                                : c.abonementSessionsLeft === 2
+                                  ? "2 занятия"
+                                  : c.abonementSessionsLeft === 3
+                                    ? "3 занятия"
+                                    : "0 зан. (ожидает)"}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+
+                {setActiveTab && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("hq_finances")}
+                    className="w-full text-center text-[11px] font-bold text-amber-800 hover:text-amber-950 py-1.5 bg-amber-50/70 hover:bg-amber-100/70 rounded-lg transition border border-amber-200/40 flex items-center justify-center gap-1 mt-2"
+                  >
+                    <span>Все абонементы на продление</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
                 )}
               </div>
 
@@ -3758,18 +3900,18 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                   {[
                     {
                       id: "clients",
-                      label: "👥 Ученики",
+                      label: "Ученики",
                       count: clients.length,
                     },
-                    { id: "leads", label: "📂 Лиды", count: leads.length },
+                    { id: "leads", label: "Лиды", count: leads.length },
                     {
                       id: "finances",
-                      label: "💳 Финансы",
+                      label: "Финансы",
                       count: finances.length,
                     },
                     {
                       id: "coaches",
-                      label: "📋 Тренеры",
+                      label: "Тренеры",
                       count: coaches?.length || 0,
                     },
                   ].map((sec) => (
@@ -4023,7 +4165,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                             }
                             className="w-full text-[11px] font-bold bg-slate-50 border border-gray-200 rounded p-1.5 focus:ring-1 focus:ring-red-500 text-slate-700"
                           >
-                            <option value="skip">⚠️ Пропустить столбец</option>
+                            <option value="skip">Пропустить столбец</option>
                             {FIELD_DEFINITIONS[importType].map((field) => (
                               <option key={field.key} value={field.key}>
                                 {field.required ? "★ " : ""}

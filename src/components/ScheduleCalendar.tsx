@@ -991,7 +991,7 @@ export const ScheduleCalendar: React.FC<{
                 onChange={(e) => setSelectedGroupId(e.target.value)}
                 className="w-full px-2.5 py-2 pl-7 border border-slate-200 rounded-xl text-xs font-semibold bg-white focus:outline-none focus:border-red-600 appearance-none cursor-pointer"
               >
-                <option value="all">📁 Все футбольные группы</option>
+                <option value="all">Все футбольные группы</option>
                 {groups.map((g) => (
                   <option key={g.id} value={g.id}>
                     {g.name}
@@ -1008,7 +1008,7 @@ export const ScheduleCalendar: React.FC<{
                   onChange={(e) => setSelectedCoachId(e.target.value)}
                   className="w-full px-2.5 py-2 pl-7 border border-slate-200 rounded-xl text-xs font-semibold bg-white focus:outline-none focus:border-red-600 appearance-none cursor-pointer"
                 >
-                  <option value="all">⚽ Все тренеры штаба</option>
+                  <option value="all">Все тренеры штаба</option>
                   {coaches.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -1025,7 +1025,7 @@ export const ScheduleCalendar: React.FC<{
                 onChange={(e) => setSelectedType(e.target.value)}
                 className="w-full px-2.5 py-2 pl-7 border border-slate-200 rounded-xl text-xs font-semibold bg-white focus:outline-none focus:border-red-600 appearance-none cursor-pointer"
               >
-                <option value="all">📝 Все категории событий</option>
+                <option value="all">Все категории событий</option>
                 <option value="regular">Занятия по графику</option>
                 <option value="match">Турниры / Матчи</option>
                 <option value="masterclass">Мастер-Классы</option>

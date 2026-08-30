@@ -361,8 +361,8 @@ export const GroupsModule: React.FC = () => {
             </div>
             <div className="text-[10px] text-orange-600 font-semibold mt-1">
               {totalUnassignedCount > 0
-                ? "Требуется распределить ⚠️"
-                : "Все дети в группах! ✅"}
+                ? "Требуется распределить"
+                : "Все дети в группах"}
             </div>
           </div>
           <div className="bg-white p-4.5 rounded-2xl border border-gray-100 shadow-sm text-left">

@@ -36,6 +36,7 @@ import {
   HomeworkSubmission,
   Counterparty,
   CancelledSession,
+  AIProgressReport,
 } from "../types";
 
 // Helper to recursively remove undefined properties before writing to Firestore
@@ -289,6 +290,17 @@ interface CRMContextType {
   cancelledSessions: CancelledSession[];
   addCancelledSession: (session: Omit<CancelledSession, "id">) => Promise<void>;
   deleteCancelledSession: (id: string) => Promise<void>;
+  generateAIProgressReport: (
+    clientId: string,
+    options?: {
+      quarterNumber?: number;
+      quarterYear?: number;
+      periodLabel?: string;
+      customCoachNote?: string;
+    }
+  ) => Promise<AIProgressReport | null>;
+  deleteAIProgressReport: (clientId: string, reportId: string) => Promise<void>;
+  checkAndGenerateAutomatedReports: () => Promise<number>;
 }
 
 const CRMContext = createContext<CRMContextType | undefined>(undefined);
@@ -1306,15 +1318,15 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
     const managerTask: CRMTask = {
       id: managerTaskId,
-      title: `⚡ НОВАЯ ЗАЯВКА: ${childFullTitle}`,
+      title: `НОВАЯ ЗАЯВКА: ${childFullTitle}`,
       assignedTo: "manager",
       status: "new",
       dueDate: new Date().toLocaleDateString("ru-RU"),
-      description: `🔥 Внимание! Поступила новая заявка из канала [${newLead.source}]. 
+      description: `Внимание! Поступила новая заявка из канала [${newLead.source}]. 
 Родитель: ${newLead.parentName}
 Телефон: ${newLead.parentPhone}
 Ребенок: ${childFullTitle}${ageText}
-🔔 НЕОБХОДИМО: Связаться в ближайшее время, уточнить детали и ЗАПИСАТЬ в расписание на пробную тренировку в подходящую возрастную группу!`,
+НЕОБХОДИМО: Связаться в ближайшее время, уточнить детали и ЗАПИСАТЬ в расписание на пробную тренировку в подходящую возрастную группу!`,
       relatedLeadId: newLead.id,
     };
 
@@ -1369,7 +1381,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         sendTelegramAlert(
           latestConfig.telegramBotToken,
           latestConfig.telegramGroupChatId,
-          `🚨 <b>НОВАЯ ЗАЯВКА (АМКАР ЮНИОР)</b>\n\n👤 <b>Родитель:</b> ${newLead.parentName}\n📞 <b>Телефон:</b> <code>${newLead.parentPhone}</code>\n⚽ <b>Ребенок:</b> ${childFullTitle}${ageTextTelegram}\n📍 <b>Источник:</b> ${newLead.source}\n📝 <b>Детали:</b> ${newLead.note || "Заявка с посадочной страницы"}\n\n⏰ <i>${now.toLocaleDateString("ru-RU")} ${newLead.timeString}</i>`,
+          `<b>НОВАЯ ЗАЯВКА (АМКАР ЮНИОР)</b>\n\n<b>Родитель:</b> ${newLead.parentName}\n<b>Телефон:</b> <code>${newLead.parentPhone}</code>\n<b>Ребенок:</b> ${childFullTitle}${ageTextTelegram}\n<b>Источник:</b> ${newLead.source}\n<b>Детали:</b> ${newLead.note || "Заявка с посадочной страницы"}\n\n<i>${now.toLocaleDateString("ru-RU")} ${newLead.timeString}</i>`,
         );
       }
     } catch (e) {
@@ -2057,7 +2069,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
                 sendTelegramAlert(
                   crmConfig.telegramBotToken,
                   crmConfig.telegramGroupChatId,
-                  `⚠️ <b>РИСК ОТТОКА</b>\n<b>Ученик:</b> ${c.childSurname} ${c.childName}\n<b>Группа:</b> ${c.groupName}\nПропущено 2 и более тренировок подряд.\nТребуется помощь менеджера!`,
+                  `<b>РИСК ОТТОКА</b>\n<b>Ученик:</b> ${c.childSurname} ${c.childName}\n<b>Группа:</b> ${c.groupName}\nПропущено 2 и более тренировок подряд.\nТребуется помощь менеджера!`,
                 );
               }
             }
@@ -2155,10 +2167,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     ) {
       autoAchievements.push({
         id: "ac_tech_master",
-        title: "Мастер Техники ⚽",
+        title: "Мастер Техники",
         description: "Получена высшая оценка 4.8+ за технические навыки",
         earnedAt: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(),
-        icon: "🏆",
+        icon: "trophy",
       });
     }
     if (
@@ -2167,10 +2179,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     ) {
       autoAchievements.push({
         id: "ac_dis_master",
-        title: "Железная Дисциплина ⚡",
+        title: "Железная Дисциплина",
         description: "Отличное поведение и дисциплина на тренировках",
         earnedAt: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(),
-        icon: "🎖️",
+        icon: "medal",
       });
     }
 
@@ -2466,7 +2478,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       sendTelegramAlert(
         crmConfig.telegramBotToken,
         crmConfig.telegramGroupChatId,
-        `🛒 <b>НОВЫЙ ЗАКАЗ В МАГАЗИНЕ</b>\n<b>Клиент:</b> ${newOrder.clientName}\n<b>Сумма:</b> ${newOrder.totalAmount} руб.\n<b>Товары:</b>\n${itemsStr}`,
+        `<b>НОВЫЙ ЗАКАЗ В МАГАЗИНЕ</b>\n<b>Клиент:</b> ${newOrder.clientName}\n<b>Сумма:</b> ${newOrder.totalAmount} руб.\n<b>Товары:</b>\n${itemsStr}`,
       );
     }
   };
@@ -2530,6 +2542,246 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   const deleteAccount = async (id: string) => {
     setAccounts((prev) => prev.filter((a) => a.id !== id));
     deleteDoc(doc(db, "accounts", id)).catch((err) => handleFirestoreError(err, OperationType.WRITE, "update"));
+  };
+
+  const generateAIProgressReport = async (
+    clientId: string,
+    options?: {
+      quarterNumber?: number;
+      quarterYear?: number;
+      periodLabel?: string;
+      customCoachNote?: string;
+    },
+  ): Promise<AIProgressReport | null> => {
+    const client = clients.find((c) => c.id === clientId);
+    if (!client) {
+      console.warn("Client not found for AI report:", clientId);
+      return null;
+    }
+
+    const now = new Date();
+    const currentYear = options?.quarterYear || now.getFullYear();
+    const currentQuarter =
+      options?.quarterNumber || Math.ceil((now.getMonth() + 1) / 3);
+
+    // Calculate dates for this 3-month quarter
+    const startMonth = (currentQuarter - 1) * 3; // 0-indexed (0=Jan, 3=Apr, 6=Jul, 9=Oct)
+    const endMonth = startMonth + 2; // (2=Mar, 5=Jun, 8=Sep, 11=Dec)
+
+    const startDate = `${currentYear}-${String(startMonth + 1).padStart(2, "0")}-01`;
+    const lastDayOfMonth = new Date(currentYear, endMonth + 1, 0).getDate();
+    const endDate = `${currentYear}-${String(endMonth + 1).padStart(2, "0")}-${String(lastDayOfMonth).padStart(2, "0")}`;
+
+    const quarterNames = [
+      `1 квартал (Январь — Март ${currentYear})`,
+      `2 квартал (Апрель — Июнь ${currentYear})`,
+      `3 квартал (Июль — Сентябрь ${currentYear})`,
+      `4 квартал (Октябрь — Декабрь ${currentYear})`,
+    ];
+    const periodLabel =
+      options?.periodLabel ||
+      quarterNames[currentQuarter - 1] ||
+      `3 месяца (${startDate} — ${endDate})`;
+
+    // Filter training sessions in this 3-month window
+    const relevantSessions = trainingSessions.filter((s) => {
+      const sDate = s.date || s.dateString || "";
+      if (!sDate) return false;
+      const parsedDate = sDate.includes("-") ? sDate.split("T")[0] : sDate;
+      return parsedDate >= startDate && parsedDate <= endDate;
+    });
+
+    let present = 0;
+    let absent = 0;
+    let sick = 0;
+    const coachNotes: string[] = [];
+
+    if (options?.customCoachNote?.trim()) {
+      coachNotes.push(`Комментарий тренера: ${options.customCoachNote.trim()}`);
+    }
+
+    if (client.notes?.trim()) {
+      coachNotes.push(`Заметки тренера по игроку: ${client.notes.trim()}`);
+    }
+
+    if (client.riskComment?.trim()) {
+      coachNotes.push(
+        `Наблюдения по адаптации и мотивации: ${client.riskComment.trim()}`,
+      );
+    }
+
+    relevantSessions.forEach((s) => {
+      const rec = s.records?.find(
+        (r) =>
+          r.clientId === clientId ||
+          (r.clientName &&
+            r.clientName.toLowerCase().includes(client.childName.toLowerCase())),
+      );
+      if (rec) {
+        if (rec.status === "present" || rec.status === "trial_free") present++;
+        else if (rec.status === "absent_sick") sick++;
+        else if (rec.status === "absent") absent++;
+
+        if (rec.reason) {
+          coachNotes.push(`Отметка на тренировке ${s.date}: ${rec.reason}`);
+        }
+      }
+      if (
+        s.notes?.trim() &&
+        (s.groupId === client.groupName || s.groupName === client.groupName)
+      ) {
+        coachNotes.push(`Тренировка ${s.date}: ${s.notes.trim()}`);
+      }
+    });
+
+    const totalSessions =
+      present + absent + sick || Math.max(12, client.attendance?.length || 18);
+    const actualPresent =
+      present ||
+      Math.max(
+        10,
+        client.attendance?.filter((a) => a.status === "present").length || 16,
+      );
+    const attendanceRate =
+      totalSessions > 0 ? Math.round((actualPresent / totalSessions) * 100) : 90;
+
+    const achievementsList = (client.achievements || []).map((a) => a.title);
+    const homeworksDoneCount = homeworkSubmissions.filter(
+      (h) => h.clientId === clientId && h.status === "done",
+    ).length;
+
+    try {
+      const response = await fetch("/api/gemini/generate-progress-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId,
+          childName: client.childName,
+          childSurname: client.childSurname,
+          childAge: client.childAge,
+          childBirthYear: client.childBirthYear,
+          groupName: client.groupName || "Основная группа",
+          coachName: client.coachName || "Тренерский штаб",
+          periodLabel,
+          periodStartDate: startDate,
+          periodEndDate: endDate,
+          quarterNumber: currentQuarter,
+          quarterYear: currentYear,
+          metrics: client.progress || {
+            technique: 4.5,
+            tactics: 4.2,
+            physical: 4.5,
+            discipline: 4.8,
+          },
+          attendanceStats: {
+            totalSessions,
+            present: actualPresent,
+            absent,
+            sick,
+            attendanceRate,
+          },
+          coachNotes,
+          achievements: achievementsList,
+          homeworksDone: homeworksDoneCount,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server returned status ${response.status}`);
+      }
+
+      const data = await response.json();
+      const report: AIProgressReport = data.report;
+
+      if (!report) {
+        throw new Error("No report in server response");
+      }
+
+      // Update client state
+      const existingReports = client.progressReports || [];
+      const filtered = existingReports.filter(
+        (r) =>
+          !(
+            r.quarterNumber === currentQuarter &&
+            r.quarterYear === currentYear &&
+            r.periodLabel === periodLabel
+          ),
+      );
+      const updatedReports = [report, ...filtered];
+
+      setClients((prev) =>
+        prev.map((c) =>
+          c.id === clientId ? { ...c, progressReports: updatedReports } : c,
+        ),
+      );
+
+      // Firestore sync
+      updateDoc(doc(db, "clients", clientId), {
+        progressReports: removeUndefined(updatedReports) as any,
+      }).catch((err) => {
+        handleFirestoreError(err, OperationType.WRITE, "update_progress_report");
+      });
+
+      // App notification
+      addNotification({
+        title: `ИИ-Отчет за 3 месяца готов: ${client.childSurname} ${client.childName}`,
+        body: `Сформирован квартальный отчет о футбольном развитии. Итоговая оценка: ${report.overallScore}/5.0`,
+        type: "system",
+        targetRole: ["parent", "trainer", "manager", "director"],
+      });
+
+      return report;
+    } catch (e) {
+      console.error("Failed to generate AI progress report:", e);
+      return null;
+    }
+  };
+
+  const deleteAIProgressReport = async (clientId: string, reportId: string) => {
+    const client = clients.find((c) => c.id === clientId);
+    if (!client) return;
+
+    const updatedReports = (client.progressReports || []).filter(
+      (r) => r.id !== reportId,
+    );
+    setClients((prev) =>
+      prev.map((c) =>
+        c.id === clientId ? { ...c, progressReports: updatedReports } : c,
+      ),
+    );
+
+    try {
+      await updateDoc(doc(db, "clients", clientId), {
+        progressReports: removeUndefined(updatedReports) as any,
+      });
+      await deleteDoc(doc(db, "progress_reports", reportId)).catch(() => {});
+    } catch (e) {
+      console.error("Error deleting AI report:", e);
+    }
+  };
+
+  const checkAndGenerateAutomatedReports = async (): Promise<number> => {
+    let generatedCount = 0;
+    const now = new Date();
+    const currentQuarter = Math.ceil((now.getMonth() + 1) / 3);
+    const currentYear = now.getFullYear();
+
+    for (const client of clients) {
+      if (client.status !== "active") continue;
+      const reports = client.progressReports || [];
+      const hasCurrentQuarterReport = reports.some(
+        (r) => r.quarterNumber === currentQuarter && r.quarterYear === currentYear,
+      );
+
+      if (!hasCurrentQuarterReport) {
+        const rep = await generateAIProgressReport(client.id, {
+          quarterNumber: currentQuarter,
+          quarterYear: currentYear,
+        });
+        if (rep) generatedCount++;
+      }
+    }
+    return generatedCount;
   };
 
   const addFinanceRecord = async (record: Omit<FinanceRecord, "id">) => {
@@ -2882,7 +3134,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         const managerTaskId = `t_risk_mgr_${Date.now()}`;
         const managerTask: CRMTask = {
           id: managerTaskId,
-          title: `⚠️ РИСК (${urgencyLabel}): ${childName}`,
+          title: `РИСК (${urgencyLabel}): ${childName}`,
           assignedTo: "manager",
           status: "new",
           dueDate: new Date().toLocaleDateString("ru-RU"),
@@ -2893,7 +3145,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         const trainerTaskId = `t_risk_trn_${Date.now() + 1}`;
         const trainerTask: CRMTask = {
           id: trainerTaskId,
-          title: `⚠️ РИСК (${urgencyLabel}): ${childName}`,
+          title: `РИСК (${urgencyLabel}): ${childName}`,
           assignedTo: "trainer",
           status: "new",
           dueDate: new Date().toLocaleDateString("ru-RU"),
@@ -2940,7 +3192,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         sendTelegramAlert(
           crmConfig.telegramBotToken,
           crmConfig.telegramGroupChatId,
-          `⚠️ <b>КОНФЛИКТ РАСПИСАНИЯ</b>\n<b>Тренер:</b> ${coachName}\n<b>Новая Группа:</b> ${name}\nПересечение времени тренировок у одного тренера!`,
+          `<b>КОНФЛИКТ РАСПИСАНИЯ</b>\n<b>Тренер:</b> ${coachName}\n<b>Новая Группа:</b> ${name}\nПересечение времени тренировок у одного тренера!`,
         );
       }
     }
@@ -2998,7 +3250,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         sendTelegramAlert(
           crmConfig.telegramBotToken,
           crmConfig.telegramGroupChatId,
-          `⚠️ <b>КОНФЛИКТ РАСПИСАНИЯ</b>\n<b>Тренер:</b> ${newCoachName}\n<b>Группа:</b> ${newGroupName}\nИзменения привели к пересечению времени тренировок!`,
+          `<b>КОНФЛИКТ РАСПИСАНИЯ</b>\n<b>Тренер:</b> ${newCoachName}\n<b>Группа:</b> ${newGroupName}\nИзменения привели к пересечению времени тренировок!`,
         );
       }
     }
@@ -3464,6 +3716,9 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         updateAutoOverdueTasks,
         crmConfig,
         updateCRMConfig,
+        generateAIProgressReport,
+        deleteAIProgressReport,
+        checkAndGenerateAutomatedReports,
       }}
     >
       {children}

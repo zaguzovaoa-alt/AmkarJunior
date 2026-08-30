@@ -37,6 +37,7 @@ import {
   ChevronRight,
   Search,
   Info,
+  Clock,
 } from "lucide-react";
 import {
   LineChart,
@@ -102,6 +103,9 @@ export const FinanceModule: React.FC = () => {
     | "client_income"
     | "expiring"
   >(() => (currentRole === "manager" ? "expiring" : "dashboard"));
+
+  const [expiringSessionsFilter, setExpiringSessionsFilter] = useState<"all" | 3 | 2 | 1 | "unpaid">("all");
+  const [expiringSearchQuery, setExpiringSearchQuery] = useState<string>("");
 
   const [salaryTab, setSalaryTab] = useState<"staff" | "transactions">("staff");
   const [selectedCoachIdForDetail, setSelectedCoachIdForDetail] = useState<string | null>(null);
@@ -461,7 +465,7 @@ export const FinanceModule: React.FC = () => {
     updateFinancialPlan(plan);
     const btn = document.getElementById("savePlanBtn");
     if (btn) {
-      btn.innerText = "План сохранен ✅";
+      btn.innerText = "План сохранен";
       setTimeout(() => {
         btn.innerText = "Зафиксировать KPI план";
       }, 2000);
@@ -633,7 +637,7 @@ export const FinanceModule: React.FC = () => {
                       : "text-gray-500 hover:text-gray-700"
                   }`}
                 >
-                  Заканчивается абонемент
+                  Заканчивается абонемент (2-3 зан.)
                 </button>
                 <button
                   onClick={() => setActiveTab("debts")}
@@ -657,6 +661,16 @@ export const FinanceModule: React.FC = () => {
                   }`}
                 >
                   Дашборд
+                </button>
+                <button
+                  onClick={() => setActiveTab("expiring")}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                    activeTab === "expiring"
+                      ? "bg-white shadow-sm text-emerald-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  Заканчивается абонемент (2-3 зан.)
                 </button>
                 <button
                   onClick={() => setActiveTab("input")}
@@ -775,141 +789,375 @@ export const FinanceModule: React.FC = () => {
       </div>
 
       <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4 md:space-y-6">
-        {activeTab === "expiring" && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300 text-left">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-2xl font-black text-slate-900">
-                  Заканчивается абонемент
-                </h2>
-                <p className="text-xs text-gray-500 mt-1">
-                  Список активных учеников, у которых осталось 1-2 занятия или ожидается оплата следующего абонемента.
-                </p>
-              </div>
-            </div>
+        {activeTab === "expiring" && (() => {
+          const allExpiringClients = clients.filter(
+            (c) =>
+              c.status === "active" &&
+              c.abonement &&
+              c.abonement !== "none" &&
+              ((typeof c.abonementSessionsLeft === "number" && c.abonementSessionsLeft <= 3) ||
+                c.abonementStatus === "Ожидает оплаты" ||
+                c.abonementStatus === "unpaid")
+          );
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white rounded-2xl p-5 border border-amber-100 shadow-sm">
-                <div className="text-[10px] font-bold text-amber-700 uppercase tracking-wider mb-1">
-                  Всего подлежат продлению
-                </div>
-                <div className="text-2xl font-black text-slate-900">
-                  {clients.filter((c) => c.status === "active" && c.abonement && c.abonement !== "none" && (c.abonementSessionsLeft <= 2 || c.abonementStatus === "Ожидает оплаты" || c.abonementStatus === "unpaid")).length} учеников
-                </div>
-              </div>
-              <div className="bg-white rounded-2xl p-5 border border-amber-100 shadow-sm">
-                <div className="text-[10px] font-bold text-amber-700 uppercase tracking-wider mb-1">
-                  Осталось 1-2 занятия
-                </div>
-                <div className="text-2xl font-black text-amber-600">
-                  {clients.filter((c) => c.status === "active" && c.abonementSessionsLeft > 0 && c.abonementSessionsLeft <= 2).length} учеников
-                </div>
-              </div>
-              <div className="bg-white rounded-2xl p-5 border border-amber-100 shadow-sm">
-                <div className="text-[10px] font-bold text-amber-700 uppercase tracking-wider mb-1">
-                  Ожидают счет на оплату
-                </div>
-                <div className="text-2xl font-black text-rose-600">
-                  {clients.filter((c) => c.status === "active" && (c.abonementStatus === "Ожидает оплаты" || c.abonementStatus === "unpaid" || c.abonementSessionsLeft === 0)).length} учеников
-                </div>
-              </div>
-            </div>
+          const count3 = allExpiringClients.filter((c) => c.abonementSessionsLeft === 3).length;
+          const count2 = allExpiringClients.filter((c) => c.abonementSessionsLeft === 2).length;
+          const count1 = allExpiringClients.filter((c) => c.abonementSessionsLeft === 1).length;
+          const countUnpaid = allExpiringClients.filter(
+            (c) =>
+              c.abonementSessionsLeft === 0 ||
+              c.abonementStatus === "Ожидает оплаты" ||
+              c.abonementStatus === "unpaid"
+          ).length;
 
-            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm space-y-4">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-slate-700 border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 text-gray-400 font-semibold uppercase tracking-wider border-b text-[10px]">
-                      <th className="p-3">Ученик (Ребенок)</th>
-                      <th className="p-3">Родитель & Связь</th>
-                      <th className="p-3">Группа</th>
-                      <th className="p-3">Абонемент</th>
-                      <th className="p-3">Остаток занятий</th>
-                      <th className="p-3">Статус оплаты</th>
-                      <th className="p-3 text-right">Действия</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {clients
-                      .filter(
-                        (c) =>
-                          c.status === "active" &&
-                          c.abonement &&
-                          c.abonement !== "none" &&
-                          (c.abonementSessionsLeft <= 2 ||
-                            c.abonementStatus === "Ожидает оплаты" ||
-                            c.abonementStatus === "unpaid")
-                      )
-                      .map((c) => (
-                        <tr key={c.id} className="hover:bg-slate-50 transition">
-                          <td className="p-3">
-                            <div className="font-bold text-slate-900">
-                              {c.childSurname} {c.childName}
-                            </div>
-                            <div className="text-[10px] text-gray-400">
-                              {c.childAge} лет ({c.childBirthYear} г.р.)
-                            </div>
-                          </td>
-                          <td className="p-3">
-                            <div className="font-semibold text-slate-800">
-                              {c.parentName}
-                            </div>
-                            <div className="text-[10px] text-indigo-600 font-mono">
-                              {c.parentPhone}
-                            </div>
-                          </td>
-                          <td className="p-3">
-                            <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded font-bold text-[10px]">
-                              {c.groupName || "Без группы"}
-                            </span>
-                          </td>
-                          <td className="p-3 font-medium text-slate-800">
-                            {c.abonement === "1_session"
-                              ? "Разовое (1 зан)"
-                              : c.abonement === "4_sessions"
-                                ? "Абонемент 4 зан"
-                                : c.abonement === "8_sessions"
-                                  ? "Абонемент 8 зан"
-                                  : c.abonement === "12_sessions"
-                                    ? "Абонемент 12 зан"
-                                    : c.abonement}
-                          </td>
-                          <td className="p-3">
-                            <span className={`px-2 py-1 rounded-lg font-black text-xs ${
-                              c.abonementSessionsLeft === 0
-                                ? "bg-rose-100 text-rose-800"
-                                : c.abonementSessionsLeft === 1
-                                  ? "bg-amber-100 text-amber-800"
-                                  : "bg-yellow-100 text-yellow-800"
-                            }`}>
-                              {c.abonementSessionsLeft} из {c.abonementTotalSessions || 8} зан.
-                            </span>
-                          </td>
-                          <td className="p-3">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              c.abonementStatus === "Оплачено"
-                                ? "bg-emerald-100 text-emerald-800"
-                                : "bg-rose-100 text-rose-800"
-                            }`}>
-                              {c.abonementStatus || "Ожидает оплаты"}
-                            </span>
-                          </td>
-                          <td className="p-3 text-right">
-                            <button
-                              onClick={() => showNotification(`Ссылка на оплату отправлена родителю ${c.parentName} (${c.parentPhone})!`)}
-                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition shadow-xs"
-                            >
-                              Отправить счет
-                            </button>
+          const filteredList = allExpiringClients.filter((c) => {
+            // Sub-filter by session count
+            if (expiringSessionsFilter === 3 && c.abonementSessionsLeft !== 3) return false;
+            if (expiringSessionsFilter === 2 && c.abonementSessionsLeft !== 2) return false;
+            if (expiringSessionsFilter === 1 && c.abonementSessionsLeft !== 1) return false;
+            if (expiringSessionsFilter === "unpaid") {
+              const isUnpaid =
+                c.abonementSessionsLeft === 0 ||
+                c.abonementStatus === "Ожидает оплаты" ||
+                c.abonementStatus === "unpaid";
+              if (!isUnpaid) return false;
+            }
+
+            // Search query filter
+            if (expiringSearchQuery.trim()) {
+              const q = expiringSearchQuery.toLowerCase();
+              const nameMatch = `${c.childSurname} ${c.childName}`.toLowerCase().includes(q);
+              const parentMatch = `${c.parentName}`.toLowerCase().includes(q);
+              const phoneMatch = `${c.parentPhone}`.includes(q);
+              const groupMatch = `${c.groupName}`.toLowerCase().includes(q);
+              if (!nameMatch && !parentMatch && !phoneMatch && !groupMatch) return false;
+            }
+
+            return true;
+          });
+
+          return (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300 text-left">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
+                      <Clock className="w-6 h-6 text-amber-600" />
+                      Заканчивается абонемент (2-3 зан.)
+                    </h2>
+                    <span className="bg-amber-100 text-amber-800 font-extrabold text-xs px-2.5 py-1 rounded-full border border-amber-200">
+                      {allExpiringClients.length} чел.
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Список активных учеников, у которых осталось 3, 2 или 1 занятие (2-3 зан.), либо требуется продление абонемента.
+                  </p>
+                </div>
+              </div>
+
+              {/* Metric Breakdown Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+                {/* Total */}
+                <div
+                  onClick={() => setExpiringSessionsFilter("all")}
+                  className={`bg-white rounded-2xl p-4 border transition cursor-pointer shadow-xs ${
+                    expiringSessionsFilter === "all"
+                      ? "border-amber-400 ring-2 ring-amber-400/20 bg-amber-50/30"
+                      : "border-amber-100 hover:border-amber-200"
+                  }`}
+                >
+                  <div className="text-[10px] font-bold text-amber-700 uppercase tracking-wider mb-1">
+                    Всего на продление
+                  </div>
+                  <div className="text-2xl font-black text-slate-900">
+                    {allExpiringClients.length} <span className="text-xs font-normal text-gray-500">чел.</span>
+                  </div>
+                  <div className="text-[11px] text-amber-600 font-semibold mt-1">
+                    1, 2 и 3 занятия
+                  </div>
+                </div>
+
+                {/* 3 sessions left */}
+                <div
+                  onClick={() => setExpiringSessionsFilter(3)}
+                  className={`bg-white rounded-2xl p-4 border transition cursor-pointer shadow-xs ${
+                    expiringSessionsFilter === 3
+                      ? "border-blue-500 ring-2 ring-blue-500/20 bg-blue-50/30"
+                      : "border-blue-100 hover:border-blue-200"
+                  }`}
+                >
+                  <div className="text-[10px] font-bold text-blue-700 uppercase tracking-wider mb-1">
+                    Осталось 3 занятия
+                  </div>
+                  <div className="text-2xl font-black text-blue-700">
+                    {count3} <span className="text-xs font-normal text-gray-500">чел.</span>
+                  </div>
+                  <div className="text-[11px] text-blue-600 font-semibold mt-1">
+                    Плановое напоминание
+                  </div>
+                </div>
+
+                {/* 2 sessions left */}
+                <div
+                  onClick={() => setExpiringSessionsFilter(2)}
+                  className={`bg-white rounded-2xl p-4 border transition cursor-pointer shadow-xs ${
+                    expiringSessionsFilter === 2
+                      ? "border-amber-500 ring-2 ring-amber-500/20 bg-amber-50/30"
+                      : "border-amber-100 hover:border-amber-200"
+                  }`}
+                >
+                  <div className="text-[10px] font-bold text-amber-700 uppercase tracking-wider mb-1">
+                    Осталось 2 занятия
+                  </div>
+                  <div className="text-2xl font-black text-amber-600">
+                    {count2} <span className="text-xs font-normal text-gray-500">чел.</span>
+                  </div>
+                  <div className="text-[11px] text-amber-600 font-semibold mt-1">
+                    Подготовка счета
+                  </div>
+                </div>
+
+                {/* 1 session left */}
+                <div
+                  onClick={() => setExpiringSessionsFilter(1)}
+                  className={`bg-white rounded-2xl p-4 border transition cursor-pointer shadow-xs ${
+                    expiringSessionsFilter === 1
+                      ? "border-rose-500 ring-2 ring-rose-500/20 bg-rose-50/30"
+                      : "border-rose-100 hover:border-rose-200"
+                  }`}
+                >
+                  <div className="text-[10px] font-bold text-rose-700 uppercase tracking-wider mb-1 flex items-center justify-between">
+                    <span>Осталось 1 занятие</span>
+                    <span className="px-1.5 py-0.2 bg-rose-100 text-rose-800 rounded font-black text-[9px]">Срочно!</span>
+                  </div>
+                  <div className="text-2xl font-black text-rose-600">
+                    {count1} <span className="text-xs font-normal text-gray-500">чел.</span>
+                  </div>
+                  <div className="text-[11px] text-rose-600 font-semibold mt-1">
+                    Критический остаток
+                  </div>
+                </div>
+
+                {/* 0 / Unpaid */}
+                <div
+                  onClick={() => setExpiringSessionsFilter("unpaid")}
+                  className={`bg-white rounded-2xl p-4 border transition cursor-pointer shadow-xs ${
+                    expiringSessionsFilter === "unpaid"
+                      ? "border-red-500 ring-2 ring-red-500/20 bg-red-50/30"
+                      : "border-red-100 hover:border-red-200"
+                  }`}
+                >
+                  <div className="text-[10px] font-bold text-red-700 uppercase tracking-wider mb-1">
+                    0 зан. / Ожидают оплаты
+                  </div>
+                  <div className="text-2xl font-black text-red-600">
+                    {countUnpaid} <span className="text-xs font-normal text-gray-500">чел.</span>
+                  </div>
+                  <div className="text-[11px] text-red-600 font-semibold mt-1">
+                    Требуется новый счет
+                  </div>
+                </div>
+              </div>
+
+              {/* Table Card with Filter Chips and Search */}
+              <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-2 border-b border-gray-100">
+                  {/* Category Chips */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setExpiringSessionsFilter("all")}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                        expiringSessionsFilter === "all"
+                          ? "bg-slate-900 text-white shadow-xs"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      Все ({allExpiringClients.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExpiringSessionsFilter(3)}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                        expiringSessionsFilter === 3
+                          ? "bg-blue-600 text-white shadow-xs"
+                          : "bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200/60"
+                      }`}
+                    >
+                      3 занятия ({count3})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExpiringSessionsFilter(2)}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                        expiringSessionsFilter === 2
+                          ? "bg-amber-600 text-white shadow-xs"
+                          : "bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200/60"
+                      }`}
+                    >
+                      2 занятия ({count2})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExpiringSessionsFilter(1)}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                        expiringSessionsFilter === 1
+                          ? "bg-rose-600 text-white shadow-xs"
+                          : "bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200/60"
+                      }`}
+                    >
+                      1 занятие ({count1})
+                    </button>
+                    {countUnpaid > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setExpiringSessionsFilter("unpaid")}
+                        className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                          expiringSessionsFilter === "unpaid"
+                            ? "bg-red-600 text-white shadow-xs"
+                            : "bg-red-50 text-red-700 hover:bg-red-100 border border-red-200/60"
+                        }`}
+                      >
+                        Ожидают счет ({countUnpaid})
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Search Input */}
+                  <div className="relative w-full sm:w-64">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Поиск по ученику, родителю, тел..."
+                      value={expiringSearchQuery}
+                      onChange={(e) => setExpiringSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    />
+                    {expiringSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setExpiringSearchQuery("")}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs font-bold"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-slate-700 border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 text-gray-400 font-semibold uppercase tracking-wider border-b text-[10px]">
+                        <th className="p-3">Ученик (Ребенок)</th>
+                        <th className="p-3">Родитель & Связь</th>
+                        <th className="p-3">Группа</th>
+                        <th className="p-3">Абонемент</th>
+                        <th className="p-3">Остаток занятий</th>
+                        <th className="p-3">Статус оплаты</th>
+                        <th className="p-3 text-right">Действия</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {filteredList.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="p-8 text-center text-gray-400">
+                            {expiringSearchQuery
+                              ? "По вашему поисковому запросу ничего не найдено"
+                              : "Нет учеников в выбранной категории"}
                           </td>
                         </tr>
-                      ))}
-                  </tbody>
-                </table>
+                      ) : (
+                        filteredList.map((c) => (
+                          <tr key={c.id} className="hover:bg-slate-50/80 transition">
+                            <td className="p-3">
+                              <div className="font-bold text-slate-900">
+                                {c.childSurname} {c.childName}
+                              </div>
+                              <div className="text-[10px] text-gray-400">
+                                {c.childAge ? `${c.childAge} лет` : ""} {c.childBirthYear ? `(${c.childBirthYear} г.р.)` : ""}
+                              </div>
+                            </td>
+                            <td className="p-3">
+                              <div className="font-semibold text-slate-800">
+                                {c.parentName}
+                              </div>
+                              <div className="text-[10px] text-indigo-600 font-mono">
+                                {c.parentPhone}
+                              </div>
+                            </td>
+                            <td className="p-3">
+                              <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded font-bold text-[10px]">
+                                {c.groupName || "Без группы"}
+                              </span>
+                            </td>
+                            <td className="p-3 font-medium text-slate-800">
+                              {c.abonement === "1_session"
+                                ? "Разовое (1 зан)"
+                                : c.abonement === "4_sessions"
+                                  ? "Абонемент 4 зан"
+                                  : c.abonement === "8_sessions"
+                                    ? "Абонемент 8 зан"
+                                    : c.abonement === "12_sessions"
+                                      ? "Абонемент 12 зан"
+                                      : c.abonement || "Стандартный"}
+                            </td>
+                            <td className="p-3">
+                              <span
+                                className={`px-2.5 py-1 rounded-lg font-black text-xs border inline-flex items-center gap-1 ${
+                                  c.abonementSessionsLeft === 3
+                                    ? "bg-blue-50 text-blue-800 border-blue-200"
+                                    : c.abonementSessionsLeft === 2
+                                      ? "bg-amber-50 text-amber-800 border-amber-200"
+                                      : c.abonementSessionsLeft === 1
+                                        ? "bg-rose-50 text-rose-800 border-rose-200 font-black"
+                                        : "bg-red-50 text-red-800 border-red-200"
+                                }`}
+                              >
+                                {c.abonementSessionsLeft === 1 ? (
+                                  <>1 из {c.abonementTotalSessions || 8} зан. (Срочно)</>
+                                ) : c.abonementSessionsLeft === 2 ? (
+                                  <>2 из {c.abonementTotalSessions || 8} зан.</>
+                                ) : c.abonementSessionsLeft === 3 ? (
+                                  <>3 из {c.abonementTotalSessions || 8} зан.</>
+                                ) : (
+                                  <>0 зан. (Истек)</>
+                                )}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  c.abonementStatus === "Оплачено"
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : "bg-rose-100 text-rose-800"
+                                }`}
+                              >
+                                {c.abonementStatus || "Ожидает оплаты"}
+                              </span>
+                            </td>
+                            <td className="p-3 text-right">
+                              <button
+                                onClick={() =>
+                                  showNotification(
+                                    `Ссылка на оплату и напоминание отправлены родителю ${c.parentName} (${c.parentPhone})!`
+                                  )
+                                }
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition shadow-xs"
+                              >
+                                Отправить счет
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
         {activeTab === "dashboard" && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
@@ -4210,103 +4458,161 @@ export const FinanceModule: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                   {processedAccounts.map((acc) => (
                     <div
                       key={acc.id}
-                      className="bg-slate-50 p-5 rounded-2xl border border-slate-200 flex flex-col justify-between h-40 shadow-sm transition hover:shadow-md hover:border-slate-300 relative group"
+                      className="bg-white p-5 rounded-2xl border border-slate-200 flex flex-col justify-between min-h-[175px] shadow-xs hover:shadow-md hover:border-slate-300 transition-all relative"
                     >
-                      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {/* Top bar: Icon, Name, Badge, Actions */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <div
+                            className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                              acc.type === "cash"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : acc.type === "bank"
+                                  ? "bg-blue-100 text-blue-700"
+                                  : acc.type === "acquiring"
+                                    ? "bg-violet-100 text-violet-700"
+                                    : "bg-slate-100 text-slate-700"
+                            }`}
+                          >
+                            {acc.type === "cash" ? (
+                              <Wallet className="w-4.5 h-4.5" />
+                            ) : acc.type === "bank" ? (
+                              <Building2 className="w-4.5 h-4.5" />
+                            ) : (
+                              <CreditCard className="w-4.5 h-4.5" />
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h3
+                              className="font-bold text-slate-900 text-sm truncate"
+                              title={acc.name}
+                            >
+                              {acc.name}
+                            </h3>
+                            <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                              <span
+                                className={`inline-flex items-center text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase tracking-wider border ${
+                                  acc.type === "cash"
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                    : acc.type === "bank"
+                                      ? "bg-blue-50 text-blue-700 border-blue-200"
+                                      : acc.type === "acquiring"
+                                        ? "bg-violet-50 text-violet-700 border-violet-200"
+                                        : "bg-slate-100 text-slate-700 border-slate-200"
+                                }`}
+                              >
+                                {acc.type === "cash"
+                                  ? "Наличные"
+                                  : acc.type === "bank"
+                                    ? "Расч. счет"
+                                    : acc.type === "acquiring"
+                                      ? "Эквайринг"
+                                      : "Счет"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="flex items-center gap-1 shrink-0 bg-slate-50 p-1 rounded-xl border border-slate-100">
+                          <button
+                            onClick={() => {
+                              setTransferFromAcc(acc.id);
+                              setTransferToAcc("");
+                              setTransferAmount("");
+                            }}
+                            className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Перевод средств"
+                          >
+                            <ArrowRightLeft className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setEditingAccount(acc.id);
+                              setEditAccName(acc.name);
+                              setEditAccBalance(acc.actualBalance);
+                            }}
+                            className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                            title="Редактировать"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  "Удалить этот счет? Операции по нему не будут удалены, но могут перестать отображаться корректно.",
+                                )
+                              )
+                                deleteAccount(acc.id);
+                            }}
+                            className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                            title="Удалить"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Balance & Subtitle */}
+                      <div className="mt-4 pt-3 border-t border-slate-100 flex items-end justify-between gap-2">
+                        <div className="min-w-0">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+                            Текущий остаток
+                          </span>
+                          <div className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight truncate">
+                            {acc.actualBalance.toLocaleString("ru-RU")}&nbsp;₽
+                          </div>
+                        </div>
                         <button
                           onClick={() => {
                             setTransferFromAcc(acc.id);
                             setTransferToAcc("");
                             setTransferAmount("");
                           }}
-                          className="p-1.5 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200"
-                          title="Перевод средств"
+                          className="px-2.5 py-1 text-[11px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors shrink-0 flex items-center gap-1"
                         >
-                          <ArrowRightLeft className="w-3.5 h-3.5" />
+                          <ArrowRightLeft className="w-3 h-3" /> Перевод
                         </button>
-                        <button
-                          onClick={() => {
-                            setEditingAccount(acc.id);
-                            setEditAccName(acc.name);
-                            setEditAccBalance(acc.actualBalance);
-                          }}
-                          className="p-1.5 bg-amber-100 text-amber-600 rounded-lg hover:bg-amber-200"
-                          title="Редактировать"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                "Удалить этот счет? Операции по нему не будут удалены, но могут перестать отображаться корректно.",
-                              )
-                            )
-                              deleteAccount(acc.id);
-                          }}
-                          className="p-1.5 bg-red-100 text-red-600 rounded-lg hover:bg-red-200"
-                          title="Удалить"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      <div className="flex justify-between items-start">
-                        <div className="font-bold text-slate-800 break-words pr-24">
-                          {acc.name}
-                        </div>
-                        <div className="text-[10px] text-emerald-700 bg-emerald-100 px-2 py-1 rounded shadow-sm border border-emerald-200 uppercase font-extrabold tracking-wider whitespace-nowrap">
-                          {acc.type === "cash"
-                            ? "Наличные"
-                            : acc.type === "bank"
-                              ? "Расч. счет"
-                              : acc.type === "acquiring"
-                                ? "Эквайринг"
-                                : "Счет"}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-3xl font-black text-slate-900 tracking-tight">
-                          {acc.actualBalance.toLocaleString("ru-RU")} ₽
-                        </div>
-                        <div className="text-xs text-slate-500 font-bold mt-1 uppercase tracking-wider">
-                          Текущий остаток
-                        </div>
                       </div>
                     </div>
                   ))}
 
                   {/* Create New Account Form */}
-                  <div className="p-5 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col justify-center h-40 bg-slate-50/50 hover:bg-slate-50 transition">
-                    <div className="space-y-3">
+                  <div className="bg-slate-50/70 p-5 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col justify-between min-h-[175px] hover:bg-slate-50 transition">
+                    <div>
+                      <span className="text-xs font-bold text-slate-600 uppercase tracking-wider block mb-2">
+                        + Новый счет
+                      </span>
                       <input
                         type="text"
                         placeholder="Название счета"
                         value={newAccName}
                         onChange={(e) => setNewAccName(e.target.value)}
-                        className="w-full text-xs p-2 rounded-lg border border-slate-200 font-bold outline-none focus:border-emerald-500"
+                        className="w-full text-xs p-2.5 rounded-xl border border-slate-200 font-bold outline-none focus:border-emerald-500 bg-white"
                       />
-                      <div className="flex gap-2">
-                        <select
-                          value={newAccType}
-                          onChange={(e) => setNewAccType(e.target.value as any)}
-                          className="w-1/2 text-xs p-2 rounded-lg border border-slate-200 font-bold outline-none focus:border-emerald-500 bg-white"
-                        >
-                          <option value="cash">Наличные</option>
-                          <option value="bank">Р/С</option>
-                          <option value="acquiring">Эквайринг</option>
-                          <option value="other">Другое</option>
-                        </select>
-                        <button
-                          onClick={handleAddAccount}
-                          className="w-1/2 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-slate-800 transition active:scale-95 flex items-center justify-center gap-1"
-                        >
-                          <Plus className="w-4 h-4" /> Добавить
-                        </button>
-                      </div>
+                    </div>
+                    <div className="flex gap-2 mt-3">
+                      <select
+                        value={newAccType}
+                        onChange={(e) => setNewAccType(e.target.value as any)}
+                        className="w-1/2 text-xs p-2 rounded-xl border border-slate-200 font-bold outline-none focus:border-emerald-500 bg-white cursor-pointer"
+                      >
+                        <option value="cash">Наличные</option>
+                        <option value="bank">Расч. счет</option>
+                        <option value="acquiring">Эквайринг</option>
+                        <option value="other">Другое</option>
+                      </select>
+                      <button
+                        onClick={handleAddAccount}
+                        className="w-1/2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition active:scale-95 flex items-center justify-center gap-1 py-2"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Добавить
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -4437,7 +4743,7 @@ export const FinanceModule: React.FC = () => {
                     handleAddCat();
                     const btn = document.getElementById("addCatBtn");
                     if (btn) {
-                      btn.innerText = "Добавлено ✅";
+                      btn.innerText = "Добавлено";
                       setTimeout(() => {
                         btn.innerText = "+ Создать статью";
                       }, 2000);

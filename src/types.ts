@@ -93,6 +93,51 @@ export interface HomeworkSubmission {
   dateDone?: string;
 }
 
+export interface AIProgressReport {
+  id: string;
+  clientId: string;
+  childName: string;
+  childSurname: string;
+  groupName?: string;
+  coachName?: string;
+  periodLabel: string; // e.g. "Март — Май 2026 (3 месяца)"
+  periodStartDate: string; // YYYY-MM-DD
+  periodEndDate: string; // YYYY-MM-DD
+  quarterNumber?: number; // 1, 2, 3, 4
+  quarterYear?: number; // e.g. 2026
+  createdAt: string; // ISO string
+  generatedBy?: 'auto' | 'trainer' | 'manager' | 'parent';
+  
+  // Aggregated input metrics
+  metrics: ProgressMetrics;
+  attendanceStats: {
+    totalSessions: number;
+    present: number;
+    absent: number;
+    sick: number;
+    attendanceRate: number;
+  };
+  coachNotesSummary?: string;
+
+  // AI-generated evaluation sections
+  overallSummary: string;
+  strengths: string[];
+  growthAreas: string[];
+  recommendationsForChild: string[];
+  recommendationsForParents: string[];
+  coachTips: string;
+  motivationalMessage: string;
+  overallScore: number; // e.g. 4.7
+  radarScores?: {
+    technique: number;
+    tactics: number;
+    physical: number;
+    discipline: number;
+    speed: number;
+    teamwork: number;
+  };
+}
+
 export interface Client {
   id: string;
   password?: string;
@@ -133,6 +178,7 @@ export interface Client {
   riskUrgency?: 'none' | 'intervene' | 'urgent';
   riskResolution?: 'none' | 'left' | 'thinking' | 'renewed' | 'refused' | 'resolved' | 'reconciled';
   riskComment?: string;
+  progressReports?: AIProgressReport[];
 }
 
 export interface CRMTask {

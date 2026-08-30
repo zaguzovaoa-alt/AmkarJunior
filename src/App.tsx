@@ -17,7 +17,7 @@ import { DirectorUsers } from "./components/DirectorUsers";
 import { JoinPage } from "./components/JoinPage";
 import { AdminStore } from "./components/AdminStore";
 import { TasksModule } from "./components/TasksModule";
-import { Shield, RefreshCw, Menu } from "lucide-react";
+import { Shield, RefreshCw, Menu, Settings, CreditCard, AlertTriangle, Radio } from "lucide-react";
 import firebaseConfig from "../firebase-applet-config.json";
 
 import { PaymentModal } from "./components/PaymentModal";
@@ -351,7 +351,13 @@ function DashboardContainer() {
               <div className="bg-amber-50 border-b border-amber-200 px-6 py-4 text-xs font-sans text-amber-800 shrink-0 select-none">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex items-start space-x-3">
-                    <span className="text-lg">{isOffline ? "📡" : "⚠️"}</span>
+                    <span className="text-lg">
+                      {isOffline ? (
+                        <Radio className="w-5 h-5 text-amber-600 mt-0.5" />
+                      ) : (
+                        <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
+                      )}
+                    </span>
                     <div>
                       <h4 className="font-bold text-amber-955 mb-0.5 text-sm">
                         {isOffline
@@ -397,7 +403,7 @@ function DashboardContainer() {
                             {isOffline ? (
                               <>
                                 <div className="font-bold text-amber-900 flex items-center gap-1.5 text-xs mb-1">
-                                  <span>⚙️</span> Решение проблемы со статусом
+                                  <Settings className="w-3.5 h-3.5" /> Решение проблемы со статусом
                                   Offline:
                                 </div>
                                 <ul className="list-disc pl-5 space-y-2.5 leading-relaxed text-slate-700">
@@ -449,7 +455,7 @@ function DashboardContainer() {
                             ) : (
                               <>
                                 <div className="font-bold text-amber-900 flex items-center gap-1.5 text-xs mb-1">
-                                  <span>⚙️</span> Настройка правил доступа:
+                                  <Settings className="w-3.5 h-3.5" /> Настройка правил доступа:
                                 </div>
                                 <p className="text-slate-700 leading-relaxed mb-2">
                                   Вы подключили приватное окружение Firebase.
@@ -577,9 +583,10 @@ service cloud.firestore {
             {currentRole === "parent" && (
               <button
                 disabled={true} title="Оплата временно недоступна"
-                className="px-2.5 py-1 bg-emerald-600 text-white text-[10px] font-bold rounded uppercase transition font-mono opacity-50 cursor-not-allowed"
+                className="px-2.5 py-1 bg-emerald-600 text-white text-[10px] font-bold rounded uppercase transition font-mono opacity-50 cursor-not-allowed inline-flex items-center space-x-1"
               >
-                💳 Оплатить абонемент
+                <CreditCard className="w-3 h-3" />
+                <span>Оплатить абонемент</span>
               </button>
             )}
 
@@ -706,6 +713,7 @@ import { PrivacyPolicy } from "./components/PrivacyPolicy";
 import { AmkarLogo } from "./components/AmkarLogo";
 import { SafetyPolicy } from "./components/SafetyPolicy";
 import { PhotoPolicy } from "./components/PhotoPolicy";
+import { OfferAgreement } from "./components/OfferAgreement";
 
 export default function App() {
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
@@ -723,6 +731,16 @@ export default function App() {
       <CRMProvider>
         <JoinPage />
       </CRMProvider>
+    );
+  }
+
+  if (currentPath === "/offer") {
+    return (
+      <OfferAgreement
+        onBack={() => {
+          window.history.back();
+        }}
+      />
     );
   }
 
