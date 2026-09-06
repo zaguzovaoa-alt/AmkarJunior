@@ -818,8 +818,12 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         const isOffline =
           errMsg.toLowerCase().includes("offline") ||
           errMsg.toLowerCase().includes("unavailable");
+        const isQuota = errMsg.toLowerCase().includes("quota");
         if (isOffline) {
           console.warn("Firestore running in offline/cached mode:", errMsg);
+        } else if (isQuota) {
+          console.warn("Firestore daily quota limit reached:", errMsg);
+          setFirestoreError(errMsg);
         } else {
           console.error("Failed to initialize or fill Firestore:", err);
           setFirestoreError(errMsg);
@@ -841,11 +845,18 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       const isOffline =
         errMsg.toLowerCase().includes("offline") ||
         errMsg.toLowerCase().includes("unavailable");
+      const isQuota = errMsg.toLowerCase().includes("quota");
       if (isOffline) {
         console.warn(
           `Firestore collection ${col} loaded/waiting in offline mode:`,
           errMsg,
         );
+      } else if (isQuota) {
+        console.warn(
+          `Firestore collection ${col} daily read quota limit reached:`,
+          errMsg,
+        );
+        setFirestoreError(errMsg);
       } else {
         setFirestoreError(errMsg);
         try {
@@ -974,7 +985,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         snapshot.forEach((doc) => {
           list.push(doc.data() as FinanceRecord);
         });
-        list.sort((a, b) => b.date.localeCompare(a.date));
+        list.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
         setFinances(list);
       },
       (err) => handleSnapshotErr(err, "finances"),
@@ -988,7 +999,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
           list.push(doc.data() as TrainingSessionProtocol);
         });
         // Sort newest first
-        list.sort((a, b) => b.date.localeCompare(a.date));
+        list.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
         setTrainingSessions(list);
       },
       (err) => handleSnapshotErr(err, "training_sessions"),
@@ -1001,7 +1012,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         snapshot.forEach((doc) => {
           list.push(doc.data() as ChatMessage);
         });
-        list.sort((a, b) => a.id.localeCompare(b.id));
+        list.sort((a, b) => (a.id || "").localeCompare(b.id || ""));
         setMessages(list);
       },
       (err) => handleSnapshotErr(err, "messages"),
@@ -1014,7 +1025,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         snapshot.forEach((doc) => {
           list.push(doc.data() as AppNotification);
         });
-        list.sort((a, b) => b.dateString.localeCompare(a.dateString));
+        list.sort((a, b) => (b.dateString || "").localeCompare(a.dateString || ""));
         setNotifications(list);
       },
       (err) => handleSnapshotErr(err, "notifications"),
@@ -1027,7 +1038,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         snapshot.forEach((doc) => {
           list.push(doc.data() as Account);
         });
-        list.sort((a, b) => a.name.localeCompare(b.name));
+        list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
         if (list.length === 0) {
           // Init default if entirely empty empty
           INITIAL_ACCOUNTS.forEach((acc) => {
@@ -1047,7 +1058,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         snapshot.forEach((doc) => {
           list.push(doc.data() as Counterparty);
         });
-        list.sort((a, b) => a.name.localeCompare(b.name));
+        list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
         if (list.length === 0) {
           INITIAL_COUNTERPARTIES.forEach((cp) => {
             setDoc(doc(db, "counterparties", cp.id), cp).catch(() => {});
@@ -1082,7 +1093,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         snapshot.forEach((doc) => {
           list.push(doc.data() as CancelledSession);
         });
-        list.sort((a, b) => b.date.localeCompare(a.date));
+        list.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
         if (list.length > 0) {
           setCancelledSessions(list);
         }

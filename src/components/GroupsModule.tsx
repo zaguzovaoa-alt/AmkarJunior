@@ -501,8 +501,8 @@ export const GroupsModule: React.FC = () => {
                     ? clients
                         .filter((c) => group.selectedClientIds?.includes(c.id))
                         .sort((a, b) =>
-                          `${a.childSurname} ${a.childName}`.localeCompare(
-                            `${b.childSurname} ${b.childName}`,
+                          `${a.childSurname || ""} ${a.childName || ""}`.localeCompare(
+                            `${b.childSurname || ""} ${b.childName || ""}`,
                             "ru",
                           ),
                         )
@@ -515,10 +515,10 @@ export const GroupsModule: React.FC = () => {
                               group.name.trim().toLowerCase(),
                         )
                         .sort((a, b) => {
-                          const nameA = `${a.childSurname} ${a.childName}`
+                          const nameA = `${a.childSurname || ""} ${a.childName || ""}`
                             .trim()
                             .toLowerCase();
-                          const nameB = `${b.childSurname} ${b.childName}`
+                          const nameB = `${b.childSurname || ""} ${b.childName || ""}`
                             .trim()
                             .toLowerCase();
                           return nameA.localeCompare(nameB, "ru");
@@ -699,8 +699,8 @@ export const GroupsModule: React.FC = () => {
                                         ),
                                     )
                                     .sort((a, b) =>
-                                      `${a.childSurname} ${a.childName}`.localeCompare(
-                                        `${b.childSurname} ${b.childName}`,
+                                      `${a.childSurname || ""} ${a.childName || ""}`.localeCompare(
+                                        `${b.childSurname || ""} ${b.childName || ""}`,
                                         "ru",
                                       ),
                                     )

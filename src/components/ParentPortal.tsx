@@ -443,7 +443,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
     list.sort((a, b) => {
       const dDiff = a.dateObj.getTime() - b.dateObj.getTime();
       if (dDiff !== 0) return dDiff;
-      return a.time.localeCompare(b.time);
+      return (a.time || "").localeCompare(b.time || "");
     });
 
     // Deduplicate by date and title

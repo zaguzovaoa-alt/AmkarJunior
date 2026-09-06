@@ -550,7 +550,7 @@ export const FinanceModule: React.FC = () => {
 
     // Sort ascending by month string
     const dynamicChartData = Array.from(monthsMap.values())
-      .sort((a, b) => a.name.localeCompare(b.name))
+      .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
       .slice(-6); // Last 6 months
     // Map nice month names
     const monthNames = [
@@ -1802,7 +1802,7 @@ export const FinanceModule: React.FC = () => {
             const periodFinances = finances.filter(
               (f) => f.date >= dashStartDate && f.date <= dashEndDate && f.paymentStatus !== "accrued",
             );
-            periodFinances.sort((a, b) => b.date.localeCompare(a.date));
+            periodFinances.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 
             const incomes = periodFinances
               .filter((f) => f.type === "income")
@@ -4036,7 +4036,7 @@ export const FinanceModule: React.FC = () => {
                             const recordMonth = f.targetMonth || f.date.substring(0, 7);
                             return recordMonth === rentMonth;
                           })
-                          .sort((a, b) => b.date.localeCompare(a.date));
+                          .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 
                         if (rentRecords.length === 0) {
                           return (
@@ -5531,7 +5531,7 @@ export const FinanceModule: React.FC = () => {
               f.category === "Премии";
             return matchesCoach && isSalaryCat;
           })
-          .sort((a, b) => b.date.localeCompare(a.date));
+          .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 
         // Calculate stats
         const rate = coach.rate || 0;

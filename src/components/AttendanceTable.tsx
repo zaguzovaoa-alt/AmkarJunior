@@ -30,8 +30,8 @@ export const AttendanceTable: React.FC<AttendanceTableProps> = ({ group, clients
       ? clients.filter(c => group.selectedClientIds?.includes(c.id))
       : clients.filter(c => c.groupName === group.name)
     ).sort((a, b) => {
-      const nameA = `${a.childSurname} ${a.childName}`.trim().toLowerCase();
-      const nameB = `${b.childSurname} ${b.childName}`.trim().toLowerCase();
+      const nameA = `${a.childSurname || ""} ${a.childName || ""}`.trim().toLowerCase();
+      const nameB = `${b.childSurname || ""} ${b.childName || ""}`.trim().toLowerCase();
       return nameA.localeCompare(nameB, "ru");
     });
   }, [group, clients]);

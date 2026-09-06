@@ -224,8 +224,8 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
       );
 
   const myClients = relevantClients.sort((a, b) => {
-    const nameA = `${a.childSurname} ${a.childName}`.trim().toLowerCase();
-    const nameB = `${b.childSurname} ${b.childName}`.trim().toLowerCase();
+    const nameA = `${a.childSurname || ""} ${a.childName || ""}`.trim().toLowerCase();
+    const nameB = `${b.childSurname || ""} ${b.childName || ""}`.trim().toLowerCase();
     return nameA.localeCompare(nameB, "ru");
   });
   const coachTasks = tasks.filter((t) => t.assignedTo === "trainer");
@@ -425,7 +425,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
       (g): g is TrainingGroup & { todayTime: string; todayLocation?: string } =>
         g !== null,
     )
-    .sort((a, b) => a.todayTime.localeCompare(b.todayTime));
+    .sort((a, b) => (a.todayTime || "").localeCompare(b.todayTime || ""));
 
   // Get current week attendance stats
   const getWeekDates = () => {
@@ -1394,10 +1394,10 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                         ...groupPlayersBase,
                         ...groupTrialLeads,
                       ].sort((a, b) => {
-                        const nameA = `${a.childSurname} ${a.childName}`
+                        const nameA = `${a.childSurname || ""} ${a.childName || ""}`
                           .trim()
                           .toLowerCase();
-                        const nameB = `${b.childSurname} ${b.childName}`
+                        const nameB = `${b.childSurname || ""} ${b.childName || ""}`
                           .trim()
                           .toLowerCase();
                         return nameA.localeCompare(nameB, "ru");
@@ -2234,10 +2234,10 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                       )
                     : clients.filter((c) => c.groupName === grp.name)
                 ).sort((a, b) => {
-                  const nameA = `${a.childSurname} ${a.childName}`
+                  const nameA = `${a.childSurname || ""} ${a.childName || ""}`
                     .trim()
                     .toLowerCase();
-                  const nameB = `${b.childSurname} ${b.childName}`
+                  const nameB = `${b.childSurname || ""} ${b.childName || ""}`
                     .trim()
                     .toLowerCase();
                   return nameA.localeCompare(nameB, "ru");
@@ -2445,10 +2445,10 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                             .includes(addPlayerSearch.toLowerCase())),
                     )
                     .sort((a, b) => {
-                      const nameA = `${a.childSurname} ${a.childName}`
+                      const nameA = `${a.childSurname || ""} ${a.childName || ""}`
                         .trim()
                         .toLowerCase();
-                      const nameB = `${b.childSurname} ${b.childName}`
+                      const nameB = `${b.childSurname || ""} ${b.childName || ""}`
                         .trim()
                         .toLowerCase();
                       return nameA.localeCompare(nameB, "ru");

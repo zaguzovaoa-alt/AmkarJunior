@@ -1046,7 +1046,7 @@ export const ScheduleCalendar: React.FC<{
               const todayDateStr = `${year}-${month}-${day}`;
               const dayEvents = filteredEvents
                 .filter((ev) => ev.date === todayDateStr)
-                .sort((a, b) => a.time.localeCompare(b.time));
+                .sort((a, b) => (a.time || "").localeCompare(b.time || ""));
               const isActualToday =
                 todayDateStr === new Date().toLocaleDateString("en-CA");
 
@@ -1508,8 +1508,8 @@ export const ScheduleCalendar: React.FC<{
                 {filteredEvents
                   .sort(
                     (a, b) =>
-                      a.date.localeCompare(b.date) ||
-                      a.time.localeCompare(b.time),
+                      (a.date || "").localeCompare(b.date || "") ||
+                      (a.time || "").localeCompare(b.time || ""),
                   )
                   .slice(0, 15)
                   .map((ev) => {

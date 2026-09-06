@@ -366,18 +366,20 @@ async function processIncomingLead(payload: any) {
   }
 
   const currentYear = new Date().getFullYear();
-  if (childAgeFinal > 0) {
-    childBirthYear = currentYear - childAgeFinal;
-  } else if (payload.childBirthYear || payload.year) {
+  if (payload.childBirthYear || payload.year) {
     childBirthYear = Number(payload.childBirthYear || payload.year);
-    childAgeFinal = currentYear - childBirthYear;
+    if (!childAgeFinal) childAgeFinal = currentYear - childBirthYear;
+  } else if (childAgeFinal > 0) {
+    childBirthYear = currentYear - childAgeFinal;
   }
 
+  const actionFinal = payload.action || payload.targetAction || "Пригласить на пробную";
   const notesFinal = payload.notes || notesList.join("\n") || "Заявка на бесплатную тренировку";
 
   const now = new Date();
   const leadId = payload.id || `l_${Date.now()}`;
-  const timeString = now.toTimeString().substring(0, 5);
+  const timeString = payload.timeString || payload.time || now.toTimeString().substring(0, 5);
+  const dateString = payload.dateString || payload.date || now.toLocaleDateString("ru-RU");
 
   const newLead = {
     id: leadId,
@@ -389,10 +391,11 @@ async function processIncomingLead(payload: any) {
     childBirthYear: childBirthYear || 2018,
     childAge: childAgeFinal || 0,
     source: sourceFinal,
-    notes: notesFinal,
+    notes: notesFinal.includes(actionFinal) ? notesFinal : `${notesFinal} (${actionFinal})`,
     timeString: timeString,
-    createdAt: now.toISOString(),
-    status: "new",
+    dateString: dateString,
+    createdAt: payload.createdAt || now.toISOString(),
+    status: payload.status || "new",
   };
 
   const ageText = childAgeFinal > 0 ? ` (${childAgeFinal} лет, ${childBirthYear || currentYear - childAgeFinal} г.р.)` : "";
@@ -402,13 +405,14 @@ async function processIncomingLead(payload: any) {
   const config = await getCRMConfig();
   if (config && config.telegramAlerts.newLead !== false && config.telegramBotToken && config.telegramGroupChatId) {
     const childDisplayName = [childSurnameFinal, childNameFinal].filter(Boolean).join(" ") || "Не указано";
-    const telegramMessage = `🚨 <b>НОВАЯ ЗАЯВКА (АМКАР ЮНИОР)</b>\n\n👤 <b>Родитель:</b> ${parentNameFinal}\n📞 <b>Телефон:</b> <code>${parentPhoneFinal}</code>\n⚽ <b>Ребенок:</b> ${childDisplayName}${ageText}\n📍 <b>Источник:</b> ${sourceFinal}\n📝 <b>Детали:</b> ${notesFinal}\n\n⏰ <i>${now.toLocaleDateString("ru-RU")} ${timeString}</i>`;
+    const telegramMessage = `🚨 <b>НОВАЯ ЗАЯВКА (АМКАР ЮНИОР)</b>\n\n👤 <b>Родитель:</b> ${parentNameFinal}\n📞 <b>Телефон:</b> <code>${parentPhoneFinal}</code>\n⚽ <b>Ребенок:</b> ${childDisplayName}${ageText}\n📍 <b>Источник:</b> ${sourceFinal}\n📋 <b>Статус:</b> Новая заявка\n🎯 <b>Действие:</b> ${actionFinal}\n📝 <b>Детали:</b> ${notesFinal}\n\n⏰ <i>${dateString} ${timeString}</i>`;
     tgResult = await sendTelegramAlertServer(config.telegramBotToken, config.telegramGroupChatId, telegramMessage);
   } else {
     console.warn("Telegram alert not sent: token/chatId missing in config", config);
   }
 
-  // 2. Save lead directly to Firestore
+  // 2. Save lead directly to Firestore with delivery status
+  (newLead as any).telegramNotified = tgResult.success === true;
   await saveFirestoreDoc("leads", leadId, newLead);
 
   // 3. Create Manager Task in Firestore
@@ -419,8 +423,8 @@ async function processIncomingLead(payload: any) {
     title: `⚡ НОВАЯ ЗАЯВКА: ${childFullTitle}`,
     assignedTo: "manager",
     status: "new",
-    dueDate: now.toLocaleDateString("ru-RU"),
-    description: `🔥 Внимание! Поступила новая заявка из канала [${sourceFinal}].\nРодитель: ${parentNameFinal}\nТелефон: ${parentPhoneFinal}\nРебенок: ${childFullTitle}${ageText}\n🔔 НЕОБХОДИМО: Связаться в ближайшее время, уточнить детали и ЗАПИСАТЬ в расписание на пробную тренировку!`,
+    dueDate: dateString,
+    description: `🔥 Внимание! Поступила новая заявка из канала [${sourceFinal}].\nРодитель: ${parentNameFinal}\nТелефон: ${parentPhoneFinal}\nРебенок: ${childFullTitle}${ageText}\n📋 Статус: Новая заявка\n🎯 Задача: ${actionFinal}\n🔔 НЕОБХОДИМО: Связаться в ближайшее время, уточнить детали и ЗАПИСАТЬ в расписание на пробную тренировку!`,
     relatedLeadId: leadId,
   };
   await saveFirestoreDoc("tasks", managerTaskId, managerTask);
@@ -432,8 +436,8 @@ async function processIncomingLead(payload: any) {
     title: `Контроль: Новая заявка [ ${sourceFinal} ]`,
     assignedTo: "director",
     status: "new",
-    dueDate: now.toLocaleDateString("ru-RU"),
-    description: `Новый потенциальный клиент: ${childFullTitle}${ageText}. Источник: ${sourceFinal}. Телефон: ${parentPhoneFinal}`,
+    dueDate: dateString,
+    description: `Новый потенциальный клиент: ${childFullTitle}${ageText}. Источник: ${sourceFinal}. Телефон: ${parentPhoneFinal}. Задача: ${actionFinal}`,
   };
   await saveFirestoreDoc("tasks", directorTaskId, directorTask);
 
@@ -441,8 +445,8 @@ async function processIncomingLead(payload: any) {
   const notifId = `notif_${Date.now()}`;
   const notification = {
     id: notifId,
-    title: `Новая заявка: ${childFullTitle}`,
-    body: `Родитель: ${parentNameFinal} (${parentPhoneFinal}). Источник: ${sourceFinal}`,
+    title: `⚡ Новая заявка: ${childFullTitle}`,
+    body: `Родитель: ${parentNameFinal} (${parentPhoneFinal}). Источник: ${sourceFinal}. Задача: ${actionFinal}`,
     type: "system",
     targetRole: ["director", "admin", "manager"],
     isRead: false,
@@ -454,7 +458,7 @@ async function processIncomingLead(payload: any) {
   try {
     await sendPushNotificationToAll({
       title: `⚡ Новая заявка: ${childFullTitle}`,
-      body: `Родитель: ${parentNameFinal} (${parentPhoneFinal}). Источник: ${sourceFinal}`,
+      body: `Родитель: ${parentNameFinal} (${parentPhoneFinal}). ${actionFinal}!`,
       tag: `lead-${leadId}`,
       url: "/crm",
     });
@@ -893,7 +897,7 @@ ${coachNotes.length > 0 ? coachNotes.map((n: string) => `- ${n}`).join('\n') : '
     console.log(`Server running on http://0.0.0.0:${PORT}`);
   });
 
-  // Set up WebSocket server for Gemini Live API
+  // WebSocket server for Gemini Live API
   const wss = new WebSocketServer({ server });
   wss.on("connection", async (clientWs, req) => {
     try {

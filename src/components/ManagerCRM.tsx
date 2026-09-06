@@ -882,8 +882,8 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
       );
     })
     .sort((a, b) => {
-      const nameA = `${a.childSurname} ${a.childName}`.trim().toLowerCase();
-      const nameB = `${b.childSurname} ${b.childName}`.trim().toLowerCase();
+      const nameA = `${a.childSurname || ""} ${a.childName || ""}`.trim().toLowerCase();
+      const nameB = `${b.childSurname || ""} ${b.childName || ""}`.trim().toLowerCase();
       return nameA.localeCompare(nameB, "ru");
     });
 

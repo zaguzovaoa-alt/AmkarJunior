@@ -22,6 +22,9 @@ export interface Lead {
   trainerFeedback?: string;
   paymentLink?: string;
   paymentStatus?: 'pending' | 'paid';
+  telegramNotified?: boolean;
+  notes?: string;
+  dateString?: string;
 }
 
 export type ClientStatus = 'active' | 'inactive' | 'left' | 'trial' | 'paused' | 'completed';

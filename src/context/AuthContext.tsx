@@ -61,9 +61,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const ensureDefaultDirector = async () => {
+      if (sessionStorage.getItem('director_bychkov_checked')) return;
       try {
         const qBychkov = query(collection(db, 'systemUsers'), where('email', '==', 'dmitriifnl@gmail.com'));
         const snap = await getDocs(qBychkov);
+        sessionStorage.setItem('director_bychkov_checked', 'true');
         if (snap.empty) {
           const qPhone = query(collection(db, 'systemUsers'), where('phone', '==', '+79194466199'));
           const snapPhone = await getDocs(qPhone);
@@ -79,8 +81,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }, { merge: true });
           }
         }
-      } catch (e) {
-        console.error('Error ensuring director Bychkov:', e);
+      } catch (e: any) {
+        if (e?.message?.toLowerCase().includes('quota') || e?.message?.toLowerCase().includes('offline')) {
+          console.warn('Skipping ensureDefaultDirector (quota or offline):', e.message);
+        } else {
+          console.error('Error ensuring director Bychkov:', e);
+        }
       }
     };
     ensureDefaultDirector();
@@ -364,6 +370,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err: any) {
       if (err.message?.includes('offline')) {
         console.warn("Offline mode active. Using fallback AppUser.");
+      } else if (err.message?.toLowerCase().includes('quota')) {
+        console.warn("Firestore quota limit active. Using fallback AppUser.");
       } else {
         console.error("Error resolving AppUser:", err);
       }

@@ -347,6 +347,7 @@ function DashboardContainer() {
             const isOffline =
               firestoreError.toLowerCase().includes("offline") ||
               firestoreError.toLowerCase().includes("unavailable");
+            const isQuota = firestoreError.toLowerCase().includes("quota");
             return (
               <div className="bg-amber-50 border-b border-amber-200 px-6 py-4 text-xs font-sans text-amber-800 shrink-0 select-none">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -360,12 +361,20 @@ function DashboardContainer() {
                     </span>
                     <div>
                       <h4 className="font-bold text-amber-955 mb-0.5 text-sm">
-                        {isOffline
+                        {isQuota
+                          ? `Превышена суточная бесплатная квота чтения Firestore (Проект: ${firebaseConfig.projectId})`
+                          : isOffline
                           ? `Нет подключения к базе данных Firestore (Проект: ${firebaseConfig.projectId})`
                           : `Ограничение доступа к Firestore (Проект: ${firebaseConfig.projectId})`}
                       </h4>
                       <div className="text-amber-800 leading-relaxed max-w-4xl">
-                        {isOffline ? (
+                        {isQuota ? (
+                          <p>
+                            Исчерпан суточный лимит бесплатных операций чтения базы данных (50 000 операций чтения в день на бесплатном тарифе Spark).{" "}
+                            Квота автоматически обновляется каждые сутки в полночь по тихоокеанскому времени (PST).{" "}
+                            Приложение продолжает полноценно работать в <strong>автономном режиме на локальных кэшированных данных</strong>.
+                          </p>
+                        ) : isOffline ? (
                           <p>
                             <strong>Инстанс базы данных не отвечает:</strong>{" "}
                             <code className="bg-amber-100/80 px-1 py-0.5 rounded font-mono text-[10px] text-amber-950 font-bold">
@@ -400,7 +409,40 @@ function DashboardContainer() {
 
                         {showInstructions && (
                           <div className="mt-4 p-4 bg-white border border-amber-200 rounded-lg space-y-3 text-slate-800 text-[12px] shadow-sm">
-                            {isOffline ? (
+                            {isQuota ? (
+                              <>
+                                <div className="font-bold text-amber-900 flex items-center gap-1.5 text-xs mb-1">
+                                  <Settings className="w-3.5 h-3.5" /> Управление квотой Firestore:
+                                </div>
+                                <ul className="list-disc pl-5 space-y-2.5 leading-relaxed text-slate-700">
+                                  <li>
+                                    <strong>Сброс квоты:</strong> Бесплатная квота чтения сбрасывается ежедневно.
+                                  </li>
+                                  <li>
+                                    <strong>Переход на оплату по факту (Blaze):</strong> Чтобы снять лимит суточных чтений, вы можете включить биллинг в консоли Firebase:{" "}
+                                    <a
+                                      href={`https://console.firebase.google.com/project/${firebaseConfig.projectId}/firestore/databases/${(firebaseConfig as any).firestoreDatabaseId}/data?openUpgradeDialog=true`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-blue-600 underline font-semibold"
+                                    >
+                                      Открыть консоль базы данных с диалогом апгрейда ↗
+                                    </a>
+                                  </li>
+                                  <li>
+                                    <strong>Тарифы и лимиты:</strong> Подробнее о лимитах можно узнать в разделе{" "}
+                                    <a
+                                      href="https://firebase.google.com/pricing#cloud-firestore"
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-blue-600 underline font-semibold"
+                                    >
+                                      Firebase Pricing (Spark Plan) ↗
+                                    </a>
+                                  </li>
+                                </ul>
+                              </>
+                            ) : isOffline ? (
                               <>
                                 <div className="font-bold text-amber-900 flex items-center gap-1.5 text-xs mb-1">
                                   <Settings className="w-3.5 h-3.5" /> Решение проблемы со статусом
