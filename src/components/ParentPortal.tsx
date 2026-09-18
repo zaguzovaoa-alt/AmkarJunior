@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { HeaderDescription } from "./HeaderDescription";
 import { useCRM } from "../context/CRMContext";
 import { ScheduleCalendar } from "./ScheduleCalendar";
@@ -6,6 +6,7 @@ import { parseScheduleString, RU_WEEKDAYS_MAP } from "../utils/scheduleParser";
 import {
   Calendar,
   Check,
+  CheckCheck,
   User,
   AlertCircle,
   TrendingUp,
@@ -105,6 +106,8 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
     addChatMessage,
     updateChatMessage,
     deleteChatMessage,
+    markChatMessageAsRead,
+    markAllChatMessagesAsRead,
     uploadDocument,
     deleteDocument,
     groups,
@@ -460,12 +463,16 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
     return uniqueList.slice(0, 3);
   }, [myGroup, today, myClient.branch, tasks]);
 
+  const currentUserId = appUser?.uid || `parent_${myClient.parentPhone || myClient.id}`;
+  const currentParentName = (myClient.parentName || appUser?.fullName || "Родитель").trim();
+
   const handleSendChat = (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
     addChatMessage({
       senderRole: "parent",
-      senderName: `${myClient.parentName || "Родитель"} (Родитель: ${myClient.childName || "Ученик"})`,
+      senderName: `${currentParentName} (Родитель: ${myClient.childName || "Ученик"})`,
+      senderId: currentUserId,
       text: chatInput,
       visibleTo: chatVisibility,
     });
@@ -478,6 +485,49 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
       m.visibleTo.includes("parent") ||
       m.senderRole === "parent",
   );
+
+  // Automatically mark unread messages as read when viewing chat
+  useEffect(() => {
+    if (activeTab !== "parent_messages") return;
+
+    const unreadIds = visibleMessages
+      .filter((m) => {
+        const isMe =
+          (m.senderId && m.senderId === currentUserId) ||
+          m.senderRole === "parent";
+        if (isMe) return false;
+
+        const readByList = m.readBy || [];
+        const isRead =
+          readByList.includes(currentUserId) ||
+          readByList.includes("parent") ||
+          (m.readers &&
+            m.readers.some(
+              (r) =>
+                r.id === currentUserId ||
+                r.id === "parent" ||
+                (currentParentName &&
+                  r.name?.toLowerCase().includes(currentParentName.toLowerCase())),
+            ));
+        return !isRead;
+      })
+      .map((m) => m.id);
+
+    if (unreadIds.length > 0) {
+      markAllChatMessagesAsRead(unreadIds, {
+        id: currentUserId,
+        name: `${currentParentName} (Родитель: ${myClient.childName || "Ученик"})`,
+        role: "parent",
+      });
+    }
+  }, [
+    activeTab,
+    visibleMessages,
+    currentUserId,
+    currentParentName,
+    myClient.childName,
+    markAllChatMessagesAsRead,
+  ]);
 
   const handleFileChange = (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -2136,17 +2186,63 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                 <div className="text-xs text-gray-400">Часовой пояс: МСК</div>
               </div>
 
+              {/* Status bar */}
+              <div className="px-4 py-1.5 bg-emerald-950/90 border-b border-emerald-900/40 text-[10px] text-emerald-200 flex items-center justify-between">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <Eye className="w-3 h-3 text-emerald-400" />
+                  <span>Статус прочтения сообщений школой отслеживается автоматически</span>
+                </span>
+                <span className="flex items-center gap-2.5">
+                  <span className="flex items-center gap-1 text-emerald-300/70">
+                    <Check className="w-3 h-3 text-emerald-400" />
+                    <span>Отправлено</span>
+                  </span>
+                  <span className="flex items-center gap-1 text-emerald-200 font-semibold">
+                    <CheckCheck className="w-3.5 h-3.5 text-emerald-300" />
+                    <span>Просмотрено</span>
+                  </span>
+                </span>
+              </div>
+
               {/* Chat log with custom scroll */}
               <div className="flex-1 p-4 overflow-y-auto bg-slate-50/50 space-y-4 text-xs font-sans">
                 {visibleMessages.map((msg, idx) => {
-                  const isMe = msg.senderRole === "parent";
+                  const isMe =
+                    (msg.senderId && msg.senderId === currentUserId) ||
+                    msg.senderRole === "parent";
+
+                  // List of school staff who read this message
+                  const schoolReaders = (msg.readers || []).filter(
+                    (r) => r.role !== "parent" && r.id !== msg.senderId
+                  );
+
+                  const isReadBySchool =
+                    schoolReaders.length > 0 ||
+                    (msg.readBy &&
+                      msg.readBy.some(
+                        (uid) =>
+                          uid !== msg.senderId &&
+                          uid !== "parent" &&
+                          !uid.startsWith("parent_")
+                      )) ||
+                    (msg.isRead && !isMe);
+
+                  const schoolReadersSummary = schoolReaders
+                    .map(
+                      (r) =>
+                        `${r.name || (r.role === "director" ? "Директор" : r.role === "trainer" ? "Тренер" : r.role === "manager" ? "Менеджер" : "Администратор")}${
+                          r.readAt ? ` (${r.readAt})` : ""
+                        }`
+                    )
+                    .join(", ");
+
                   return (
                     <div
                       key={idx}
                       className={`flex ${isMe ? "justify-end" : "justify-start"}`}
                     >
                       <div
-                        className={`max-w-xs sm:max-w-md p-3 rounded-2xl group ${
+                        className={`max-w-xs sm:max-w-md p-3 rounded-2xl group shadow-2xs ${
                           isMe
                             ? "bg-emerald-600 text-white rounded-br-none"
                             : "bg-white text-gray-800 rounded-bl-none border border-gray-200"
@@ -2176,6 +2272,22 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                               </div>
                             )}
                             <span className="font-mono">{msg.timestamp}</span>
+                            {isMe && (
+                              <span
+                                title={
+                                  isReadBySchool
+                                    ? `Просмотрено школой${schoolReadersSummary ? `: ${schoolReadersSummary}` : ""}`
+                                    : "Отправлено (тренер и менеджеры ещё не открывали)"
+                                }
+                                className="inline-flex items-center ml-0.5 cursor-help"
+                              >
+                                {isReadBySchool ? (
+                                  <CheckCheck className="w-3.5 h-3.5 text-emerald-200 drop-shadow-xs" />
+                                ) : (
+                                  <Check className="w-3.5 h-3.5 text-emerald-200/60" />
+                                )}
+                              </span>
+                            )}
                           </div>
                         </div>
 
@@ -2211,6 +2323,30 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                           <p className="leading-relaxed whitespace-pre-line">
                             {msg.text}
                           </p>
+                        )}
+
+                        {/* Read status footer */}
+                        {isMe && isReadBySchool && (
+                          <div className="mt-2 pt-1 border-t border-white/20 flex items-center justify-between text-[9px] text-emerald-100">
+                            <span className="flex items-center gap-1">
+                              <CheckCheck className="w-3 h-3 text-emerald-200 shrink-0" />
+                              <span className="font-semibold text-white">Просмотрено школой:</span>
+                              <span
+                                className="text-emerald-100 text-[8.5px] truncate max-w-[200px] sm:max-w-xs"
+                                title={schoolReadersSummary}
+                              >
+                                {schoolReadersSummary || "дежурным тренером/менеджером"}
+                              </span>
+                            </span>
+                          </div>
+                        )}
+                        {!isMe && (
+                          <div className="mt-2 pt-1 border-t border-gray-100 flex items-center justify-between text-[9px] text-gray-500">
+                            <span className="flex items-center gap-1">
+                              <CheckCheck className="w-3 h-3 text-emerald-600 shrink-0" />
+                              <span className="text-emerald-700 font-medium">Просмотрено вами</span>
+                            </span>
+                          </div>
                         )}
                       </div>
                     </div>

@@ -1,6 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { HeaderDescription } from "./HeaderDescription";
 import { useCRM } from "../context/CRMContext";
+import { db } from "../firebase";
+import { collection, onSnapshot } from "firebase/firestore";
 import {
   GraduationCap,
   TrendingUp,
@@ -98,6 +100,31 @@ export const CoachesList: React.FC = () => {
   const [commGrade, setCommGrade] = useState(5);
   const [profGrade, setProfGrade] = useState(5);
   const [resGrade, setResGrade] = useState(5);
+
+  const [systemStaff, setSystemStaff] = useState<any[]>([]);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "systemUsers"), (snap) => {
+      const docs = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
+      setSystemStaff(docs);
+    });
+    return unsub;
+  }, []);
+
+  const staffCandidates = systemStaff.filter(
+    (s: any) =>
+      (s.role === "director" || s.role === "admin" || s.role === "manager") &&
+      !coaches.some(
+        (c) =>
+          c.id === s.uid ||
+          (s.phone &&
+            c.phone &&
+            c.phone.replace(/\D/g, "").slice(-10) ===
+              s.phone.replace(/\D/g, "").slice(-10)) ||
+          c.name.trim().toLowerCase() ===
+            (s.fullName || "").trim().toLowerCase(),
+      ),
+  );
 
   // Dynamic calculations
   const totalCoaches = coaches.length;
@@ -914,6 +941,41 @@ export const CoachesList: React.FC = () => {
             </p>
 
             <form onSubmit={handleCreateCoach} className="space-y-4 text-left">
+              {staffCandidates.length > 0 && (
+                <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl space-y-1.5">
+                  <div className="text-[11px] font-bold text-amber-900 flex items-center gap-1.5">
+                    <UserPlus className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>Назначить действующего сотрудника (совмещение):</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {staffCandidates.map((staff) => (
+                      <button
+                        key={staff.uid}
+                        type="button"
+                        onClick={() => {
+                          setNewCoachName(staff.fullName || "");
+                          setNewCoachPhone(staff.phone || "");
+                          setNewCoachRole(
+                            staff.role === "director"
+                              ? "Тренер / Директор"
+                              : staff.role === "admin"
+                                ? "Тренер / Администратор"
+                                : "Тренер / Менеджер"
+                          );
+                        }}
+                        className="px-2.5 py-1 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-semibold transition shadow-2xs cursor-pointer inline-flex items-center space-x-1"
+                        title="Нажмите, чтобы автозаполнить данные сотрудника"
+                      >
+                        <span>{staff.fullName}</span>
+                        <span className="text-[10px] text-amber-700 opacity-75">
+                          ({staff.role === "director" ? "Директор" : staff.role === "admin" ? "Админ" : "Менеджер"})
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-1">
                 <label className="text-xs font-black text-slate-900 uppercase font-mono tracking-wider">
                   ФИО Тренера

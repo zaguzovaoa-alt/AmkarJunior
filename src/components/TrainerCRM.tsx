@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { HeaderDescription } from "./HeaderDescription";
 import { useCRM } from "../context/CRMContext";
 import { useAuth } from "../context/AuthContext";
@@ -6,6 +6,8 @@ import { ScheduleCalendar } from "./ScheduleCalendar";
 import {
   Calendar,
   Check,
+  CheckCheck,
+  Eye,
   User,
   AlertCircle,
   ChevronRight,
@@ -29,6 +31,11 @@ import {
   Paperclip,
   X,
   Link,
+  RefreshCw,
+  FileText,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { compressImage } from "../utils/image";
@@ -73,6 +80,8 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
     addChatMessage,
     updateChatMessage,
     deleteChatMessage,
+    markChatMessageAsRead,
+    markAllChatMessagesAsRead,
     markAttendance,
     completeTrialAndMarkAttendance,
     ratePlayer,
@@ -130,6 +139,12 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
     new Date().toISOString().split("T")[0]
   );
   const [copiedLink, setCopiedLink] = useState(false);
+  const [manualPaidCount, setManualPaidCount] = useState<number>(0);
+  const [manualUnpaidCount, setManualUnpaidCount] = useState<number>(0);
+  const [isManualCountTouched, setIsManualCountTouched] = useState<boolean>(false);
+  const [lessonPlanMode, setLessonPlanMode] = useState<"has_plan" | "no_plan">("has_plan");
+  const [lessonPlanText, setLessonPlanText] = useState<string>("");
+  const [lessonPlanFile, setLessonPlanFile] = useState<string | null>(null);
 
   // States for player rating
   const [selectedPlayerForRating, setSelectedPlayerForRating] = useState<
@@ -248,14 +263,20 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
         ? `Менеджер ${userProfile.name}`
         : "Менеджер";
 
+    const currentUserId = appUser?.uid || (currentRole === "trainer" ? myCoach.id : currentRole);
+
     addChatMessage({
       senderRole: currentRole,
       senderName,
+      senderId: currentUserId,
       text: chatInput,
       visibleTo: chatVisibility,
     });
     setChatInput("");
   };
+
+  const currentUserId = appUser?.uid || (currentRole === "trainer" ? myCoach.id : currentRole);
+  const currentUserName = (appUser?.fullName || userProfile?.name || "").trim().toLowerCase();
 
   const visibleMessages = messages.filter(
     (m) =>
@@ -263,6 +284,65 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
       m.visibleTo.includes(currentRole) ||
       m.senderRole === currentRole,
   );
+
+  // Automatically mark unread messages as read when viewing chat
+  useEffect(() => {
+    if (activeTab !== "trainer_messages") return;
+
+    const unreadIds = visibleMessages
+      .filter((m) => {
+        const isMe =
+          (m.senderId && m.senderId === currentUserId) ||
+          (currentUserName &&
+            m.senderName?.trim().toLowerCase() === currentUserName) ||
+          (m.senderRole === currentRole && !m.senderId);
+        if (isMe) return false;
+
+        const readByList = m.readBy || [];
+        const isRead =
+          readByList.includes(currentUserId) ||
+          readByList.includes(currentRole) ||
+          (m.readers &&
+            m.readers.some(
+              (r) =>
+                r.id === currentUserId ||
+                r.id === currentRole ||
+                (currentUserName &&
+                  r.name?.trim().toLowerCase() === currentUserName),
+            ));
+        return !isRead;
+      })
+      .map((m) => m.id);
+
+    if (unreadIds.length > 0) {
+      let displayName = userProfile?.name || appUser?.fullName || "";
+      if (!displayName) {
+        displayName =
+          currentRole === "trainer"
+            ? `Тренер ${myCoach.name}`
+            : currentRole === "director"
+              ? "Директор"
+              : currentRole === "manager"
+                ? "Менеджер"
+                : "Администратор";
+      }
+      markAllChatMessagesAsRead(unreadIds, {
+        id: currentUserId,
+        name: displayName,
+        role: currentRole,
+      });
+    }
+  }, [
+    activeTab,
+    visibleMessages,
+    currentUserId,
+    currentUserName,
+    currentRole,
+    userProfile?.name,
+    appUser?.fullName,
+    myCoach.name,
+    markAllChatMessagesAsRead,
+  ]);
 
   const startAttendanceMarking = (groupId: string) => {
     const tabToSet = currentRole === "trainer" ? "trainer_attendance" : "hq_attendance";
@@ -305,6 +385,15 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
     setAttendanceRecords(initialRecs);
     setUploadedAttendancePhoto(null);
     setSessionNotes("");
+
+    // Initial counts: default to active abonement holders vs others
+    const withPaidAbonement = groupPlayersBase.filter(
+      (p) => p.abonement && p.abonement !== "none" && (p.abonementSessionsLeft || 0) > 0
+    ).length;
+    const withoutAbonement = groupPlayers.length - withPaidAbonement;
+    setManualPaidCount(withPaidAbonement);
+    setManualUnpaidCount(withoutAbonement);
+    setIsManualCountTouched(false);
   };
 
   const handleAttendanceChange = (
@@ -312,10 +401,85 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
     status: "present" | "absent_sick" | "absent" | "trial_free",
     reason = "",
   ) => {
-    setAttendanceRecords((prev) => ({
-      ...prev,
-      [playerId]: { status, reason },
-    }));
+    setAttendanceRecords((prev) => {
+      const next = {
+        ...prev,
+        [playerId]: { status, reason },
+      };
+
+      // If manual counts were not manually edited, keep them responsive to the checkboxes:
+      if (!isManualCountTouched) {
+        const groupObj = groups.find((g) => g.name === selectedGroupForAttendance || g.id === selectedGroupForAttendance);
+        const groupPlayersBase: any[] = groupObj?.isSelectTeam
+          ? clients.filter((c) => groupObj.selectedClientIds?.includes(c.id))
+          : clients.filter(
+              (c) =>
+                c.groupName &&
+                selectedGroupForAttendance &&
+                c.groupName.trim().toLowerCase() === selectedGroupForAttendance.trim().toLowerCase(),
+            );
+        let paid = 0;
+        let unpaid = 0;
+        Object.entries(next).forEach(([id, rec]: [string, any]) => {
+          if (rec.status === "present") {
+            const cl = groupPlayersBase.find((c) => c.id === id);
+            if (cl?.abonement && cl.abonement !== "none" && (cl.abonementSessionsLeft || 0) > 0) {
+              paid++;
+            } else {
+              unpaid++;
+            }
+          } else if (rec.status === "trial_free") {
+            unpaid++;
+          }
+        });
+        setManualPaidCount(paid);
+        setManualUnpaidCount(unpaid);
+      }
+
+      return next;
+    });
+  };
+
+  const markAllPlayersPresent = () => {
+    const groupObj = groups.find((g) => g.name === selectedGroupForAttendance || g.id === selectedGroupForAttendance);
+    const groupPlayersBase: any[] = groupObj?.isSelectTeam
+      ? clients.filter((c) => groupObj.selectedClientIds?.includes(c.id))
+      : clients.filter(
+          (c) =>
+            c.groupName &&
+            selectedGroupForAttendance &&
+            c.groupName.trim().toLowerCase() === selectedGroupForAttendance.trim().toLowerCase(),
+        );
+    const groupTrialLeads = (leads || [])
+      .filter(
+        (l) =>
+          l.status === "trial_booked" &&
+          l.trialGroupId &&
+          l.trialGroupId === groupObj?.id &&
+          l.trialDate === (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(),
+      )
+      .map((l) => ({ id: l.id, isLead: true }));
+
+    const all = [...groupPlayersBase, ...groupTrialLeads];
+    const newRecs: any = {};
+    let paid = 0;
+    let unpaid = 0;
+
+    all.forEach((p) => {
+      newRecs[p.id] = { status: p.isLead ? "trial_free" : "present", reason: "" };
+      if (p.isLead) {
+        unpaid++;
+      } else if (p.abonement && p.abonement !== "none" && (p.abonementSessionsLeft || 0) > 0) {
+        paid++;
+      } else {
+        unpaid++;
+      }
+    });
+
+    setAttendanceRecords(newRecs);
+    setManualPaidCount(paid);
+    setManualUnpaidCount(unpaid);
+    setIsManualCountTouched(false);
   };
 
   const submitAttendanceToCRM = () => {
@@ -326,6 +490,10 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
 
     const [year, month, day] = attendanceDate.split("-");
     const formattedDate = `${day}.${month}.${year}`;
+
+    const paidNum = Math.max(0, Number(manualPaidCount) || 0);
+    const unpaidNum = Math.max(0, Number(manualUnpaidCount) || 0);
+    const totalPresent = paidNum + unpaidNum;
 
     const clientRecords: {
       clientId: string;
@@ -365,9 +533,25 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
     });
 
     if (hasUnmarked) {
-      alert("Пожалуйста, отметьте статус всех учеников в списке.");
-      return;
+      const confirmUnmarked = window.confirm(
+        `В списке группы есть неотмеченные ученики.\n\nОтметить их как отсутствующих и зафиксировать присутствующих?\n• С оплатой: ${paidNum} чел.\n• Без оплаты: ${unpaidNum} чел.\n• Итого всего: ${totalPresent} чел.`
+      );
+      if (!confirmUnmarked) return;
+
+      Object.keys(attendanceRecords).forEach((pid) => {
+        if (!attendanceRecords[pid].status) {
+          clientRecords.push({
+            clientId: pid,
+            status: "absent",
+            reason: "Отсутствовал",
+          });
+        }
+      });
     }
+
+    const finalHasLessonPlan = lessonPlanMode === "has_plan";
+    const finalPlanText = lessonPlanMode === "has_plan" ? lessonPlanText.trim() : "";
+    const finalPlanPhoto = lessonPlanMode === "has_plan" ? lessonPlanFile : null;
 
     markAttendance(
       selectedGroupForAttendance,
@@ -375,15 +559,24 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
       clientRecords,
       photoToSubmit,
       sessionNotes,
-      selectedAssistantId || undefined
+      selectedAssistantId || undefined,
+      paidNum,
+      unpaidNum,
+      finalHasLessonPlan,
+      finalPlanText,
+      finalPlanPhoto,
     );
     alert(
-      "Ведомость посещаемости успешно сохранена и передана в систему директора!",
+      `Ведомость посещаемости успешно сохранена!\n• Присутствовало: ${totalPresent} чел. (С оплатой: ${paidNum}, Без оплаты: ${unpaidNum})\n• Конспект: ${finalHasLessonPlan ? "Прикреплен" : "Отметка «Нет конспекта»"}`,
     );
     setSelectedGroupForAttendance(null);
     setSelectedAssistantId("");
     setUploadedAttendancePhoto(null);
     setSessionNotes("");
+    setIsManualCountTouched(false);
+    setLessonPlanMode("has_plan");
+    setLessonPlanText("");
+    setLessonPlanFile(null);
   };
 
   const submitPlayerRating = () => {
@@ -1420,36 +1613,194 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
 
                       return (
                         <>
-                          <div className="bg-slate-900 rounded-xl p-4 flex flex-wrap gap-4 items-center justify-between text-white border shadow-sm mb-2">
-                            <div className="text-center bg-white/10 px-3 py-2 rounded-lg flex-1 min-w-[80px]">
-                              <div className="text-[10px] text-emerald-300 font-bold uppercase tracking-wider">
+                          {/* РУЧНОЙ ВВОД КОЛИЧЕСТВА УЧЕНИКОВ: 2 ГРАФЫ (С ОПЛАТОЙ И БЕЗ ОПЛАТЫ) + АВТОМАТИЧЕСКИЙ РАСЧЕТ ИТОГО */}
+                          <div className="bg-gradient-to-br from-slate-900 via-slate-850 to-slate-900 rounded-2xl p-3.5 sm:p-4 border border-slate-800 shadow-md text-white mb-3.5">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-3 border-b border-slate-800 gap-2">
+                              <div>
+                                <h5 className="font-extrabold text-sm sm:text-base text-white flex items-center gap-2">
+                                  <Users className="w-4 h-4 text-emerald-400" />
+                                  Количество учеников на тренировке
+                                </h5>
+                                <p className="text-[11px] text-slate-400 mt-0.5">
+                                  Введите вручную в две графы: с оплатой и без оплаты. Итоговое количество считается автоматически.
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={markAllPlayersPresent}
+                                  className="text-[11px] bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-bold px-2.5 py-1.5 rounded-lg border border-emerald-500/30 transition flex items-center gap-1.5 active:scale-95"
+                                  title="Отметить всех учеников группы как присутствующих"
+                                >
+                                  <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
+                                  Отметить всех
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    let paid = 0;
+                                    let unpaid = 0;
+                                    Object.entries(attendanceRecords).forEach(([id, rec]: [string, any]) => {
+                                      if (rec.status === "present") {
+                                        const cl = allPlayers.find((c) => c.id === id);
+                                        if (cl?.abonement && cl.abonement !== "none" && (cl.abonementSessionsLeft || 0) > 0) {
+                                          paid++;
+                                        } else {
+                                          unpaid++;
+                                        }
+                                      } else if (rec.status === "trial_free") {
+                                        unpaid++;
+                                      }
+                                    });
+                                    setManualPaidCount(paid);
+                                    setManualUnpaidCount(unpaid);
+                                    setIsManualCountTouched(true);
+                                  }}
+                                  className="text-[11px] bg-white/10 hover:bg-white/15 text-slate-300 hover:text-white font-medium px-2.5 py-1.5 rounded-lg border border-white/10 transition flex items-center gap-1.5 active:scale-95"
+                                >
+                                  <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+                                  Из списка
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 items-stretch">
+                              {/* Графа 1: С оплатой */}
+                              <div className="bg-slate-800/80 border border-emerald-500/30 rounded-xl p-2.5 sm:p-3 flex flex-col justify-between focus-within:border-emerald-500 transition">
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <label className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                                    1. С оплатой
+                                  </label>
+                                  <span className="text-[10px] text-slate-400">абонемент / оплачено</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setManualPaidCount((prev) => Math.max(0, (Number(prev) || 0) - 1));
+                                      setIsManualCountTouched(true);
+                                    }}
+                                    className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white font-black text-sm flex items-center justify-center transition active:scale-95 shrink-0"
+                                  >
+                                    -
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    value={manualPaidCount}
+                                    onChange={(e) => {
+                                      const val = e.target.value === "" ? 0 : parseInt(e.target.value, 10);
+                                      setManualPaidCount(isNaN(val) ? 0 : Math.max(0, val));
+                                      setIsManualCountTouched(true);
+                                    }}
+                                    className="w-full text-center font-black text-xl sm:text-2xl bg-black/40 border border-emerald-500/40 rounded-lg py-1 text-emerald-400 outline-none focus:ring-2 focus:ring-emerald-500/50"
+                                    placeholder="0"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setManualPaidCount((prev) => (Number(prev) || 0) + 1);
+                                      setIsManualCountTouched(true);
+                                    }}
+                                    className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white font-black text-sm flex items-center justify-center transition active:scale-95 shrink-0"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Графа 2: Без оплаты */}
+                              <div className="bg-slate-800/80 border border-amber-500/30 rounded-xl p-2.5 sm:p-3 flex flex-col justify-between focus-within:border-amber-500 transition">
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <label className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                                    <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                                    2. Без оплаты
+                                  </label>
+                                  <span className="text-[10px] text-slate-400">долг / пробное / б/о</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setManualUnpaidCount((prev) => Math.max(0, (Number(prev) || 0) - 1));
+                                      setIsManualCountTouched(true);
+                                    }}
+                                    className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white font-black text-sm flex items-center justify-center transition active:scale-95 shrink-0"
+                                  >
+                                    -
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    value={manualUnpaidCount}
+                                    onChange={(e) => {
+                                      const val = e.target.value === "" ? 0 : parseInt(e.target.value, 10);
+                                      setManualUnpaidCount(isNaN(val) ? 0 : Math.max(0, val));
+                                      setIsManualCountTouched(true);
+                                    }}
+                                    className="w-full text-center font-black text-xl sm:text-2xl bg-black/40 border border-amber-500/40 rounded-lg py-1 text-amber-400 outline-none focus:ring-2 focus:ring-amber-500/50"
+                                    placeholder="0"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setManualUnpaidCount((prev) => (Number(prev) || 0) + 1);
+                                      setIsManualCountTouched(true);
+                                    }}
+                                    className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white font-black text-sm flex items-center justify-center transition active:scale-95 shrink-0"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* ИТОГ: Общее количество человек */}
+                              <div className="bg-emerald-950/40 border-2 border-emerald-500/50 rounded-xl p-2.5 sm:p-3 flex flex-col justify-between text-center shadow-inner">
+                                <div className="text-[11px] font-bold text-emerald-300 uppercase tracking-wide">
+                                  Итого всего человек
+                                </div>
+                                <div className="text-2xl sm:text-3xl font-black text-emerald-400 my-0.5">
+                                  {(Number(manualPaidCount) || 0) + (Number(manualUnpaidCount) || 0)}
+                                  <span className="text-xs font-semibold text-emerald-300 ml-1">чел.</span>
+                                </div>
+                                <div className="text-[10px] text-emerald-200/80 font-medium">
+                                  {Number(manualPaidCount) || 0} с опл. + {Number(manualUnpaidCount) || 0} без опл.
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="bg-slate-900 rounded-2xl p-3 sm:p-4 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 text-white border border-slate-800 shadow-sm mb-3">
+                            <div className="text-center bg-white/10 px-1.5 py-2 sm:px-3 sm:py-2.5 rounded-xl flex flex-col justify-center min-w-0">
+                              <div className="text-[10px] sm:text-xs text-emerald-300 font-bold tracking-tight leading-tight text-center">
                                 Присутствуют
                               </div>
-                              <div className="text-lg font-black">
+                              <div className="text-xl sm:text-2xl font-black text-emerald-400 mt-0.5">
                                 {stats.present}
                               </div>
                             </div>
-                            <div className="text-center bg-white/10 px-3 py-2 rounded-lg flex-1 min-w-[80px]">
-                              <div className="text-[10px] text-blue-300 font-bold uppercase tracking-wider">
+                            <div className="text-center bg-white/10 px-1.5 py-2 sm:px-3 sm:py-2.5 rounded-xl flex flex-col justify-center min-w-0">
+                              <div className="text-[10px] sm:text-xs text-blue-300 font-bold tracking-tight leading-tight text-center">
                                 Уважительная
                               </div>
-                              <div className="text-lg font-black">
+                              <div className="text-xl sm:text-2xl font-black text-blue-400 mt-0.5">
                                 {stats.sick}
                               </div>
                             </div>
-                            <div className="text-center bg-white/10 px-3 py-2 rounded-lg flex-1 min-w-[80px]">
-                              <div className="text-[10px] text-purple-300 font-bold uppercase tracking-wider">
+                            <div className="text-center bg-white/10 px-1.5 py-2 sm:px-3 sm:py-2.5 rounded-xl flex flex-col justify-center min-w-0">
+                              <div className="text-[10px] sm:text-xs text-purple-300 font-bold tracking-tight leading-tight text-center">
                                 Пробные
                               </div>
-                              <div className="text-lg font-black">
+                              <div className="text-xl sm:text-2xl font-black text-purple-300 mt-0.5">
                                 {stats.trial}
                               </div>
                             </div>
-                            <div className="text-center bg-red-500/20 px-3 py-2 rounded-lg flex-1 min-w-[80px]">
-                              <div className="text-[10px] text-red-300 font-bold uppercase tracking-wider">
+                            <div className="text-center bg-red-500/20 px-1.5 py-2 sm:px-3 sm:py-2.5 rounded-xl flex flex-col justify-center min-w-0 border border-red-500/30">
+                              <div className="text-[10px] sm:text-xs text-red-300 font-bold tracking-tight leading-tight text-center">
                                 Прогул
                               </div>
-                              <div className="text-lg font-black text-red-400">
+                              <div className="text-xl sm:text-2xl font-black text-red-400 mt-0.5">
                                 {stats.absent}
                               </div>
                             </div>
@@ -1460,15 +1811,15 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                             return (
                               <div
                                 key={i}
-                                className="p-4 bg-white border border-gray-100 shadow-sm rounded-2xl flex flex-col sm:flex-row justify-between sm:items-center gap-4 hover:shadow-md transition"
+                                className="p-3.5 sm:p-4 bg-white border border-gray-100 shadow-xs sm:shadow-sm rounded-2xl flex flex-col sm:flex-row justify-between sm:items-center gap-3 sm:gap-4 hover:shadow-md transition"
                               >
-                                <div className="flex items-center space-x-3 w-1/3">
-                                  <div className="w-10 h-10 rounded-full bg-slate-100 shrink-0 flex items-center justify-center font-bold text-slate-400">
+                                <div className="flex items-center space-x-3 w-full sm:w-auto sm:min-w-[220px]">
+                                  <div className="w-10 h-10 rounded-full bg-slate-100 shrink-0 flex items-center justify-center font-bold text-slate-400 text-sm">
                                     {p.childSurname.charAt(0)}
                                     {p.childName.charAt(0)}
                                   </div>
-                                  <div>
-                                    <div className="font-bold text-slate-850 text-sm">
+                                  <div className="min-w-0 flex-1">
+                                    <div className="font-bold text-slate-850 text-sm truncate">
                                       {p.childSurname} {p.childName}
                                     </div>
                                     {isTrial ? (
@@ -1497,62 +1848,68 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                                   </div>
                                 </div>
 
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <button
-                                    onClick={() =>
-                                      handleAttendanceChange(p.id, "present")
-                                    }
-                                    className={`px-4 py-2 rounded-xl font-bold text-xs ring-1 transition ${
-                                      attendanceRecords[p.id]?.status ===
-                                      "present"
-                                        ? "bg-emerald-50 text-emerald-700 ring-emerald-500 shadow-sm"
-                                        : "bg-white text-gray-500 ring-gray-200 hover:bg-slate-50"
-                                    }`}
-                                  >
-                                    Присутствовал
-                                  </button>
-                                  <button
-                                    onClick={() =>
-                                      handleAttendanceChange(
-                                        p.id,
-                                        "absent_sick",
-                                      )
-                                    }
-                                    className={`px-4 py-2 rounded-xl font-bold text-xs ring-1 transition ${
-                                      attendanceRecords[p.id]?.status ===
-                                      "absent_sick"
-                                        ? "bg-blue-50 text-blue-700 ring-blue-500 shadow-sm"
-                                        : "bg-white text-gray-500 ring-gray-200 hover:bg-slate-50"
-                                    }`}
-                                  >
-                                    Уважительная
-                                  </button>
-                                  <button
-                                    onClick={() =>
-                                      handleAttendanceChange(p.id, "absent")
-                                    }
-                                    className={`px-4 py-2 rounded-xl font-bold text-xs ring-1 transition ${
-                                      attendanceRecords[p.id]?.status ===
-                                      "absent"
-                                        ? "bg-amber-50 text-amber-700 ring-amber-500 shadow-sm"
-                                        : "bg-white text-gray-500 ring-gray-200 hover:bg-slate-50"
-                                    }`}
-                                  >
-                                    Прогул
-                                  </button>
-                                  <button
-                                    onClick={() =>
-                                      handleAttendanceChange(p.id, "trial_free")
-                                    }
-                                    className={`px-4 py-2 rounded-xl font-bold text-xs ring-1 transition ${
-                                      attendanceRecords[p.id]?.status ===
-                                      "trial_free"
-                                        ? "bg-purple-50 text-purple-700 ring-purple-500 shadow-sm"
-                                        : "bg-white text-gray-500 ring-gray-200 hover:bg-slate-50"
-                                    }`}
-                                  >
-                                    Пробное / БП
-                                  </button>
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
+                                  <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleAttendanceChange(p.id, "present")
+                                      }
+                                      className={`px-2 py-2 sm:px-3 rounded-xl font-bold text-[11px] sm:text-xs leading-tight ring-1 transition text-center justify-center flex items-center min-h-[38px] ${
+                                        attendanceRecords[p.id]?.status ===
+                                        "present"
+                                          ? "bg-emerald-50 text-emerald-700 ring-emerald-500 shadow-xs"
+                                          : "bg-white text-gray-500 ring-gray-200 hover:bg-slate-50"
+                                      }`}
+                                    >
+                                      Присутствовал
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleAttendanceChange(
+                                          p.id,
+                                          "absent_sick",
+                                        )
+                                      }
+                                      className={`px-2 py-2 sm:px-3 rounded-xl font-bold text-[11px] sm:text-xs leading-tight ring-1 transition text-center justify-center flex items-center min-h-[38px] ${
+                                        attendanceRecords[p.id]?.status ===
+                                        "absent_sick"
+                                          ? "bg-blue-50 text-blue-700 ring-blue-500 shadow-xs"
+                                          : "bg-white text-gray-500 ring-gray-200 hover:bg-slate-50"
+                                      }`}
+                                    >
+                                      Уважительная
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleAttendanceChange(p.id, "absent")
+                                      }
+                                      className={`px-2 py-2 sm:px-3 rounded-xl font-bold text-[11px] sm:text-xs leading-tight ring-1 transition text-center justify-center flex items-center min-h-[38px] ${
+                                        attendanceRecords[p.id]?.status ===
+                                        "absent"
+                                          ? "bg-amber-50 text-amber-700 ring-amber-500 shadow-xs"
+                                          : "bg-white text-gray-500 ring-gray-200 hover:bg-slate-50"
+                                      }`}
+                                    >
+                                      Прогул
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleAttendanceChange(p.id, "trial_free")
+                                      }
+                                      className={`px-2 py-2 sm:px-3 rounded-xl font-bold text-[11px] sm:text-xs leading-tight ring-1 transition text-center justify-center flex items-center min-h-[38px] ${
+                                        attendanceRecords[p.id]?.status ===
+                                        "trial_free"
+                                          ? "bg-purple-50 text-purple-700 ring-purple-500 shadow-xs"
+                                          : "bg-white text-gray-500 ring-gray-200 hover:bg-slate-50"
+                                      }`}
+                                    >
+                                      Пробное / БП
+                                    </button>
+                                  </div>
 
                                   <AnimatePresence>
                                     {(attendanceRecords[p.id]?.status ===
@@ -1560,14 +1917,14 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                                       attendanceRecords[p.id]?.status ===
                                         "absent_sick") && (
                                       <motion.div
-                                        initial={{ opacity: 0, width: 0 }}
-                                        animate={{ opacity: 1, width: "auto" }}
-                                        exit={{ opacity: 0, width: 0 }}
-                                        className="overflow-hidden"
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: "auto" }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        className="overflow-hidden w-full sm:w-auto"
                                       >
                                         <input
                                           type="text"
-                                          placeholder="Уточните причину или приложите ссылку на справку..."
+                                          placeholder="Уточните причину..."
                                           value={
                                             attendanceRecords[p.id]?.reason ||
                                             ""
@@ -1580,7 +1937,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                                               e.target.value,
                                             )
                                           }
-                                          className="px-3 py-1.5 bg-slate-50 border border-gray-200 rounded-xl text-[11px] w-48 focus:ring-1 focus:ring-emerald-500 focus:outline-none transition-shadow"
+                                          className="px-3 py-1.5 bg-slate-50 border border-gray-200 rounded-xl text-xs w-full sm:w-56 focus:ring-1 focus:ring-emerald-500 focus:outline-none transition-shadow"
                                         />
                                       </motion.div>
                                     )}
@@ -1609,6 +1966,121 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
+                </div>
+
+                {/* КОНСПЕКТ ТРЕНИРОВКИ (ДЛЯ ДИРЕКТОРА) */}
+                <div className="space-y-3 pt-2 border-t mt-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <h4 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-emerald-600" />
+                        Конспект тренировки (для директора)
+                      </h4>
+                      <p className="text-xs text-slate-500">
+                        Прикрепите план занятия или поставьте официальную отметку об его отсутствии
+                      </p>
+                    </div>
+
+                    <div className="flex items-center bg-slate-100 p-1 rounded-xl shrink-0 self-start sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={() => setLessonPlanMode("has_plan")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                          lessonPlanMode === "has_plan"
+                            ? "bg-emerald-600 text-white shadow-xs"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Прикрепить конспект
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLessonPlanMode("no_plan")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                          lessonPlanMode === "no_plan"
+                            ? "bg-rose-600 text-white shadow-xs"
+                            : "text-slate-600 hover:text-rose-600"
+                        }`}
+                      >
+                        <XCircle className="w-3.5 h-3.5" />
+                        Нет конспекта
+                      </button>
+                    </div>
+                  </div>
+
+                  {lessonPlanMode === "has_plan" ? (
+                    <div className="bg-emerald-50/50 border border-emerald-200/70 rounded-2xl p-4 space-y-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Текст конспекта / упражнения (тема, цели, структура)
+                        </label>
+                        <textarea
+                          value={lessonPlanText}
+                          onChange={(e) => setLessonPlanText(e.target.value)}
+                          placeholder="Тема тренировки: Ведение мяча и дриблинг 1v1.&#10;1. Разминка (15 мин): беговые упражнения, координационная лестница.&#10;2. Основная часть (45 мин): квадраты 3х1, дриблинг змейкой, удары.&#10;3. Двусторонняя игра (25 мин).&#10;4. Заминка и стретчинг (5 мин)..."
+                          className="w-full h-28 p-3.5 bg-white border border-emerald-300/80 rounded-xl text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none resize-y"
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs font-bold text-slate-700">Фото / скан конспекта (по желанию)</span>
+                          {lessonPlanFile && (
+                            <button
+                              type="button"
+                              onClick={() => setLessonPlanFile(null)}
+                              className="text-[11px] text-rose-600 hover:underline font-semibold"
+                            >
+                              Удалить фото плана
+                            </button>
+                          )}
+                        </div>
+
+                        {lessonPlanFile ? (
+                          <div className="flex items-center gap-3 p-2.5 bg-white border border-emerald-300/60 rounded-xl">
+                            <div className="w-16 h-16 rounded-lg overflow-hidden border border-slate-200 shrink-0">
+                              <img src={lessonPlanFile} alt="Конспект" className="w-full h-full object-cover" />
+                            </div>
+                            <div className="flex-1 text-xs">
+                              <div className="font-bold text-slate-800">Фотография конспекта прикреплена</div>
+                              <div className="text-[11px] text-slate-500 mt-0.5">Директор сможет открыть и просмотреть этот скан</div>
+                            </div>
+                          </div>
+                        ) : (
+                          <label className="flex items-center justify-center gap-2 p-3 border border-dashed border-emerald-300 rounded-xl cursor-pointer hover:bg-emerald-100/40 transition bg-white/60 text-emerald-800 text-xs font-bold">
+                            <Camera className="w-4 h-4 text-emerald-600" />
+                            <span>Загрузить фото или скан рукописного конспекта</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  compressImage(file, (base64) => {
+                                    setLessonPlanFile(base64);
+                                  });
+                                }
+                              }}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 text-xs flex items-start gap-3">
+                      <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="font-bold text-rose-900">
+                          Выбрана отметка: «Нет конспекта»
+                        </div>
+                        <div className="text-rose-700 mt-0.5 leading-relaxed">
+                          В ведомости для директора и администрации будет зафиксировано, что конспект на данную тренировку не подготовлен/не предоставлен.
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2 pt-2">
@@ -1807,6 +2279,24 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
               </div>
             </div>
 
+            {/* Status bar */}
+            <div className="px-4 py-1.5 bg-slate-900/90 border-b border-indigo-950/30 text-[10px] text-slate-300 flex items-center justify-between">
+              <span className="flex items-center gap-1.5 font-medium">
+                <Eye className="w-3 h-3 text-sky-400" />
+                <span>Статус прочтения сообщений синхронизируется в реальном времени</span>
+              </span>
+              <span className="flex items-center gap-2.5">
+                <span className="flex items-center gap-1 text-slate-400">
+                  <Check className="w-3 h-3 text-slate-400" />
+                  <span>Отправлено</span>
+                </span>
+                <span className="flex items-center gap-1 text-sky-300 font-semibold">
+                  <CheckCheck className="w-3.5 h-3.5 text-sky-400" />
+                  <span>Просмотрено</span>
+                </span>
+              </span>
+            </div>
+
             {/* Messages list */}
             <div className="flex-1 p-4 overflow-y-auto space-y-3.5 bg-slate-50/70 text-xs">
               {visibleMessages.length === 0 ? (
@@ -1816,7 +2306,12 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                 </div>
               ) : (
                 visibleMessages.map((ms, id) => {
-                  const isMe = ms.senderRole === currentRole;
+                  const isMe =
+                    (ms.senderId && ms.senderId === currentUserId) ||
+                    (currentUserName &&
+                      ms.senderName?.trim().toLowerCase() === currentUserName) ||
+                    (ms.senderRole === currentRole && !ms.senderId);
+
                   const senderBadge =
                     ms.senderRole === "trainer"
                       ? { label: "Тренер", bg: "bg-emerald-100 text-emerald-800 border-emerald-200" }
@@ -1827,6 +2322,34 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                           : ms.senderRole === "parent"
                             ? { label: "Родитель", bg: "bg-amber-100 text-amber-800 border-amber-200" }
                             : { label: "Админ", bg: "bg-slate-100 text-slate-800 border-slate-200" };
+
+                  // List of readers except the sender
+                  const readersExceptSender = (ms.readers || []).filter(
+                    (r) =>
+                      r.id !== ms.senderId &&
+                      r.id !== ms.senderRole &&
+                      r.name?.trim().toLowerCase() !== ms.senderName?.trim().toLowerCase()
+                  );
+
+                  const isReadByOthers =
+                    readersExceptSender.length > 0 ||
+                    (ms.readBy &&
+                      ms.readBy.some(
+                        (uid) =>
+                          uid !== ms.senderId &&
+                          uid !== ms.senderRole &&
+                          uid !== (ms.senderId || "")
+                      )) ||
+                    (ms.isRead && !isMe);
+
+                  const readersSummary = readersExceptSender
+                    .map(
+                      (r) =>
+                        `${r.name || (r.role === "director" ? "Директор" : r.role === "trainer" ? "Тренер" : r.role === "manager" ? "Менеджер" : r.role === "parent" ? "Родитель" : "Админ")}${
+                          r.readAt ? ` (${r.readAt})` : ""
+                        }`
+                    )
+                    .join(", ");
 
                   return (
                     <div
@@ -1876,6 +2399,22 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                               </div>
                             )}
                             <span className="font-mono text-[9px] opacity-75">{ms.timestamp}</span>
+                            {isMe && (
+                              <span
+                                title={
+                                  isReadByOthers
+                                    ? `Просмотрено${readersSummary ? `: ${readersSummary}` : ""}`
+                                    : "Отправлено (еще не просмотрено)"
+                                }
+                                className="inline-flex items-center ml-0.5 cursor-help"
+                              >
+                                {isReadByOthers ? (
+                                  <CheckCheck className="w-3.5 h-3.5 text-sky-300 drop-shadow-xs" />
+                                ) : (
+                                  <Check className="w-3.5 h-3.5 text-indigo-200/70" />
+                                )}
+                              </span>
+                            )}
                           </div>
                         </div>
 
@@ -1940,6 +2479,35 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                                 </span>
                               );
                             })}
+                          </div>
+                        )}
+
+                        {/* Read status details */}
+                        {isMe && isReadByOthers && (
+                          <div className="mt-2 pt-1 border-t border-white/20 flex items-center justify-between text-[9px] text-sky-200">
+                            <span className="flex items-center gap-1">
+                              <CheckCheck className="w-3 h-3 text-sky-300 shrink-0" />
+                              <span className="font-semibold text-white">Просмотрено:</span>
+                              <span
+                                className="text-sky-100 text-[8.5px] truncate max-w-[200px] sm:max-w-xs"
+                                title={readersSummary}
+                              >
+                                {readersSummary || "получателем"}
+                              </span>
+                            </span>
+                          </div>
+                        )}
+                        {!isMe && (
+                          <div className="mt-2 pt-1 border-t border-gray-100 flex items-center justify-between text-[9px] text-gray-500">
+                            <span className="flex items-center gap-1">
+                              <CheckCheck className="w-3 h-3 text-emerald-600 shrink-0" />
+                              <span className="text-emerald-700 font-medium">Просмотрено вами</span>
+                            </span>
+                            {readersExceptSender.length > 1 && (
+                              <span className="text-[8px] text-gray-400" title={readersSummary}>
+                                Всего просмотрели: {readersExceptSender.length}
+                              </span>
+                            )}
                           </div>
                         )}
                       </div>

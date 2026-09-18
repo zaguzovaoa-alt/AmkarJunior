@@ -711,8 +711,15 @@ function AuthGateway() {
       }
     }
     if (appUser) {
+      const validName =
+        appUser.fullName &&
+        !appUser.fullName.includes("Без БД") &&
+        !appUser.fullName.includes("Посетитель")
+          ? appUser.fullName
+          : undefined;
+
       updateUserProfile({
-        name: appUser.fullName || '',
+        ...(validName ? { name: validName } : {}),
         phone: appUser.phone || '',
         email: appUser.email || '',
         role: appUser.role,

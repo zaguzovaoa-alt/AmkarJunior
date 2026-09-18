@@ -11,9 +11,11 @@ import {
   query,
   getDocs,
   where,
+  arrayUnion,
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../firebase";
 import { sendTelegramAlert } from "../utils/telegram";
+import { findCoachScheduleConflicts } from "../utils/scheduleParser";
 import {
   Lead,
   Client,
@@ -163,6 +165,11 @@ interface CRMContextType {
     mediaFile?: string,
     notes?: string,
     assistantId?: string,
+    manualPaidCount?: number,
+    manualUnpaidCount?: number,
+    hasLessonPlan?: boolean,
+    lessonPlanText?: string,
+    lessonPlanPhotoUrl?: string | null,
   ) => void;
   deleteTrainingSession: (sessionId: string) => Promise<void>;
   updateTrainingSessionProtocol: (session: TrainingSessionProtocol) => Promise<void>;
@@ -182,6 +189,14 @@ interface CRMContextType {
   addChatMessage: (msg: Omit<ChatMessage, "id" | "timestamp">) => void;
   updateChatMessage: (id: string, newText: string) => void;
   deleteChatMessage: (id: string) => void;
+  markChatMessageAsRead: (
+    id: string,
+    reader: { id: string; name: string; role: any },
+  ) => Promise<void>;
+  markAllChatMessagesAsRead: (
+    ids: string[],
+    reader: { id: string; name: string; role: any },
+  ) => Promise<void>;
   notifications: AppNotification[];
   addNotification: (
     notif: Omit<AppNotification, "id" | "isRead" | "dateString">,
@@ -580,7 +595,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     const cached = localStorage.getItem("amkar_user_profile");
     if (cached) {
       try {
-        return JSON.parse(cached);
+        const parsed = JSON.parse(cached);
+        if (parsed && parsed.name && !parsed.name.includes("Без БД") && !parsed.name.includes("Посетитель")) {
+          return parsed;
+        }
       } catch (e) {}
     }
     return {
@@ -593,7 +611,17 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   });
 
   const updateUserProfile = async (updates: Partial<UserProfile>) => {
-    const newProfile = { ...userProfile, ...updates };
+    const sanitizedUpdates = { ...updates };
+    if (
+      sanitizedUpdates.name &&
+      (sanitizedUpdates.name.includes("Без БД") ||
+        sanitizedUpdates.name.includes("Посетитель") ||
+        sanitizedUpdates.name.trim() === "")
+    ) {
+      delete sanitizedUpdates.name;
+    }
+
+    const newProfile = { ...userProfile, ...sanitizedUpdates };
     setUserProfile(newProfile);
     localStorage.setItem("amkar_user_profile", JSON.stringify(newProfile));
     try {
@@ -1238,7 +1266,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
                 childAge: payload.childAge || payload.age || 8,
                 source: payload.utm_source || ("messengers" as any),
                 notes: notesList.join("\n") || "Заявка из Yandex Формы",
-                timeString: new Date().toTimeString().slice(0, 5),
+                timeString: new Date().toLocaleTimeString("ru-RU", {
+                  timeZone: "Europe/Moscow",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }),
               };
 
               // We call addLead to insert and create tasks
@@ -1307,6 +1339,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
     const now = new Date();
     const leadId = `l_${Date.now()}`;
+    const moscowTime = now.toLocaleTimeString("ru-RU", {
+      timeZone: "Europe/Moscow",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
     const newLead: Lead = {
       ...leadData,
       childName: parsedChildName,
@@ -1315,7 +1352,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       childBirthYear: parsedBirthYear || 2018,
       id: leadId,
       createdAt: now.toISOString(),
-      timeString: now.toTimeString().substring(0, 5),
+      timeString: moscowTime,
       status: "new",
     };
 
@@ -1768,6 +1805,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     mediaFile?: string,
     notes?: string,
     assistantId?: string,
+    manualPaidCount?: number,
+    manualUnpaidCount?: number,
+    hasLessonPlan?: boolean,
+    lessonPlanText?: string,
+    lessonPlanPhotoUrl?: string | null,
   ) => {
     const rawClients = clients; // avoid stale state issues in loops
     const groupObj = groups.find((g) => g.id === groupId || g.name === groupId);
@@ -1779,12 +1821,38 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       ? coaches.find((c) => c.id === assistantId)?.name || ""
       : "";
 
-    const presentCount = records.filter(
+    const derivedPresentCount = records.filter(
       (r) => r.status === "present" || r.status === "trial_free",
     ).length;
     const sickCount = records.filter((r) => r.status === "absent_sick").length;
     const absentCount = records.filter((r) => r.status === "absent").length;
     const trialCount = records.filter((r) => r.status === "trial_free").length;
+
+    // Handle manual counts or calculate from roster
+    const hasManualPaid = typeof manualPaidCount === "number" && !isNaN(manualPaidCount);
+    const hasManualUnpaid = typeof manualUnpaidCount === "number" && !isNaN(manualUnpaidCount);
+
+    const presentPaidCount = hasManualPaid
+      ? Math.max(0, manualPaidCount!)
+      : records.filter((r) => {
+          if (r.status !== "present") return false;
+          const c = rawClients.find((cl) => cl.id === r.clientId);
+          return !!(c?.abonement && c.abonement !== "none" && (c.abonementSessionsLeft || 0) > 0);
+        }).length;
+
+    const presentUnpaidCount = hasManualUnpaid
+      ? Math.max(0, manualUnpaidCount!)
+      : records.filter((r) => {
+          if (r.status === "trial_free") return true;
+          if (r.status !== "present") return false;
+          const c = rawClients.find((cl) => cl.id === r.clientId);
+          return !c?.abonement || c.abonement === "none" || (c.abonementSessionsLeft || 0) <= 0;
+        }).length;
+
+    // Total count is sum of paid and unpaid if manual counts are provided, otherwise derived
+    const presentCount = (hasManualPaid || hasManualUnpaid)
+      ? (presentPaidCount + presentUnpaidCount)
+      : derivedPresentCount;
 
     // Format date string to YYYY-MM-DD
     const sessionDateISO = (() => {
@@ -1823,7 +1891,14 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       assistantName: assistantName || "",
       photoUrl: mediaFile || "",
       notes: notes || "",
+      hasLessonPlan: hasLessonPlan !== undefined
+        ? hasLessonPlan
+        : Boolean(lessonPlanText?.trim() || lessonPlanPhotoUrl),
+      lessonPlanText: lessonPlanText || "",
+      lessonPlanPhotoUrl: lessonPlanPhotoUrl || null,
       presentCount,
+      presentPaidCount,
+      presentUnpaidCount,
       absentCount,
       sickCount,
       trialCount,
@@ -2125,20 +2200,37 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const updateTrainingSessionProtocol = async (updatedSession: TrainingSessionProtocol) => {
     try {
-      let presentCount = 0;
+      let recordsPresent = 0;
       let sickCount = 0;
       let absentCount = 0;
       let trialCount = 0;
 
       (updatedSession.records || []).forEach((r) => {
-        if (r.status === "present") presentCount++;
+        if (r.status === "present") recordsPresent++;
         else if (r.status === "absent_sick") sickCount++;
         else if (r.status === "trial_free") trialCount++;
         else absentCount++;
       });
 
+      const paid = typeof updatedSession.presentPaidCount === "number" && !isNaN(updatedSession.presentPaidCount)
+        ? Math.max(0, updatedSession.presentPaidCount)
+        : 0;
+      const unpaid = typeof updatedSession.presentUnpaidCount === "number" && !isNaN(updatedSession.presentUnpaidCount)
+        ? Math.max(0, updatedSession.presentUnpaidCount)
+        : 0;
+
+      const hasManualCounts = typeof updatedSession.presentPaidCount === "number" || typeof updatedSession.presentUnpaidCount === "number";
+      const presentCount = hasManualCounts ? (paid + unpaid) : recordsPresent;
+
       const sessionToSave: TrainingSessionProtocol = {
         ...updatedSession,
+        hasLessonPlan: updatedSession.hasLessonPlan !== undefined
+          ? updatedSession.hasLessonPlan
+          : Boolean(updatedSession.lessonPlanText?.trim() || updatedSession.lessonPlanPhotoUrl),
+        lessonPlanText: updatedSession.lessonPlanText || "",
+        lessonPlanPhotoUrl: updatedSession.lessonPlanPhotoUrl || null,
+        presentPaidCount: paid,
+        presentUnpaidCount: unpaid,
         presentCount,
         sickCount,
         absentCount,
@@ -2267,19 +2359,135 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       hour: "2-digit",
       minute: "2-digit",
     });
+    const senderId = msgData.senderId || msgData.senderRole;
+    const initialReader = {
+      id: senderId,
+      name: msgData.senderName,
+      role: msgData.senderRole,
+      readAt: timeNow,
+    };
+
     const newMsg: ChatMessage = {
       ...msgData,
       id,
       timestamp: timeNow,
+      senderId,
+      readBy: [senderId],
+      readers: [initialReader],
+      isRead: false,
     };
 
     // Instantly update local state so messages show up in chat instantly
     setMessages((prev) => [...prev, newMsg]);
 
     // Background sync
-    setDoc(doc(db, "messages", id), newMsg).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
+    setDoc(doc(db, "messages", id), removeUndefined(newMsg)).catch((err) => {
+      handleFirestoreError(err, OperationType.WRITE, "messages");
       console.warn("Failed to sync new message in Firestore:", err);
     });
+  };
+
+  const markChatMessageAsRead = async (
+    id: string,
+    reader: { id: string; name: string; role: any },
+  ) => {
+    if (!id || !reader?.id) return;
+    const timeNow = new Date().toLocaleTimeString("ru-RU", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    const readerEntry = {
+      id: reader.id,
+      name: reader.name || "Сотрудник",
+      role: reader.role || "admin",
+      readAt: timeNow,
+    };
+
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.id !== id) return m;
+        const currentReadBy = m.readBy || [];
+        if (currentReadBy.includes(reader.id)) return m;
+        const currentReaders = m.readers || [];
+        const isAlreadyReader = currentReaders.some((r) => r.id === reader.id);
+        const updatedReaders = isAlreadyReader
+          ? currentReaders
+          : [...currentReaders, readerEntry];
+        return {
+          ...m,
+          readBy: [...currentReadBy, reader.id],
+          readers: updatedReaders,
+          isRead: true,
+        };
+      }),
+    );
+
+    try {
+      const msgRef = doc(db, "messages", id);
+      await updateDoc(msgRef, {
+        readBy: arrayUnion(reader.id),
+        readers: arrayUnion(readerEntry),
+        isRead: true,
+      });
+    } catch (err) {
+      console.warn(`Failed to mark message ${id} as read in Firestore:`, err);
+    }
+  };
+
+  const markAllChatMessagesAsRead = async (
+    ids: string[],
+    reader: { id: string; name: string; role: any },
+  ) => {
+    if (!ids || ids.length === 0 || !reader?.id) return;
+    const timeNow = new Date().toLocaleTimeString("ru-RU", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    const readerEntry = {
+      id: reader.id,
+      name: reader.name || "Сотрудник",
+      role: reader.role || "admin",
+      readAt: timeNow,
+    };
+
+    const targetIds = new Set(ids);
+
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (!targetIds.has(m.id)) return m;
+        const currentReadBy = m.readBy || [];
+        if (currentReadBy.includes(reader.id)) return m;
+        const currentReaders = m.readers || [];
+        const isAlreadyReader = currentReaders.some((r) => r.id === reader.id);
+        const updatedReaders = isAlreadyReader
+          ? currentReaders
+          : [...currentReaders, readerEntry];
+        return {
+          ...m,
+          readBy: [...currentReadBy, reader.id],
+          readers: updatedReaders,
+          isRead: true,
+        };
+      }),
+    );
+
+    // Update in Firestore
+    try {
+      const promises = ids.map((id) =>
+        updateDoc(doc(db, "messages", id), {
+          readBy: arrayUnion(reader.id),
+          readers: arrayUnion(readerEntry),
+          isRead: true,
+        }).catch((err) => {
+          console.warn(`Failed to mark message ${id} as read:`, err);
+        }),
+      );
+      await Promise.all(promises);
+    } catch (err) {
+      console.warn("Failed to batch mark messages as read:", err);
+    }
   };
 
   const updateChatMessage = async (id: string, newText: string) => {
@@ -3192,18 +3400,23 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     scheduleStartDate?: string,
     scheduleEndDate?: string,
   ) => {
-    // TELEGRAM ALERT: Check schedule conflict
-    if (crmConfig.telegramAlerts?.scheduleConflict !== false) {
-      const hasConflict = groups.some(
-        (g) =>
-          g.coachId === coachId &&
-          (g.scheduleDays || []).some((day) => scheduleDays.includes(day)),
+    // TELEGRAM ALERT: Check schedule conflict with actual time interval overlap
+    if (crmConfig.telegramAlerts?.scheduleConflict !== false && coachId) {
+      const conflicts = findCoachScheduleConflicts(
+        groups,
+        coachId,
+        scheduleDays,
+        undefined,
+        name,
       );
-      if (hasConflict) {
+      if (conflicts.length > 0) {
+        const details = conflicts
+          .map((c) => `• <b>${c.day}:</b> ${c.overlapDescription}`)
+          .join("\n");
         sendTelegramAlert(
           crmConfig.telegramBotToken,
           crmConfig.telegramGroupChatId,
-          `<b>КОНФЛИКТ РАСПИСАНИЯ</b>\n<b>Тренер:</b> ${coachName}\n<b>Новая Группа:</b> ${name}\nПересечение времени тренировок у одного тренера!`,
+          `⚠️ <b>КОНФЛИКТ РАСПИСАНИЯ</b>\n<b>Тренер:</b> ${coachName}\n<b>Новая Группа:</b> ${name}\n<b>Пересечение времени тренировок:</b>\n${details}`,
         );
       }
     }
@@ -3241,7 +3454,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     const oldGroup = groups.find((g) => g.id === id);
     const oldName = oldGroup?.name;
 
-    // TELEGRAM ALERT: Check schedule conflict
+    // TELEGRAM ALERT: Check schedule conflict with actual time interval overlap
     if (
       (updates.scheduleDays || updates.coachId) &&
       crmConfig.telegramAlerts?.scheduleConflict !== false
@@ -3251,18 +3464,24 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       const newCoachName = updates.coachName || oldGroup?.coachName || "";
       const newGroupName = updates.name || oldGroup?.name || "";
 
-      const hasConflict = groups.some(
-        (g) =>
-          g.id !== id &&
-          g.coachId === newCoachId &&
-          (g.scheduleDays || []).some((day) => newSchedule.includes(day)),
-      );
-      if (hasConflict) {
-        sendTelegramAlert(
-          crmConfig.telegramBotToken,
-          crmConfig.telegramGroupChatId,
-          `<b>КОНФЛИКТ РАСПИСАНИЯ</b>\n<b>Тренер:</b> ${newCoachName}\n<b>Группа:</b> ${newGroupName}\nИзменения привели к пересечению времени тренировок!`,
+      if (newCoachId && newSchedule.length > 0) {
+        const conflicts = findCoachScheduleConflicts(
+          groups,
+          newCoachId,
+          newSchedule,
+          id,
+          newGroupName,
         );
+        if (conflicts.length > 0) {
+          const details = conflicts
+            .map((c) => `• <b>${c.day}:</b> ${c.overlapDescription}`)
+            .join("\n");
+          sendTelegramAlert(
+            crmConfig.telegramBotToken,
+            crmConfig.telegramGroupChatId,
+            `⚠️ <b>КОНФЛИКТ РАСПИСАНИЯ</b>\n<b>Тренер:</b> ${newCoachName}\n<b>Группа:</b> ${newGroupName}\n<b>Пересечение времени тренировок:</b>\n${details}`,
+          );
+        }
       }
     }
 
@@ -3670,6 +3889,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         addChatMessage,
         updateChatMessage,
         deleteChatMessage,
+        markChatMessageAsRead,
+        markAllChatMessagesAsRead,
         toggleCalendarSync,
         triggerManualCalendarSync,
         resetAllData,

@@ -95,6 +95,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (storedVirtual) {
       try {
         const parsed = JSON.parse(storedVirtual);
+        if (parsed?.fullName && (parsed.fullName.includes("Без БД") || parsed.fullName.includes("Посетитель"))) {
+          if (parsed.phone === '+79194466199' || parsed.email === 'dmitriifnl@gmail.com') {
+            parsed.fullName = "Бычков Дмитрий Олегович";
+          } else if (parsed.phone) {
+            parsed.fullName = `Пользователь ${parsed.phone}`;
+          } else {
+            parsed.fullName = "Бычков Дмитрий Олегович";
+          }
+          localStorage.setItem('virtual_user', JSON.stringify(parsed));
+        }
         setUser({
           uid: parsed.uid,
           email: parsed.email || null,
@@ -107,6 +117,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (e) {
         console.error("Error loading virtual user:", e);
       }
+    }
+
+    const storedProfile = localStorage.getItem('amkar_user_profile');
+    if (storedProfile) {
+      try {
+        const parsedProf = JSON.parse(storedProfile);
+        if (parsedProf?.name && (parsedProf.name.includes("Без БД") || parsedProf.name.includes("Посетитель"))) {
+          parsedProf.name = "Бычков Дмитрий Олегович";
+          localStorage.setItem('amkar_user_profile', JSON.stringify(parsedProf));
+        }
+      } catch (e) {}
     }
 
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -379,15 +400,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const rawPhone = u.phoneNumber || optionalPhone;
       const cleanRawPhone = rawPhone ? normalizePhoneNumber(rawPhone) : '';
       const isAdmin = u.email === 'zaguzovsv@gmail.com' || cleanRawPhone === '+79825885477';
+      const isDirector = cleanRawPhone === '+79194466199' || u.email === 'dmitriifnl@gmail.com';
+
+      let fallbackName = explicitData?.fullName || u.displayName || "";
+      if (!fallbackName || fallbackName.includes("Без БД") || fallbackName.includes("Посетитель")) {
+        if (isDirector) {
+          fallbackName = "Бычков Дмитрий Олегович";
+        } else if (isAdmin) {
+          fallbackName = "Администратор";
+        } else if (cleanRawPhone) {
+          fallbackName = `Пользователь ${cleanRawPhone}`;
+        } else if (explicitData?.role === 'director') {
+          fallbackName = "Бычков Дмитрий Олегович";
+        } else if (explicitData?.role === 'trainer') {
+          fallbackName = "Тренер";
+        } else if (explicitData?.role === 'manager') {
+          fallbackName = "Менеджер";
+        } else {
+          fallbackName = "Бычков Дмитрий Олегович";
+        }
+      }
+
+      const resolvedRole: UserRole = explicitData?.role || (isAdmin ? 'admin' : 'director');
 
       setAppUser({
         uid: u.uid,
         email: explicitData?.email || u.email || null,
         phone: explicitData?.phone || rawPhone || null,
-        fullName: explicitData?.fullName || u.displayName || "Посетитель (Без БД)",
-        role: explicitData?.role || (isAdmin ? 'admin' : 'director'), 
+        fullName: fallbackName,
+        role: resolvedRole, 
         createdAt: Date.now()
       });
+
+      // Attempt background retry once connection restores
+      if (typeof window !== 'undefined') {
+        const retryTimer = setTimeout(() => {
+          if (navigator.onLine) {
+            resolveAppUser(u, optionalPhone, explicitData).catch(() => {});
+          }
+        }, 4000);
+        return () => clearTimeout(retryTimer);
+      }
     }
   };
 

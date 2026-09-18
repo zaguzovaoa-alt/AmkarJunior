@@ -256,7 +256,12 @@ export interface TrainingSessionProtocol {
   assistantName?: string;
   photoUrl?: string | null;
   notes?: string;
+  hasLessonPlan?: boolean;
+  lessonPlanText?: string;
+  lessonPlanPhotoUrl?: string | null;
   presentCount: number;
+  presentPaidCount?: number;
+  presentUnpaidCount?: number;
   absentCount: number;
   sickCount: number;
   trialCount?: number;
@@ -359,16 +364,27 @@ export interface CRMConfig {
   };
 }
 
+export interface ChatMessageReader {
+  id: string;
+  name: string;
+  role: 'manager' | 'trainer' | 'parent' | 'director' | 'admin';
+  readAt: string; // e.g. "14:35" or "18.09 14:35"
+}
+
 export interface ChatMessage {
   id: string;
   senderRole: 'manager' | 'trainer' | 'parent' | 'director' | 'admin';
   senderName: string;
+  senderId?: string;
   text: string;
   timestamp: string; // HH:MM or ISO
   fileUrl?: string;
   fileName?: string;
   fileType?: 'image' | 'document';
   visibleTo?: ('manager' | 'trainer' | 'parent' | 'director' | 'admin')[];
+  readBy?: string[]; // user IDs or roles who viewed the message
+  readers?: ChatMessageReader[]; // detailed list of users who read the message
+  isRead?: boolean; // true if read by any recipient
 }
 
 export interface AppNotification {

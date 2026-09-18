@@ -10,6 +10,7 @@ import {
   onSnapshot,
 } from "firebase/firestore";
 import { AppUser } from "../context/AuthContext";
+import { useCRM } from "../context/CRMContext";
 import {
   Users,
   Plus,
@@ -21,10 +22,13 @@ import {
   Loader2,
   Save,
   X,
+  GraduationCap,
+  Check,
 } from "lucide-react";
 import { handleFirestoreError, OperationType } from "../firebase";
 
 export const DirectorUsers: React.FC = () => {
+  const { coaches } = useCRM();
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"staff" | "clients">("staff");
@@ -38,6 +42,7 @@ export const DirectorUsers: React.FC = () => {
     phone: "",
     role: "manager",
   });
+  const [isAlsoCoach, setIsAlsoCoach] = useState(false);
 
   const [saving, setSaving] = useState(false);
 
@@ -80,6 +85,102 @@ export const DirectorUsers: React.FC = () => {
     return unsub;
   }, []);
 
+  const isUserCoach = (u: AppUser) => {
+    return coaches.some((c) => {
+      if (c.id === u.uid) return true;
+      if (u.phone && c.phone) {
+        const uClean = u.phone.replace(/\D/g, "").slice(-10);
+        const cClean = c.phone.replace(/\D/g, "").slice(-10);
+        if (uClean && cClean && uClean === cClean) return true;
+      }
+      if (
+        u.fullName &&
+        c.name &&
+        u.fullName.trim().toLowerCase() === c.name.trim().toLowerCase()
+      ) {
+        return true;
+      }
+      return false;
+    });
+  };
+
+  const handleToggleCoachRole = async (u: AppUser) => {
+    const isCoach = isUserCoach(u);
+    if (isCoach) {
+      if (
+        window.confirm(
+          `Исключить "${u.fullName}" из тренерского состава?\nДоступ в систему как ${
+            u.role === "director"
+              ? "Директор"
+              : u.role === "admin"
+                ? "Администратор"
+                : "Сотрудник"
+          } сохранится в полном объёме.`
+        )
+      ) {
+        const existingCoach = coaches.find((c) => {
+          if (c.id === u.uid) return true;
+          if (u.phone && c.phone) {
+            const uClean = u.phone.replace(/\D/g, "").slice(-10);
+            const cClean = c.phone.replace(/\D/g, "").slice(-10);
+            if (uClean && cClean && uClean === cClean) return true;
+          }
+          if (
+            u.fullName &&
+            c.name &&
+            u.fullName.trim().toLowerCase() === c.name.trim().toLowerCase()
+          ) {
+            return true;
+          }
+          return false;
+        });
+        if (existingCoach) {
+          try {
+            await deleteDoc(doc(db, "coaches", existingCoach.id));
+          } catch (err) {
+            handleFirestoreError(err, OperationType.DELETE, `coaches/${existingCoach.id}`);
+          }
+        }
+      }
+    } else {
+      const coachRole =
+        u.role === "director"
+          ? "Тренер / Директор"
+          : u.role === "admin"
+            ? "Тренер / Администратор"
+            : u.role === "manager"
+              ? "Тренер / Менеджер"
+              : "Тренер состава";
+      const coachDoc = {
+        id: u.uid,
+        name: u.fullName.trim(),
+        role: coachRole,
+        phone: u.phone?.trim() || "",
+        telegram: "",
+        status: "Активен",
+        joinedYear: new Date().getFullYear(),
+        rating: 5,
+        avatarUrl: "",
+        groupsCount: 0,
+        kidsCount: 0,
+        workload: 0,
+        paymentType: "per_session",
+        rate: 1000,
+        feedback: {
+          professionalism: 5,
+          communication: 5,
+          results: 5,
+          discipline: 5,
+        },
+      };
+      try {
+        await setDoc(doc(db, "coaches", u.uid), coachDoc, { merge: true });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `coaches/${u.uid}`);
+      }
+    }
+  };
+
   const handleOpenModal = (user?: AppUser) => {
     if (user) {
       setEditingUserId(user.uid || null);
@@ -89,6 +190,7 @@ export const DirectorUsers: React.FC = () => {
         phone: user.phone || "",
         role: user.role || "manager",
       });
+      setIsAlsoCoach(isUserCoach(user) || user.role === "trainer");
     } else {
       setEditingUserId(null);
       setFormData({
@@ -97,6 +199,7 @@ export const DirectorUsers: React.FC = () => {
         phone: "",
         role: activeTab === "clients" ? "parent" : "manager",
       });
+      setIsAlsoCoach(false);
     }
     setIsModalOpen(true);
   };
@@ -139,11 +242,20 @@ export const DirectorUsers: React.FC = () => {
         merge: true,
       });
 
-      if (formData.role === "trainer") {
+      if (formData.role === "trainer" || isAlsoCoach) {
+        const coachRole =
+          formData.role === "director"
+            ? "Тренер / Директор"
+            : formData.role === "admin"
+              ? "Тренер / Администратор"
+              : formData.role === "manager"
+                ? "Тренер / Менеджер"
+                : "Тренер";
+
         const coachDoc = {
           id: idToSave as string,
           name: formData.fullName.trim(),
-          role: "Тренер",
+          role: coachRole,
           phone: formData.phone?.trim() || "",
           telegram: "",
           status: "Активен",
@@ -165,6 +277,19 @@ export const DirectorUsers: React.FC = () => {
         await setDoc(doc(db, "coaches", idToSave as string), coachDoc, {
           merge: true,
         }).catch((err) => console.warn("Failed to sync coach:", err));
+      } else if (editingUserId && !isAlsoCoach && formData.role !== "trainer") {
+        const existingCoach = coaches.find((c) => {
+          if (c.id === editingUserId) return true;
+          if (formData.phone && c.phone) {
+            const uClean = formData.phone.replace(/\D/g, "").slice(-10);
+            const cClean = c.phone.replace(/\D/g, "").slice(-10);
+            if (uClean && cClean && uClean === cClean) return true;
+          }
+          return false;
+        });
+        if (existingCoach) {
+          await deleteDoc(doc(db, "coaches", existingCoach.id)).catch(() => {});
+        }
       }
 
       setIsModalOpen(false);
@@ -274,29 +399,40 @@ export const DirectorUsers: React.FC = () => {
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <span
-                        className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${
-                          u.role === "admin"
-                            ? "bg-amber-100 text-amber-700"
+                      <div className="flex items-center flex-wrap gap-1.5">
+                        <span
+                          className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                            u.role === "admin"
+                              ? "bg-amber-100 text-amber-700"
+                              : u.role === "director"
+                                ? "bg-purple-100 text-purple-700"
+                                : u.role === "manager"
+                                  ? "bg-blue-100 text-blue-700"
+                                  : u.role === "trainer"
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : "bg-slate-100 text-slate-700"
+                          }`}
+                        >
+                          {u.role === "admin"
+                            ? "Администратор"
                             : u.role === "director"
-                              ? "bg-purple-100 text-purple-700"
+                              ? "Директор"
                               : u.role === "manager"
-                                ? "bg-blue-100 text-blue-700"
+                                ? "Менеджер"
                                 : u.role === "trainer"
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : "bg-slate-100 text-slate-700"
-                        }`}
-                      >
-                        {u.role === "admin"
-                          ? "Администратор"
-                          : u.role === "director"
-                            ? "Директор"
-                            : u.role === "manager"
-                              ? "Менеджер"
-                              : u.role === "trainer"
-                                ? "Тренер"
-                                : "Ученик/Родитель"}
-                      </span>
+                                  ? "Тренер"
+                                  : "Ученик/Родитель"}
+                        </span>
+                        {u.role !== "trainer" && isUserCoach(u) && (
+                          <span
+                            className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200"
+                            title="Также включен в тренерский состав (совмещение)"
+                          >
+                            <GraduationCap className="w-3 h-3 text-emerald-600" />
+                            <span>+ Тренер</span>
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-slate-500 font-medium">
                       {u.email ? (
@@ -318,10 +454,33 @@ export const DirectorUsers: React.FC = () => {
                         <span className="opacity-40">-</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-right space-x-2">
+                    <td className="px-6 py-4 text-right space-x-2 whitespace-nowrap">
+                      {staffRoles.includes(u.role) && u.role !== "trainer" && (
+                        isUserCoach(u) ? (
+                          <button
+                            type="button"
+                            onClick={() => handleToggleCoachRole(u)}
+                            className="px-2.5 py-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition inline-flex items-center space-x-1 cursor-pointer"
+                            title="Сотрудник в тренерском составе. Нажмите, чтобы исключить (доступ в систему сохранится)"
+                          >
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>В тренерах</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleToggleCoachRole(u)}
+                            className="px-2.5 py-1 text-[11px] font-bold text-slate-700 hover:text-emerald-700 bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 rounded-lg transition inline-flex items-center space-x-1 shadow-xs cursor-pointer"
+                            title="Назначить тренером без создания дубликата"
+                          >
+                            <GraduationCap className="w-3.5 h-3.5 text-slate-500" />
+                            <span>Сделать тренером</span>
+                          </button>
+                        )
+                      )}
                       <button
                         onClick={() => handleOpenModal(u)}
-                        className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition"
+                        className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition inline-flex items-center"
                         title="Редактировать"
                       >
                         <Edit3 className="w-4 h-4" />
@@ -331,7 +490,7 @@ export const DirectorUsers: React.FC = () => {
                           1) && (
                         <button
                           onClick={() => handleDelete(u.uid)}
-                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition"
+                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition inline-flex items-center"
                           title="Удалить"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -440,6 +599,34 @@ export const DirectorUsers: React.FC = () => {
                   <option value="parent">Родитель / Ученик</option>
                 </select>
               </div>
+
+              {formData.role !== "trainer" && formData.role !== "parent" && (
+                <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-1">
+                  <label className="flex items-start space-x-3 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={isAlsoCoach}
+                      onChange={(e) => setIsAlsoCoach(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-xs font-bold text-slate-900 block flex items-center gap-1.5">
+                        <GraduationCap className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>Включить в тренерский состав (совмещение)</span>
+                      </span>
+                      <span className="text-[11px] text-slate-600 block leading-tight mt-0.5">
+                        Сотрудник сохраняет все права{" "}
+                        {formData.role === "director"
+                          ? "директора"
+                          : formData.role === "admin"
+                            ? "администратора"
+                            : "менеджера"}
+                        , но также отображается в списках тренеров для закрепления за группами и ведения тренировок.
+                      </span>
+                    </div>
+                  </label>
+                </div>
+              )}
 
               <div className="pt-2 flex justify-end space-x-3">
                 <button

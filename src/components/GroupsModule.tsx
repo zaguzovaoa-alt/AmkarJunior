@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { HeaderDescription } from "./HeaderDescription";
 import { useCRM } from "../context/CRMContext";
 import {
@@ -21,10 +21,14 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  AlertTriangle,
 } from "lucide-react";
-import { parseScheduleString } from "../utils/scheduleParser";
+import { parseScheduleString, findCoachScheduleConflicts } from "../utils/scheduleParser";
 import { toISODateString, formatSessionDateDisplay, parseSessionDate } from "../utils/dateUtils";
 import { formatGroupNameDisplay } from "../utils/formatters";
+import { GroupTemplateSelector } from "./groups/GroupTemplateSelector";
+import { ScheduleTimePicker } from "./groups/ScheduleTimePicker";
+import { OrganicNumberInput } from "./groups/OrganicNumberInput";
 
 export const GroupsModule: React.FC = () => {
   const {
@@ -70,8 +74,8 @@ export const GroupsModule: React.FC = () => {
   const [scheduleEndDate, setScheduleEndDate] = useState("");
   const [newIsSelectTeam, setNewIsSelectTeam] = useState(false);
   const [newTargetCompetition, setNewTargetCompetition] = useState("");
-  const [newGroupVenueCost, setNewGroupVenueCost] = useState<number>(0);
-  const [newGroupMaxCapacity, setNewGroupMaxCapacity] = useState<number>(15);
+  const [newGroupVenueCostStr, setNewGroupVenueCostStr] = useState<string>("");
+  const [newGroupMaxCapacityStr, setNewGroupMaxCapacityStr] = useState<string>("15");
   const [newGroupVenueId, setNewGroupVenueId] = useState("");
 
   // Edit Group Form States
@@ -92,8 +96,8 @@ export const GroupsModule: React.FC = () => {
   const [editScheduleEndDate, setEditScheduleEndDate] = useState("");
   const [editIsSelectTeam, setEditIsSelectTeam] = useState(false);
   const [editTargetCompetition, setEditTargetCompetition] = useState("");
-  const [editVenueCost, setEditVenueCost] = useState<number>(0);
-  const [editMaxCapacity, setEditMaxCapacity] = useState<number>(15);
+  const [editVenueCostStr, setEditVenueCostStr] = useState<string>("");
+  const [editMaxCapacityStr, setEditMaxCapacityStr] = useState<string>("15");
   const [editVenueId, setEditVenueId] = useState("");
 
   // Quick assignment states
@@ -158,8 +162,37 @@ export const GroupsModule: React.FC = () => {
   const totalUnassignedCount = unassignedClients.length;
   const availableCoachesCount = coaches.length;
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Real-time conflict checks
+  const createConflicts = useMemo(() => {
+    if (!selectedCoachId || !scheduleInput.trim()) return [];
+    const parsed = parseScheduleString(scheduleInput).map((s) => s.raw);
+    return findCoachScheduleConflicts(
+      groups,
+      selectedCoachId,
+      parsed,
+      undefined,
+      newGroupName.trim(),
+    );
+  }, [groups, selectedCoachId, scheduleInput, newGroupName]);
+
+  const editConflicts = useMemo(() => {
+    if (!editSelectedCoachId || !editingGroup || !editScheduleInput.trim()) return [];
+    const parsed = parseScheduleString(editScheduleInput).map((s) => s.raw);
+    return findCoachScheduleConflicts(
+      groups,
+      editSelectedCoachId,
+      parsed,
+      editingGroup.id,
+      editGroupName.trim(),
+    );
+  }, [groups, editSelectedCoachId, editScheduleInput, editingGroup, editGroupName]);
+
   const handleCreateGroup = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     if (!newGroupName.trim()) {
       alert("Пожалуйста, введите название группы");
       return;
@@ -173,6 +206,11 @@ export const GroupsModule: React.FC = () => {
     const parsedSlots = parseScheduleString(scheduleInput);
     const parsedSchedule = parsedSlots.map((slot) => slot.raw);
 
+    const parsedCap = parseInt(newGroupMaxCapacityStr.trim(), 10);
+    const finalCapacity = !isNaN(parsedCap) && parsedCap > 0 ? parsedCap : 15;
+    const finalVenueCost = parseFloat(newGroupVenueCostStr.trim()) || 0;
+
+    setIsSubmitting(true);
     try {
       await createGroup(
         newGroupName,
@@ -185,8 +223,8 @@ export const GroupsModule: React.FC = () => {
         newIsSelectTeam,
         newTargetCompetition,
         [],
-        newGroupVenueCost,
-        newGroupMaxCapacity,
+        finalVenueCost,
+        finalCapacity,
         newGroupVenueId,
         scheduleStartDate || undefined,
         scheduleEndDate || undefined,
@@ -203,12 +241,14 @@ export const GroupsModule: React.FC = () => {
       setScheduleEndDate("");
       setNewIsSelectTeam(false);
       setNewTargetCompetition("");
-      setNewGroupVenueCost(0);
-      setNewGroupMaxCapacity(15);
+      setNewGroupVenueCostStr("");
+      setNewGroupMaxCapacityStr("15");
       setNewGroupVenueId("");
       setShowCreateModal(false);
     } catch (err: any) {
       alert("Ошибка при создании группы: " + err.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -224,14 +264,14 @@ export const GroupsModule: React.FC = () => {
     setEditScheduleEndDate(group.scheduleEndDate || "");
     setEditIsSelectTeam(group.isSelectTeam || false);
     setEditTargetCompetition(group.targetCompetition || "");
-    setEditVenueCost(group.venueCost || 0);
+    setEditVenueCostStr(group.venueCost ? String(Math.round(group.venueCost)) : "");
     setEditVenueId(group.venueId || "");
-    setEditMaxCapacity(group.maxCapacity || 15);
+    setEditMaxCapacityStr(group.maxCapacity ? String(group.maxCapacity) : "15");
   };
 
   const handleUpdateGroup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingGroup) return;
+    if (!editingGroup || isSubmitting) return;
 
     if (!editGroupName.trim()) {
       alert("Пожалуйста, введите название группы");
@@ -245,6 +285,11 @@ export const GroupsModule: React.FC = () => {
     const parsedSlots = parseScheduleString(editScheduleInput);
     const parsedSchedule = parsedSlots.map((slot) => slot.raw);
 
+    const parsedCap = parseInt(editMaxCapacityStr.trim(), 10);
+    const finalCapacity = !isNaN(parsedCap) && parsedCap > 0 ? parsedCap : 15;
+    const finalVenueCost = parseFloat(editVenueCostStr.trim()) || 0;
+
+    setIsSubmitting(true);
     try {
       await updateGroup(editingGroup.id, {
         name: editGroupName.trim(),
@@ -258,14 +303,16 @@ export const GroupsModule: React.FC = () => {
         scheduleEndDate: editScheduleEndDate || undefined,
         isSelectTeam: editIsSelectTeam,
         targetCompetition: editTargetCompetition,
-        venueCost: editVenueCost,
-        maxCapacity: editMaxCapacity,
+        venueCost: finalVenueCost,
+        maxCapacity: finalCapacity,
         venueId: editVenueId
       });
 
       setEditingGroup(null);
     } catch (err: any) {
       alert("Ошибка при обновлении группы: " + err.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -839,7 +886,7 @@ export const GroupsModule: React.FC = () => {
       {/* CREATE NEW TRAINING GROUP MODAL */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-neutral-900/40 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 z-50">
-          <div className="bg-white rounded-2xl max-w-md w-full border shadow-2xl p-5 sm:p-6 relative max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-2xl max-w-xl w-full border shadow-2xl p-5 sm:p-6 relative max-h-[92vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
             <button
               onClick={() => setShowCreateModal(false)}
               className="absolute top-4 right-4 p-1 rounded-lg hover:bg-slate-50 text-gray-400 hover:text-gray-600 transition cursor-pointer"
@@ -852,25 +899,50 @@ export const GroupsModule: React.FC = () => {
               <span>Создать учебную группу</span>
             </h3>
             <p className="text-xs text-gray-400 mb-4">
-              Укажите параметры новой группы, расписание и прикрепите тренера.
+              Выберите типовую группу из списка или создайте новую, настройте расписание и прикрепите тренера.
             </p>
 
             <form onSubmit={handleCreateGroup} className="space-y-4 text-left">
+              {/* 1. SELECT GROUP FROM TEMPLATES OR SAVE CURRENT */}
+              <GroupTemplateSelector
+                currentName={newGroupName}
+                birthYearFrom={newGroupBirthYearFrom}
+                birthYearTo={newGroupBirthYearTo}
+                isSelectTeam={newIsSelectTeam}
+                targetCompetition={newTargetCompetition}
+                onSelectTemplate={(tmpl) => {
+                  setNewGroupName(tmpl.name);
+                  setNewGroupBirthYearFrom(tmpl.birthYearFrom);
+                  setNewGroupBirthYearTo(tmpl.birthYearTo);
+                  if (tmpl.isSelectTeam !== undefined) {
+                    setNewIsSelectTeam(tmpl.isSelectTeam);
+                  }
+                  if (tmpl.targetCompetition) {
+                    setNewTargetCompetition(tmpl.targetCompetition);
+                  }
+                  if (tmpl.suggestedCapacity && (!newGroupMaxCapacityStr || newGroupMaxCapacityStr === "15")) {
+                    setNewGroupMaxCapacityStr(String(tmpl.suggestedCapacity));
+                  }
+                }}
+              />
+
+              {/* 2. GROUP NAME INPUT */}
               <div className="space-y-1">
                 <label className="text-xs font-black text-slate-900 uppercase font-mono tracking-wider">
-                  Название группы
+                  Название группы <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
-                  placeholder="Например: Группа 2015 спартак"
+                  placeholder="Например: Группа 2016-2017 Спартак"
                   required
                   value={newGroupName}
                   onChange={(e) => setNewGroupName(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-xl text-xs font-semibold focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600"
+                  className="w-full px-3 py-2 border rounded-xl text-xs font-semibold focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 bg-white"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              {/* 3. BIRTH YEARS & COACH */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-xs font-black text-slate-900 uppercase font-mono tracking-wider">
                     Год рождения учеников
@@ -879,30 +951,30 @@ export const GroupsModule: React.FC = () => {
                     <span className="text-xs font-bold text-gray-500">с</span>
                     <input
                       type="number"
-                      min="2010"
-                      max="2027"
+                      min="2008"
+                      max="2028"
                       required
                       value={newGroupBirthYearFrom}
                       onChange={(e) =>
                         setNewGroupBirthYearFrom(
-                          parseInt(e.target.value) || new Date().getFullYear(),
+                          parseInt(e.target.value) || new Date().getFullYear() - 10,
                         )
                       }
-                      className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold focus:outline-none"
+                      className="w-full px-2.5 py-1.5 border rounded-xl text-xs font-mono font-bold focus:outline-none bg-white"
                     />
                     <span className="text-xs font-bold text-gray-500">до</span>
                     <input
                       type="number"
-                      min="2010"
-                      max="2027"
+                      min="2008"
+                      max="2028"
                       required
                       value={newGroupBirthYearTo}
                       onChange={(e) =>
                         setNewGroupBirthYearTo(
-                          parseInt(e.target.value) || new Date().getFullYear(),
+                          parseInt(e.target.value) || new Date().getFullYear() - 8,
                         )
                       }
-                      className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold focus:outline-none"
+                      className="w-full px-2.5 py-1.5 border rounded-xl text-xs font-mono font-bold focus:outline-none bg-white"
                     />
                   </div>
                 </div>
@@ -927,44 +999,36 @@ export const GroupsModule: React.FC = () => {
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-black text-slate-900 uppercase font-mono tracking-wider">
-                  Расписание тренировок
-                </label>
-                <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
-                  {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map(day => (
-                    <label key={day} className={`flex items-center p-2 rounded-lg border cursor-pointer transition ${scheduleInput.includes(day) ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200 hover:bg-slate-50'}`}>
-                      <input 
-                        type="checkbox" 
-                        checked={scheduleInput.includes(day)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            const time = prompt(`Укажите время для ${day} (например, 17:00-18:00):`, "17:00-18:00");
-                            if (time) {
-                              setScheduleInput(prev => prev ? `${prev}, ${day} ${time}` : `${day} ${time}`);
-                            }
-                          } else {
-                            const parts = scheduleInput.split(', ').filter(p => !p.startsWith(day));
-                            setScheduleInput(parts.join(', '));
-                          }
-                        }}
-                        className="sr-only"
-                      />
-                      <span className="text-xs font-bold w-6">{day}</span>
-                      {scheduleInput.includes(day) && (
-                        <span className="text-[10px] text-red-600 font-mono font-medium ml-1 flex-1 truncate">
-                          {scheduleInput.split(', ').find(p => p.startsWith(day))?.replace(day, '').trim() || ''}
-                        </span>
-                      )}
-                    </label>
-                  ))}
-                </div>
-                <div className="flex justify-between items-center px-1">
-                  <p className="text-[9px] text-gray-400 mt-1">Выберите дни и укажите время</p>
-                  <button type="button" onClick={() => setScheduleInput('')} className="text-[9px] text-red-500 hover:underline">Очистить</button>
-                </div>
+              {/* 4. VISUAL SCHEDULE & TIME CONFIGURATOR */}
+              <div className="space-y-2">
+                <ScheduleTimePicker
+                  value={scheduleInput}
+                  onChange={setScheduleInput}
+                />
 
-                <div className="pt-2 grid grid-cols-2 gap-3">
+                {/* Conflict / Free Status indicator */}
+                {createConflicts.length > 0 ? (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1.5 text-xs">
+                    <div className="flex items-center space-x-1.5 text-amber-800 font-bold">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>Внимание: пересечение времени в расписании тренера!</span>
+                    </div>
+                    <ul className="text-amber-700 space-y-1 pl-5 list-disc text-[11px]">
+                      {createConflicts.map((c, idx) => (
+                        <li key={idx}>
+                          <b>{c.day}:</b> {c.overlapDescription}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : selectedCoachId && scheduleInput.trim() ? (
+                  <div className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center space-x-1.5 text-xs text-emerald-800 font-medium">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>Расписание тренера в эти часы свободно (пересечений нет)</span>
+                  </div>
+                ) : null}
+
+                <div className="grid grid-cols-2 gap-3 pt-1">
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-600 uppercase font-mono block">
                       Период с (Дата начала)
@@ -973,7 +1037,7 @@ export const GroupsModule: React.FC = () => {
                       type="date"
                       value={scheduleStartDate}
                       onChange={(e) => setScheduleStartDate(e.target.value)}
-                      className="w-full px-2.5 py-1.5 border rounded-xl text-xs font-semibold focus:outline-none focus:border-red-600"
+                      className="w-full px-2.5 py-1.5 border rounded-xl text-xs font-semibold focus:outline-none focus:border-red-600 bg-white"
                     />
                   </div>
                   <div className="space-y-1">
@@ -984,16 +1048,17 @@ export const GroupsModule: React.FC = () => {
                       type="date"
                       value={scheduleEndDate}
                       onChange={(e) => setScheduleEndDate(e.target.value)}
-                      className="w-full px-2.5 py-1.5 border rounded-xl text-xs font-semibold focus:outline-none focus:border-red-600"
+                      className="w-full px-2.5 py-1.5 border rounded-xl text-xs font-semibold focus:outline-none focus:border-red-600 bg-white"
                     />
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-1 col-span-3 sm:col-span-1">
+              {/* 5. VENUE, VENUE COST & CAPACITY (ORGANIC NUMBER INPUT) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1 sm:col-span-1">
                   <label className="text-xs font-black text-slate-900 uppercase font-mono tracking-wider">
-                    Площадка (Контрагент)
+                    Площадка
                   </label>
                   <select
                     value={newGroupVenueId}
@@ -1002,10 +1067,10 @@ export const GroupsModule: React.FC = () => {
                       setNewGroupVenueId(selectedId);
                       const cp = counterparties.find((c) => c.id === selectedId);
                       if (cp && cp.rate) {
-                        setNewGroupVenueCost(cp.rate);
+                        setNewGroupVenueCostStr(String(Math.round(cp.rate)));
                       }
                     }}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-red-600 bg-white"
+                    className="w-full px-2.5 py-2 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-red-600 bg-white"
                   >
                     <option value="">-- Не выбрана --</option>
                     {counterparties
@@ -1017,30 +1082,38 @@ export const GroupsModule: React.FC = () => {
                       ))}
                   </select>
                 </div>
-                 <div className="space-y-1">
+
+                <div className="space-y-1 sm:col-span-1">
                   <label className="text-xs font-black text-slate-900 uppercase font-mono tracking-wider">
                     Аренда (₽/занят.)
                   </label>
                   <input
-                    type="number"
-                    value={Math.round(newGroupVenueCost)}
-                    onChange={(e) => setNewGroupVenueCost(parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold focus:outline-none"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="0"
+                    value={newGroupVenueCostStr}
+                    onChange={(e) =>
+                      setNewGroupVenueCostStr(e.target.value.replace(/\D/g, ""))
+                    }
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-mono font-bold focus:outline-none focus:border-red-600 bg-white"
                   />
                 </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-black text-slate-900 uppercase font-mono tracking-wider">
-                    Вместимость
-                  </label>
-                  <input
-                    type="number"
-                    value={newGroupMaxCapacity}
-                    onChange={(e) => setNewGroupMaxCapacity(parseInt(e.target.value) || 0)}
-                    className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold focus:outline-none"
+
+                {/* CAPACITY WITH ORGANIC INPUT (NO DEFAULT ZERO) */}
+                <div className="sm:col-span-1">
+                  <OrganicNumberInput
+                    label="Вместимость"
+                    value={newGroupMaxCapacityStr}
+                    onChange={setNewGroupMaxCapacityStr}
+                    placeholder="Например: 15"
+                    presetValues={[10, 12, 15, 18, 20]}
+                    unit="чел."
                   />
                 </div>
               </div>
 
+              {/* 6. SELECT TEAM SECTION */}
               <div className="space-y-3 p-3 bg-red-50/50 border border-red-100 rounded-xl">
                 <label className="flex items-center space-x-2 cursor-pointer">
                   <input
@@ -1064,7 +1137,7 @@ export const GroupsModule: React.FC = () => {
                       value={newTargetCompetition}
                       onChange={(e) => setNewTargetCompetition(e.target.value)}
                       placeholder="Напр. Кубок Мэра 2026"
-                      className="w-full px-3 py-2 border border-red-200 rounded-xl text-xs font-medium focus:outline-none focus:border-red-500"
+                      className="w-full px-3 py-2 border border-red-200 rounded-xl text-xs font-medium focus:outline-none focus:border-red-500 bg-white"
                     />
                   </div>
                 )}
@@ -1080,9 +1153,10 @@ export const GroupsModule: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-1 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black uppercase transition shadow-md"
+                  disabled={isSubmitting}
+                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black uppercase transition shadow-md shadow-red-600/10 cursor-pointer"
                 >
-                  Создать группу
+                  {isSubmitting ? "Создание..." : "Создать группу"}
                 </button>
               </div>
             </form>
@@ -1093,7 +1167,7 @@ export const GroupsModule: React.FC = () => {
       {/* EDIT TRAINING GROUP MODAL */}
       {editingGroup && (
         <div className="fixed inset-0 bg-neutral-900/40 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 z-50">
-          <div className="bg-white rounded-2xl max-w-md w-full border shadow-2xl p-5 sm:p-6 relative max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-2xl max-w-xl w-full border shadow-2xl p-5 sm:p-6 relative max-h-[92vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
             <button
               onClick={() => setEditingGroup(null)}
               className="absolute top-4 right-4 p-1 rounded-lg hover:bg-slate-50 text-gray-400 hover:text-gray-600 transition cursor-pointer"
@@ -1113,7 +1187,7 @@ export const GroupsModule: React.FC = () => {
             <form onSubmit={handleUpdateGroup} className="space-y-4 text-left">
               <div className="space-y-1">
                 <label className="text-xs font-black text-slate-900 uppercase font-mono tracking-wider">
-                  Название группы
+                  Название группы <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -1121,11 +1195,11 @@ export const GroupsModule: React.FC = () => {
                   required
                   value={editGroupName}
                   onChange={(e) => setEditGroupName(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-xl text-xs font-semibold focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600"
+                  className="w-full px-3 py-2 border rounded-xl text-xs font-semibold focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 bg-white"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-xs font-black text-slate-900 uppercase font-mono tracking-wider">
                     Год рождения учеников
@@ -1134,30 +1208,30 @@ export const GroupsModule: React.FC = () => {
                     <span className="text-xs font-bold text-gray-500">с</span>
                     <input
                       type="number"
-                      min="2010"
-                      max="2027"
+                      min="2008"
+                      max="2028"
                       required
                       value={editGroupBirthYearFrom}
                       onChange={(e) =>
                         setEditGroupBirthYearFrom(
-                          parseInt(e.target.value) || new Date().getFullYear(),
+                          parseInt(e.target.value) || new Date().getFullYear() - 10,
                         )
                       }
-                      className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold focus:outline-none"
+                      className="w-full px-2.5 py-1.5 border rounded-xl text-xs font-mono font-bold focus:outline-none bg-white"
                     />
                     <span className="text-xs font-bold text-gray-500">до</span>
                     <input
                       type="number"
-                      min="2010"
-                      max="2027"
+                      min="2008"
+                      max="2028"
                       required
                       value={editGroupBirthYearTo}
                       onChange={(e) =>
                         setEditGroupBirthYearTo(
-                          parseInt(e.target.value) || new Date().getFullYear(),
+                          parseInt(e.target.value) || new Date().getFullYear() - 8,
                         )
                       }
-                      className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold focus:outline-none"
+                      className="w-full px-2.5 py-1.5 border rounded-xl text-xs font-mono font-bold focus:outline-none bg-white"
                     />
                   </div>
                 </div>
@@ -1182,44 +1256,36 @@ export const GroupsModule: React.FC = () => {
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-black text-slate-900 uppercase font-mono tracking-wider">
-                  Расписание тренировок
-                </label>
-                <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
-                  {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map(day => (
-                    <label key={day} className={`flex items-center p-2 rounded-lg border cursor-pointer transition ${editScheduleInput.includes(day) ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200 hover:bg-slate-50'}`}>
-                      <input 
-                        type="checkbox" 
-                        checked={editScheduleInput.includes(day)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            const time = prompt(`Укажите время для ${day} (например, 17:00-18:00):`, "17:00-18:00");
-                            if (time) {
-                              setEditScheduleInput(prev => prev ? `${prev}, ${day} ${time}` : `${day} ${time}`);
-                            }
-                          } else {
-                            const parts = editScheduleInput.split(', ').filter(p => !p.startsWith(day));
-                            setEditScheduleInput(parts.join(', '));
-                          }
-                        }}
-                        className="sr-only"
-                      />
-                      <span className="text-xs font-bold w-6">{day}</span>
-                      {editScheduleInput.includes(day) && (
-                        <span className="text-[10px] text-red-600 font-mono font-medium ml-1 flex-1 truncate">
-                          {editScheduleInput.split(', ').find(p => p.startsWith(day))?.replace(day, '').trim() || ''}
-                        </span>
-                      )}
-                    </label>
-                  ))}
-                </div>
-                <div className="flex justify-between items-center px-1">
-                  <p className="text-[9px] text-gray-400 mt-1">Выберите дни и укажите время</p>
-                  <button type="button" onClick={() => setEditScheduleInput('')} className="text-[9px] text-red-500 hover:underline">Очистить</button>
-                </div>
+              {/* SCHEDULE & TIME PICKER */}
+              <div className="space-y-2">
+                <ScheduleTimePicker
+                  value={editScheduleInput}
+                  onChange={setEditScheduleInput}
+                />
 
-                <div className="pt-2 grid grid-cols-2 gap-3">
+                {/* Conflict / Free Status indicator */}
+                {editConflicts.length > 0 ? (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1.5 text-xs">
+                    <div className="flex items-center space-x-1.5 text-amber-800 font-bold">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>Внимание: пересечение времени в расписании тренера!</span>
+                    </div>
+                    <ul className="text-amber-700 space-y-1 pl-5 list-disc text-[11px]">
+                      {editConflicts.map((c, idx) => (
+                        <li key={idx}>
+                          <b>{c.day}:</b> {c.overlapDescription}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : editSelectedCoachId && editScheduleInput.trim() ? (
+                  <div className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center space-x-1.5 text-xs text-emerald-800 font-medium">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>Расписание тренера в эти часы свободно (пересечений нет)</span>
+                  </div>
+                ) : null}
+
+                <div className="grid grid-cols-2 gap-3 pt-1">
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-600 uppercase font-mono block">
                       Период с (Дата начала)
@@ -1228,7 +1294,7 @@ export const GroupsModule: React.FC = () => {
                       type="date"
                       value={editScheduleStartDate}
                       onChange={(e) => setEditScheduleStartDate(e.target.value)}
-                      className="w-full px-2.5 py-1.5 border rounded-xl text-xs font-semibold focus:outline-none focus:border-red-600"
+                      className="w-full px-2.5 py-1.5 border rounded-xl text-xs font-semibold focus:outline-none focus:border-red-600 bg-white"
                     />
                   </div>
                   <div className="space-y-1">
@@ -1239,16 +1305,16 @@ export const GroupsModule: React.FC = () => {
                       type="date"
                       value={editScheduleEndDate}
                       onChange={(e) => setEditScheduleEndDate(e.target.value)}
-                      className="w-full px-2.5 py-1.5 border rounded-xl text-xs font-semibold focus:outline-none focus:border-red-600"
+                      className="w-full px-2.5 py-1.5 border rounded-xl text-xs font-semibold focus:outline-none focus:border-red-600 bg-white"
                     />
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-1 col-span-3 sm:col-span-1">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1 sm:col-span-1">
                   <label className="text-xs font-black text-slate-900 uppercase font-mono tracking-wider">
-                    Площадка (Контрагент)
+                    Площадка
                   </label>
                   <select
                     value={editVenueId}
@@ -1257,10 +1323,10 @@ export const GroupsModule: React.FC = () => {
                       setEditVenueId(selectedId);
                       const cp = counterparties.find((c) => c.id === selectedId);
                       if (cp && cp.rate) {
-                        setEditVenueCost(cp.rate);
+                        setEditVenueCostStr(String(Math.round(cp.rate)));
                       }
                     }}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-red-600 bg-white"
+                    className="w-full px-2.5 py-2 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-red-600 bg-white"
                   >
                     <option value="">-- Не выбрана --</option>
                     {counterparties
@@ -1272,26 +1338,32 @@ export const GroupsModule: React.FC = () => {
                       ))}
                   </select>
                 </div>
-                 <div className="space-y-1">
+
+                <div className="space-y-1 sm:col-span-1">
                   <label className="text-xs font-black text-slate-900 uppercase font-mono tracking-wider">
                     Аренда (₽/занят.)
                   </label>
                   <input
-                    type="number"
-                    value={Math.round(editVenueCost)}
-                    onChange={(e) => setEditVenueCost(parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold focus:outline-none"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="0"
+                    value={editVenueCostStr}
+                    onChange={(e) =>
+                      setEditVenueCostStr(e.target.value.replace(/\D/g, ""))
+                    }
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-mono font-bold focus:outline-none focus:border-red-600 bg-white"
                   />
                 </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-black text-slate-900 uppercase font-mono tracking-wider">
-                    Вместимость
-                  </label>
-                  <input
-                    type="number"
-                    value={editMaxCapacity}
-                    onChange={(e) => setEditMaxCapacity(parseInt(e.target.value) || 0)}
-                    className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold focus:outline-none"
+
+                <div className="sm:col-span-1">
+                  <OrganicNumberInput
+                    label="Вместимость"
+                    value={editMaxCapacityStr}
+                    onChange={setEditMaxCapacityStr}
+                    placeholder="Например: 15"
+                    presetValues={[10, 12, 15, 18, 20]}
+                    unit="чел."
                   />
                 </div>
               </div>
@@ -1319,7 +1391,7 @@ export const GroupsModule: React.FC = () => {
                       value={editTargetCompetition}
                       onChange={(e) => setEditTargetCompetition(e.target.value)}
                       placeholder="Напр. Кубок Мэра"
-                      className="w-full px-3 py-2 border border-red-200 rounded-xl text-xs font-medium focus:outline-none focus:border-red-500"
+                      className="w-full px-3 py-2 border border-red-200 rounded-xl text-xs font-medium focus:outline-none focus:border-red-500 bg-white"
                     />
                   </div>
                 )}
@@ -1335,9 +1407,10 @@ export const GroupsModule: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black uppercase transition shadow-md shadow-red-600/10 cursor-pointer"
+                  disabled={isSubmitting}
+                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black uppercase transition shadow-md shadow-red-600/10 cursor-pointer"
                 >
-                  Сохранить
+                  {isSubmitting ? "Сохранение..." : "Сохранить"}
                 </button>
               </div>
             </form>

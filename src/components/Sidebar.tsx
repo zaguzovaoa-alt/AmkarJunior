@@ -21,6 +21,7 @@ import {
   ShieldCheck
 } from "lucide-react";
 import { useCRM } from "../context/CRMContext";
+import { useAuth } from "../context/AuthContext";
 import { AmkarLogo } from "./AmkarLogo";
 import { InviteLinkModal } from "./InviteLinkModal";
 
@@ -38,18 +39,49 @@ export const Sidebar: React.FC<SidebarProps> = ({
   messageCount,
 }) => {
   const { schoolName, leads, messages } = useCRM();
+  const { appUser } = useAuth();
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
 
   const newLeadsCount = leads.filter((l) => l.status === "new").length;
-  // Calculate messages visible to the current role
-  const visibleMessagesCount = messages.filter(
-    (m) =>
+
+  const currentUserId = appUser?.uid || currentRole;
+  const currentUserName = appUser?.fullName?.trim().toLowerCase();
+
+  // Calculate unread (unseen) messages for current user
+  const unreadMessagesCount = messages.filter((m) => {
+    const isVisible =
       !m.visibleTo ||
       m.visibleTo.includes(currentRole) ||
-      m.senderRole === currentRole,
-  ).length;
+      m.senderRole === currentRole;
+    if (!isVisible) return false;
+
+    // Sender's own message is never unread to themselves
+    const isMe =
+      (m.senderId && m.senderId === currentUserId) ||
+      (currentUserName &&
+        m.senderName?.trim().toLowerCase() === currentUserName) ||
+      (m.senderRole === currentRole && !m.senderId);
+    if (isMe) return false;
+
+    // Check if current user has viewed/read it
+    const readByList = m.readBy || [];
+    const isReadByMe =
+      readByList.includes(currentUserId) ||
+      readByList.includes(currentRole) ||
+      (m.readers &&
+        m.readers.some(
+          (r) =>
+            r.id === currentUserId ||
+            r.id === currentRole ||
+            (currentUserName &&
+              r.name?.trim().toLowerCase() === currentUserName),
+        ));
+
+    return !isReadByMe;
+  }).length;
+
   const finalMessageCount =
-    messageCount !== undefined ? messageCount : visibleMessagesCount;
+    messageCount !== undefined ? messageCount : unreadMessagesCount;
 
   // Get visible menu items based on role
   const getMenuItems = () => {

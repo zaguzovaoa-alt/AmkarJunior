@@ -378,8 +378,22 @@ async function processIncomingLead(payload: any) {
 
   const now = new Date();
   const leadId = payload.id || `l_${Date.now()}`;
-  const timeString = payload.timeString || payload.time || now.toTimeString().substring(0, 5);
-  const dateString = payload.dateString || payload.date || now.toLocaleDateString("ru-RU");
+
+  // Moscow timezone formatting (Europe/Moscow)
+  const moscowDate = now.toLocaleDateString("ru-RU", {
+    timeZone: "Europe/Moscow",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+  const moscowTime = now.toLocaleTimeString("ru-RU", {
+    timeZone: "Europe/Moscow",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  const timeString = payload.timeString || payload.time || moscowTime;
+  const dateString = payload.dateString || payload.date || moscowDate;
 
   const newLead = {
     id: leadId,
@@ -403,9 +417,9 @@ async function processIncomingLead(payload: any) {
   // 1. Fetch config and send Telegram notification IMMEDIATELY from server
   let tgResult: { success: boolean; error?: string } = { success: false };
   const config = await getCRMConfig();
-  if (config && config.telegramAlerts.newLead !== false && config.telegramBotToken && config.telegramGroupChatId) {
+  if (config && config.telegramAlerts?.newLead !== false && config.telegramBotToken && config.telegramGroupChatId) {
     const childDisplayName = [childSurnameFinal, childNameFinal].filter(Boolean).join(" ") || "Не указано";
-    const telegramMessage = `🚨 <b>НОВАЯ ЗАЯВКА (АМКАР ЮНИОР)</b>\n\n👤 <b>Родитель:</b> ${parentNameFinal}\n📞 <b>Телефон:</b> <code>${parentPhoneFinal}</code>\n⚽ <b>Ребенок:</b> ${childDisplayName}${ageText}\n📍 <b>Источник:</b> ${sourceFinal}\n📋 <b>Статус:</b> Новая заявка\n🎯 <b>Действие:</b> ${actionFinal}\n📝 <b>Детали:</b> ${notesFinal}\n\n⏰ <i>${dateString} ${timeString}</i>`;
+    const telegramMessage = `🚨 <b>НОВАЯ ЗАЯВКА (АМКАР ЮНИОР)</b>\n\n👤 <b>Родитель:</b> ${parentNameFinal}\n📞 <b>Телефон:</b> <code>${parentPhoneFinal}</code>\n⚽ <b>Ребенок:</b> ${childDisplayName}${ageText}\n📍 <b>Источник:</b> ${sourceFinal}\n📋 <b>Статус:</b> Новая заявка\n🎯 <b>Действие:</b> ${actionFinal}\n📝 <b>Детали:</b> ${notesFinal}\n\n⏰ <i>${dateString} ${timeString} (МСК)</i>`;
     tgResult = await sendTelegramAlertServer(config.telegramBotToken, config.telegramGroupChatId, telegramMessage);
   } else {
     console.warn("Telegram alert not sent: token/chatId missing in config", config);

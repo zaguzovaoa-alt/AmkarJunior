@@ -1035,11 +1035,21 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                           </span>
                         </td>
                         <td className="p-3">
-                          <div className="font-bold">{lead.timeString}</div>
+                          <div className="font-bold">
+                            {lead.createdAt
+                              ? new Date(lead.createdAt).toLocaleTimeString("ru-RU", {
+                                  timeZone: "Europe/Moscow",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })
+                              : lead.timeString}
+                          </div>
                           <p className="text-[10px] text-gray-400 font-mono">
                             {new Date(
                               lead.createdAt || Date.now(),
-                            ).toLocaleDateString("ru-RU")}
+                            ).toLocaleDateString("ru-RU", {
+                              timeZone: "Europe/Moscow",
+                            })}
                           </p>
                         </td>
                         <td className="p-3">
