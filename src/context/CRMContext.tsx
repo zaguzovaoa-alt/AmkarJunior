@@ -304,6 +304,7 @@ interface CRMContextType {
   updateCRMConfig: (config: Partial<CRMConfig>) => Promise<void>;
   cancelledSessions: CancelledSession[];
   addCancelledSession: (session: Omit<CancelledSession, "id">) => Promise<void>;
+  addCancelledSessionsBatch: (sessions: Omit<CancelledSession, "id">[]) => Promise<number>;
   deleteCancelledSession: (id: string) => Promise<void>;
   generateAIProgressReport: (
     clientId: string,
@@ -2622,9 +2623,23 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [homeworkSubmissions]);
 
   const addCancelledSession = async (session: Omit<CancelledSession, "id">) => {
+    // Prevent duplicate cancellations for the same group and date
+    const isDuplicate = cancelledSessions.some(
+      (cs) =>
+        (cs.groupName?.trim().toLowerCase() === session.groupName?.trim().toLowerCase() ||
+          (session.groupId && cs.groupId === session.groupId)) &&
+        (cs.date === session.date || cs.date?.startsWith(session.date) || session.date?.startsWith(cs.date)) &&
+        cs.reason === session.reason
+    );
+    if (isDuplicate) {
+      console.warn("Cancelled session already recorded, ignoring duplicate:", session);
+      return;
+    }
+
     const newSession: CancelledSession = {
       ...session,
       id: `cs_${Date.now()}`,
+      createdAt: session.createdAt || new Date().toISOString(),
     };
     setCancelledSessions((prev) => [newSession, ...prev]);
     try {
@@ -2632,6 +2647,46 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     } catch (e) {
       console.error("Error adding cancelled session to Firestore:", e);
     }
+  };
+
+  const addCancelledSessionsBatch = async (sessions: Omit<CancelledSession, "id">[]): Promise<number> => {
+    if (!sessions || sessions.length === 0) return 0;
+
+    const validSessionsToAdd: CancelledSession[] = [];
+    const existingKeys = new Set(
+      cancelledSessions.map((cs) => `${(cs.groupId || cs.groupName || "").trim().toLowerCase()}_${cs.date?.substring(0, 10)}`)
+    );
+
+    const now = Date.now();
+    for (let i = 0; i < sessions.length; i++) {
+      const s = sessions[i];
+      const key = `${(s.groupId || s.groupName || "").trim().toLowerCase()}_${s.date?.substring(0, 10)}`;
+      if (existingKeys.has(key)) {
+        continue;
+      }
+      existingKeys.add(key);
+      const newSession: CancelledSession = {
+        ...s,
+        id: `cs_${now}_${i}_${Math.random().toString(36).substring(2, 6)}`,
+        createdAt: s.createdAt || new Date().toISOString(),
+      };
+      validSessionsToAdd.push(newSession);
+    }
+
+    if (validSessionsToAdd.length === 0) return 0;
+
+    setCancelledSessions((prev) => [...validSessionsToAdd, ...prev]);
+
+    try {
+      const batchPromises = validSessionsToAdd.map((session) =>
+        setDoc(doc(db, "cancelled_sessions", session.id), removeUndefined(session) as any)
+      );
+      await Promise.all(batchPromises);
+    } catch (e) {
+      console.error("Error adding cancelled sessions batch to Firestore:", e);
+    }
+
+    return validSessionsToAdd.length;
   };
 
   const deleteCancelledSession = async (id: string) => {
@@ -3853,6 +3908,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         trainingSessions,
         cancelledSessions,
         addCancelledSession,
+        addCancelledSessionsBatch,
         deleteCancelledSession,
         messages,
         calendarSyncEnabled,

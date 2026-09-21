@@ -51,6 +51,7 @@ import {
   UserX,
   HelpCircle,
   Edit2,
+  RefreshCw,
 } from "lucide-react";
 import { motion } from "motion/react";
 import {
@@ -388,21 +389,31 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
     setIsEditingGoals(false);
   };
 
+  const [isSubmittingCancellation, setIsSubmittingCancellation] = useState(false);
+
   const handleAddCancellationSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCancelGroup) {
       alert("Пожалуйста, выберите или укажите группу");
       return;
     }
-    await addCancelledSession({
-      groupName: newCancelGroup,
-      date: newCancelDate,
-      reason: newCancelReason,
-      notes: newCancelNotes,
-      coachName: newCancelCoach,
-    });
-    setShowAddCancellationModal(false);
-    setNewCancelNotes("");
+    if (isSubmittingCancellation) return;
+    setIsSubmittingCancellation(true);
+    try {
+      await addCancelledSession({
+        groupName: newCancelGroup,
+        date: newCancelDate,
+        reason: newCancelReason,
+        notes: newCancelNotes,
+        coachName: newCancelCoach,
+      });
+      setShowAddCancellationModal(false);
+      setNewCancelNotes("");
+    } catch (err) {
+      console.error("Error submitting cancellation:", err);
+    } finally {
+      setIsSubmittingCancellation(false);
+    }
   };
 
   // Today Income Records & Sum
@@ -514,38 +525,78 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
       slot: string;
     }> = [];
     const checkDays = 7;
+    const dayNames = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
+
     for (let i = 1; i <= checkDays; i++) {
       const pDate = new Date();
       pDate.setDate(pDate.getDate() - i);
-      const dateStr = pDate.toISOString().substring(0, 10);
-      const dayNames = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
+      const year = pDate.getFullYear();
+      const month = String(pDate.getMonth() + 1).padStart(2, "0");
+      const day = String(pDate.getDate()).padStart(2, "0");
+      const dateStr = `${year}-${month}-${day}`;
+      const ruDateStr = `${day}.${month}.${year}`;
       const dayAbbr = dayNames[pDate.getDay()];
 
       groups.forEach((g) => {
+        // Skip if schedule has not started yet or has already ended
+        if (g.scheduleStartDate && dateStr < g.scheduleStartDate) return;
+        if (g.scheduleEndDate && dateStr > g.scheduleEndDate) return;
+
         const hasSlot = (g.scheduleDays || []).some((s) => s.startsWith(dayAbbr));
-        if (hasSlot) {
-          const hasReport = trainingSessions.some(
-            (ts) =>
-              ts.groupId === g.id &&
-              (ts.date === dateStr || ts.dateString?.includes(dateStr))
+        if (!hasSlot) return;
+
+        // Check if report exists in trainingSessions
+        const hasReport = trainingSessions.some((ts) => {
+          const groupMatches =
+            (ts.groupId && ts.groupId === g.id) ||
+            (ts.groupName && ts.groupName.trim().toLowerCase() === g.name.trim().toLowerCase());
+          if (!groupMatches) return false;
+
+          const tsIsoDate = ts.date ? ts.date.substring(0, 10) : "";
+          const dateMatches =
+            tsIsoDate === dateStr ||
+            (ts.date && ts.date.startsWith(dateStr)) ||
+            (ts.dateString &&
+              (ts.dateString === ruDateStr ||
+                ts.dateString.startsWith(ruDateStr) ||
+                ts.dateString.includes(ruDateStr)));
+
+          return dateMatches;
+        });
+
+        if (hasReport) return;
+
+        // Check if session was cancelled (in cancelledSessions)
+        const isCancelled = cancelledSessions.some((cs) => {
+          const groupMatches =
+            (cs.groupId && cs.groupId === g.id) ||
+            (cs.groupName && cs.groupName.trim().toLowerCase() === g.name.trim().toLowerCase());
+          if (!groupMatches) return false;
+
+          return (
+            cs.date === dateStr ||
+            cs.date === ruDateStr ||
+            (cs.date && cs.date.startsWith(dateStr))
           );
-          if (!hasReport) {
-            const slot =
-              (g.scheduleDays || []).find((s) => s.startsWith(dayAbbr)) ||
-              `${dayAbbr} 18:00`;
-            missing.push({
-              id: `${g.id}_${dateStr}`,
-              groupName: g.name,
-              coachName: g.coachName || "Тренер не назначен",
-              dateStr,
-              slot,
-            });
-          }
-        }
+        });
+
+        if (isCancelled) return;
+
+        const slot =
+          (g.scheduleDays || []).find((s) => s.startsWith(dayAbbr)) ||
+          `${dayAbbr} 18:00`;
+
+        missing.push({
+          id: `${g.id}_${dateStr}`,
+          groupName: g.name,
+          coachName: g.coachName || "Тренер не назначен",
+          dateStr,
+          slot,
+        });
       });
     }
-    return missing.slice(0, 6);
-  }, [groups, trainingSessions]);
+    return missing.slice(0, 8);
+  }, [groups, trainingSessions, cancelledSessions]);
 
   // Filtered Cancelled Sessions
   const filteredCancelledSessions = useMemo(() => {
@@ -564,6 +615,8 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
       "Погодные условия": 0,
       "Мало участников": 0,
       "Праздничный день": 0,
+      "Соревнования / турнир": 0,
+      "Карантин / санитарный день": 0,
       "Другое": 0,
     };
     filteredCancelledSessions.forEach((cs) => {
@@ -2556,19 +2609,34 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                     {missingTrainerReports.map((m) => (
                       <div
                         key={m.id}
-                        className="p-2 bg-amber-50/60 border border-amber-200/60 rounded-lg flex items-center justify-between text-xs"
+                        className="p-2 bg-amber-50/70 border border-amber-200/70 rounded-lg flex items-center justify-between text-xs gap-2"
                       >
-                        <div>
-                          <div className="font-bold text-slate-800">
+                        <div className="min-w-0 flex-1">
+                          <div className="font-bold text-slate-800 truncate">
                             {m.groupName}
                           </div>
-                          <div className="text-[10px] text-amber-800 font-mono">
+                          <div className="text-[10px] text-amber-900/80 font-mono mt-0.5">
                             {m.coachName} • {m.dateStr} ({m.slot})
                           </div>
                         </div>
-                        <span className="bg-amber-200 text-amber-900 text-[9px] font-bold px-1.5 py-0.5 rounded">
-                          Нет отчета
-                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNewCancelGroup(m.groupName);
+                              setNewCancelDate(m.dateStr);
+                              setNewCancelCoach(m.coachName);
+                              setShowAddCancellationModal(true);
+                            }}
+                            className="px-2 py-1 bg-amber-200/70 hover:bg-amber-300 text-amber-950 text-[10px] font-bold rounded transition"
+                            title="Зафиксировать отмену этой тренировки"
+                          >
+                            Зафиксировать отмену
+                          </button>
+                          <span className="bg-amber-200 text-amber-900 text-[9px] font-bold px-1.5 py-0.5 rounded">
+                            Нет отчета
+                          </span>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -4853,15 +4921,24 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                 <button
                   type="button"
                   onClick={() => setShowAddCancellationModal(false)}
-                  className="px-3 py-1.5 rounded-lg border text-gray-600 font-bold hover:bg-slate-100 transition"
+                  disabled={isSubmittingCancellation}
+                  className="px-3 py-1.5 rounded-lg border text-gray-600 font-bold hover:bg-slate-100 transition disabled:opacity-50"
                 >
                   Отмена
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold transition"
+                  disabled={isSubmittingCancellation}
+                  className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold transition disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  Сохранить отмену
+                  {isSubmittingCancellation ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Сохранение...</span>
+                    </>
+                  ) : (
+                    "Сохранить отмену"
+                  )}
                 </button>
               </div>
             </form>

@@ -273,14 +273,29 @@ export interface TrainingSessionProtocol {
   }[];
 }
 
+export type CancellationReason =
+  | 'Болезнь тренера'
+  | 'Занятость зала'
+  | 'Погодные условия'
+  | 'Мало участников'
+  | 'Праздничный день'
+  | 'Соревнования / турнир'
+  | 'Карантин / санитарный день'
+  | 'Другое';
+
 export interface CancelledSession {
   id: string;
   groupId?: string;
   groupName: string;
   date: string; // YYYY-MM-DD
-  reason: 'Болезнь тренера' | 'Занятость зала' | 'Погодные условия' | 'Мало участников' | 'Праздничный день' | 'Другое';
+  reason: CancellationReason;
   notes?: string;
   coachName?: string;
+  coachId?: string;
+  rescheduleDate?: string;
+  isRescheduled?: boolean;
+  batchId?: string;
+  createdAt?: string;
 }
 
 export interface Counterparty {

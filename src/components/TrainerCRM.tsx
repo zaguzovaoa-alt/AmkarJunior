@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { HeaderDescription } from "./HeaderDescription";
 import { useCRM } from "../context/CRMContext";
 import { useAuth } from "../context/AuthContext";
@@ -36,6 +36,8 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
+  Ban,
+  Layers,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { compressImage } from "../utils/image";
@@ -48,6 +50,7 @@ import { parseScheduleString } from "../utils/scheduleParser";
 import { TrainingGroup } from "../types";
 import { formatGroupNameDisplay } from "../utils/formatters";
 import { AIProgressReportCard } from "./AIProgressReportCard";
+import { TrainerCancelModal } from "./TrainerCancelModal";
 
 const formatBirthDate = (dateString?: string, fallbackYear?: number) => {
   if (!dateString) return fallbackYear ? `${fallbackYear} г.р.` : "";
@@ -93,6 +96,8 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
     homeworkSubmissions,
     addHomework,
     deleteHomework,
+    cancelledSessions,
+    addCancelledSession,
   } = useCRM();
   const { appUser } = useAuth();
 
@@ -142,6 +147,15 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
   const [manualPaidCount, setManualPaidCount] = useState<number>(0);
   const [manualUnpaidCount, setManualUnpaidCount] = useState<number>(0);
   const [isManualCountTouched, setIsManualCountTouched] = useState<boolean>(false);
+
+  // Smart Cancellation Modal for Trainer
+  const [showTrainerCancelModal, setShowTrainerCancelModal] = useState(false);
+  const [cancelModalGroup, setCancelModalGroup] = useState("");
+  const [cancelModalDate, setCancelModalDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
+  const [cancelModalMode, setCancelModalMode] = useState<"single" | "batch" | "unreported">("single");
   const [lessonPlanMode, setLessonPlanMode] = useState<"has_plan" | "no_plan">("has_plan");
   const [lessonPlanText, setLessonPlanText] = useState<string>("");
   const [lessonPlanFile, setLessonPlanFile] = useState<string | null>(null);
@@ -244,6 +258,80 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
     return nameA.localeCompare(nameB, "ru");
   });
   const coachTasks = tasks.filter((t) => t.assignedTo === "trainer");
+
+  // Unreported sessions detection for Trainer (last 14 days)
+  const unreportedCoachSessions = useMemo(() => {
+    const missing: {
+      id: string;
+      groupId: string;
+      groupName: string;
+      dateStr: string;
+      slot: string;
+    }[] = [];
+    const checkDays = 14;
+    const dayNames = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
+
+    for (let i = 0; i <= checkDays; i++) {
+      const pDate = new Date();
+      pDate.setDate(pDate.getDate() - i);
+      const year = pDate.getFullYear();
+      const month = String(pDate.getMonth() + 1).padStart(2, "0");
+      const day = String(pDate.getDate()).padStart(2, "0");
+      const dateStr = `${year}-${month}-${day}`;
+      const ruDateStr = `${day}.${month}.${year}`;
+      const dayAbbr = dayNames[pDate.getDay()];
+
+      myGroups.forEach((g) => {
+        if (g.scheduleStartDate && dateStr < g.scheduleStartDate) return;
+        if (g.scheduleEndDate && dateStr > g.scheduleEndDate) return;
+
+        const hasSlot = (g.scheduleDays || []).some((s) => s.startsWith(dayAbbr));
+        if (!hasSlot) return;
+
+        const hasReport = trainingSessions.some((ts) => {
+          const groupMatches =
+            (ts.groupId && ts.groupId === g.id) ||
+            (ts.groupName && ts.groupName.trim().toLowerCase() === g.name.trim().toLowerCase());
+          if (!groupMatches) return false;
+
+          const tsIsoDate = ts.date ? ts.date.substring(0, 10) : "";
+          return (
+            tsIsoDate === dateStr ||
+            (ts.date && ts.date.startsWith(dateStr)) ||
+            (ts.dateString && (ts.dateString === ruDateStr || ts.dateString.includes(ruDateStr)))
+          );
+        });
+        if (hasReport) return;
+
+        const isCancelled = cancelledSessions.some((cs) => {
+          const groupMatches =
+            (cs.groupId && cs.groupId === g.id) ||
+            (cs.groupName && cs.groupName.trim().toLowerCase() === g.name.trim().toLowerCase());
+          if (!groupMatches) return false;
+
+          return (
+            cs.date === dateStr ||
+            cs.date === ruDateStr ||
+            (cs.date && cs.date.startsWith(dateStr))
+          );
+        });
+        if (isCancelled) return;
+
+        const slot =
+          (g.scheduleDays || []).find((s) => s.startsWith(dayAbbr)) ||
+          `${dayAbbr} 18:00`;
+
+        missing.push({
+          id: `${g.id}_${dateStr}`,
+          groupId: g.id,
+          groupName: g.name,
+          dateStr,
+          slot,
+        });
+      });
+    }
+    return missing;
+  }, [myGroups, trainingSessions, cancelledSessions]);
 
   const handleSendChat = (e: React.FormEvent) => {
     e.preventDefault();
@@ -720,6 +808,60 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
         {/* TAB 1: DASHBOARD OVERVIEW (МАТЧИТ ИЗОБРАЖЕНИЕ №3) */}
         {activeTab === "trainer_home" && (
           <div id="trainer-main-dashboard" className="space-y-6">
+            {/* Smart Unreported Sessions Banner if trainer has sessions needing report */}
+            {unreportedCoachSessions.length > 0 && (
+              <div className="p-4 bg-gradient-to-r from-amber-500/10 via-amber-50 to-rose-50 border border-amber-300 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3 text-left shadow-xs">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                    <AlertTriangle className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-extrabold text-amber-950 flex items-center gap-2">
+                      <span>Требуют отчёта: {unreportedCoachSessions.length} {unreportedCoachSessions.length === 1 ? "тренировка" : "тренировки"}</span>
+                      <span className="text-[10px] px-2 py-0.5 bg-amber-200 text-amber-900 font-bold rounded-full">
+                        Не закрыто
+                      </span>
+                    </div>
+                    <p className="text-xs text-amber-900/80 mt-0.5">
+                      Если тренировка состоялась — заполните табель. Если была отменена (болезнь, ремонт зала и т.д.) — зафиксируйте отмену.
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {unreportedCoachSessions.slice(0, 4).map((item) => (
+                        <span key={item.id} className="text-[10px] font-semibold bg-white/90 border border-amber-200 text-amber-950 px-2 py-0.5 rounded-md">
+                          {formatGroupNameDisplay(item.groupName)} • {item.dateStr}
+                        </span>
+                      ))}
+                      {unreportedCoachSessions.length > 4 && (
+                        <span className="text-[10px] font-semibold text-amber-800 self-center">
+                          + ещё {unreportedCoachSessions.length - 4}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCancelModalMode("unreported");
+                      setShowTrainerCancelModal(true);
+                    }}
+                    className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+                  >
+                    <Ban className="w-3.5 h-3.5" />
+                    <span>Сдать отчёт об отмене</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("trainer_attendance")}
+                    className="px-3.5 py-2 bg-white hover:bg-amber-100 text-amber-950 border border-amber-300 rounded-xl text-xs font-bold transition"
+                  >
+                    Заполнить табель
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Top stats boxes exactly like on Image 3 */}
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
               <div className="bg-white p-4 rounded-xl border border-gray-105 shadow-xs text-left">
@@ -865,6 +1007,33 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                           endTimeStr = g.todayTime.split("-")[1].trim();
                           g.todayTime = g.todayTime.split("-")[0].trim();
                         }
+                        const todayIsoStr = new Date().toISOString().split("T")[0];
+                        const todayRuStr = new Date().toLocaleDateString("ru-RU");
+
+                        const isReportedToday = trainingSessions.some((ts) => {
+                          const isMatch =
+                            (ts.groupId && ts.groupId === g.id) ||
+                            (ts.groupName && ts.groupName.trim().toLowerCase() === g.name.trim().toLowerCase());
+                          if (!isMatch) return false;
+                          return (
+                            ts.date?.substring(0, 10) === todayIsoStr ||
+                            ts.dateString === todayRuStr ||
+                            ts.dateString?.includes(todayRuStr)
+                          );
+                        });
+
+                        const todayCancellation = cancelledSessions.find((cs) => {
+                          const isMatch =
+                            (cs.groupId && cs.groupId === g.id) ||
+                            (cs.groupName && cs.groupName.trim().toLowerCase() === g.name.trim().toLowerCase());
+                          if (!isMatch) return false;
+                          return (
+                            cs.date === todayIsoStr ||
+                            cs.date === todayRuStr ||
+                            (cs.date && cs.date.startsWith(todayIsoStr))
+                          );
+                        });
+
                         return (
                           <div
                             key={g.id}
@@ -880,19 +1049,50 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                                 </div>
                               )}
                             </div>
-                            <div className="flex-1 px-4 text-left">
+                            <div className="flex-1 px-3 text-left">
                               <div className="font-bold text-slate-850 text-xs">
-                                {g.name}
+                                {formatGroupNameDisplay(g.name)}
                               </div>
-                              <div className="text-[10px] text-gray-400 mt-1">
-                                Тренировка
+                              <div className="text-[10px] text-gray-400 mt-0.5">
+                                {g.playersCount} игроков
                               </div>
                             </div>
-                            <div className="flex items-center space-x-2">
-                              <span className="text-[11px] font-bold text-slate-700">
-                                {g.playersCount} игроков
-                              </span>
-                              <ChevronRight className="w-4 h-4 text-gray-400" />
+                            <div className="flex items-center space-x-1.5 shrink-0">
+                              {todayCancellation ? (
+                                <span className="px-2 py-1 rounded-lg bg-rose-100 text-rose-800 font-bold text-[10px] flex items-center gap-1 border border-rose-200">
+                                  <Ban className="w-3 h-3" />
+                                  <span>Отменена ({todayCancellation.reason})</span>
+                                </span>
+                              ) : isReportedToday ? (
+                                <span className="px-2 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-bold text-[10px] flex items-center gap-1 border border-emerald-200">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  <span>Табель сдан</span>
+                                </span>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => startAttendanceMarking(g.id)}
+                                    className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-[10px] uppercase tracking-wider transition shadow-xs"
+                                  >
+                                    Табель
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setCancelModalGroup(g.name);
+                                      setCancelModalDate(todayIsoStr);
+                                      setCancelModalMode("single");
+                                      setShowTrainerCancelModal(true);
+                                    }}
+                                    className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-lg text-[10px] uppercase tracking-wider transition border border-rose-200 flex items-center gap-1"
+                                    title="Зафиксировать отмену тренировки"
+                                  >
+                                    <Ban className="w-3 h-3" />
+                                    <span>Отмена</span>
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </div>
                         );
@@ -1386,9 +1586,43 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
         {/* TAB 3: ATTENDANCE POPUP/WIDGET */}
         {activeTab === "trainer_attendance" && (
           <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm text-left">
-            <h3 className="text-lg font-bold text-slate-900 border-b pb-3 mb-4">
-              Ведомости присутствия на занятии
-            </h3>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b pb-3 mb-4 gap-3">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">
+                  Ведомости присутствия на занятии
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Заполнение табелей или быстрая фиксация несостоявшихся тренировок
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCancelModalGroup("");
+                    setCancelModalMode("batch");
+                    setShowTrainerCancelModal(true);
+                  }}
+                  className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-xs"
+                >
+                  <Layers className="w-4 h-4 text-rose-600" />
+                  <span>Пакетная отмена (период / группы)</span>
+                </button>
+                {unreportedCoachSessions.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCancelModalMode("unreported");
+                      setShowTrainerCancelModal(true);
+                    }}
+                    className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold rounded-xl text-xs transition flex items-center gap-1.5"
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Пропущенные ({unreportedCoachSessions.length})</span>
+                  </button>
+                )}
+              </div>
+            </div>
 
             {!selectedGroupForAttendance ? (
               <div className="space-y-4">
@@ -1423,9 +1657,25 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                             воспитанников
                           </p>
                         </div>
-                        <button className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-[11px] uppercase tracking-wider transition">
-                          Заполнить табель
-                        </button>
+                        <div className="space-y-2 mt-2">
+                          <button className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-[11px] uppercase tracking-wider transition">
+                            Заполнить табель
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCancelModalGroup(g.name);
+                              setCancelModalDate(new Date().toISOString().split("T")[0]);
+                              setCancelModalMode("single");
+                              setShowTrainerCancelModal(true);
+                            }}
+                            className="w-full py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-xl text-[10px] uppercase tracking-wider transition border border-rose-200 flex items-center justify-center gap-1"
+                          >
+                            <Ban className="w-3 h-3" />
+                            <span>Зафиксировать отмену</span>
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -1458,12 +1708,26 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                       onChange={(e) => setAttendanceDate(e.target.value)}
                     />
                   </div>
-                  <button
-                    onClick={() => setSelectedGroupForAttendance(null)}
-                    className="text-xs focus:underline text-slate-500 font-bold"
-                  >
-                    Вернуться назад
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCancelModalGroup(selectedGroupForAttendance);
+                        setCancelModalDate(attendanceDate);
+                        setShowTrainerCancelModal(true);
+                      }}
+                      className="px-2.5 py-1 bg-rose-100 hover:bg-rose-200 text-rose-800 text-xs font-bold rounded-lg border border-rose-300 transition flex items-center gap-1"
+                    >
+                      <Ban className="w-3.5 h-3.5" />
+                      <span>Отмена занятия</span>
+                    </button>
+                    <button
+                      onClick={() => setSelectedGroupForAttendance(null)}
+                      className="text-xs focus:underline text-slate-500 font-bold px-1"
+                    >
+                      Вернуться назад
+                    </button>
+                  </div>
                 </div>
 
                 {/* Submitting attendance controls with real photo upload validation simulation */}
@@ -3507,6 +3771,24 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
             <CredentialsSettings currentPhone={appUser?.phone || myCoach.phone || ""} />
           </div>
         )}
+
+        {/* SMART MODAL: ЗАФИКСИРОВАТЬ ОТМЕНУ ТРЕНИРОВКИ */}
+        <TrainerCancelModal
+          isOpen={showTrainerCancelModal}
+          onClose={() => setShowTrainerCancelModal(false)}
+          defaultGroup={cancelModalGroup}
+          defaultDate={cancelModalDate}
+          defaultCoachName={myCoach.name}
+          initialMode={cancelModalMode}
+          coachGroups={myGroups}
+          coachName={myCoach.name}
+          coachId={myCoach.id}
+          onSuccess={(count) => {
+            if (selectedGroupForAttendance && count > 0) {
+              setSelectedGroupForAttendance(null);
+            }
+          }}
+        />
       </div>
     </div>
   );
