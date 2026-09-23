@@ -16,6 +16,7 @@ import {
 import { db, handleFirestoreError, OperationType } from "../firebase";
 import { sendTelegramAlert } from "../utils/telegram";
 import { findCoachScheduleConflicts } from "../utils/scheduleParser";
+import { isGroupMatch, isDateMatch, normalizeDateToYMD } from "../utils/sessionMatching";
 import {
   Lead,
   Client,
@@ -1813,7 +1814,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     lessonPlanPhotoUrl?: string | null,
   ) => {
     const rawClients = clients; // avoid stale state issues in loops
-    const groupObj = groups.find((g) => g.id === groupId || g.name === groupId);
+    const groupObj = groups.find((g) => isGroupMatch(g.id, g.name, groupId, groupId));
     const resolvedGroupId = groupObj?.id || groupId;
     const resolvedGroupName = groupObj?.name || groupId;
     const coachId = groupObj?.coachId || "unknown";
@@ -1856,26 +1857,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       : derivedPresentCount;
 
     // Format date string to YYYY-MM-DD
-    const sessionDateISO = (() => {
-      if (date && date.includes(".")) {
-        const parts = date.split(".");
-        if (parts.length === 3) {
-          const yearPart = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
-          return `${yearPart}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
-        }
-        if (parts.length === 2) {
-          const curY = new Date().getFullYear();
-          return `${curY}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
-        }
-      }
-      if (date && date.includes("-")) {
-        const parts = date.split("-");
-        if (parts.length === 3) {
-          if (parts[0].length === 4) return date; // YYYY-MM-DD
-          const yearPart = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
-          return `${yearPart}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
-        }
-      }
+    const sessionDateISO = normalizeDateToYMD(date) || (() => {
       const d = new Date();
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     })();
@@ -1926,6 +1908,24 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     setDoc(doc(db, "training_sessions", newProtocol.id), removeUndefined(newProtocol) as any).catch((err) => {
       handleFirestoreError(err, OperationType.WRITE, "training_sessions_direct");
     });
+
+    // Auto-remove any conflicting cancellation for this group and date, since the training officially took place
+    const matchingCancellations = cancelledSessions.filter((cs) => {
+      const gMatch = isGroupMatch(cs.groupId, cs.groupName, resolvedGroupId, resolvedGroupName);
+      const dMatch = isDateMatch(cs.date, undefined, sessionDateISO);
+      return gMatch && dMatch;
+    });
+
+    if (matchingCancellations.length > 0) {
+      setCancelledSessions((prev) =>
+        prev.filter((cs) => !matchingCancellations.some((m) => m.id === cs.id))
+      );
+      matchingCancellations.forEach((mc) => {
+        deleteDoc(doc(db, "cancelled_sessions", mc.id)).catch((err) => {
+          handleFirestoreError(err, OperationType.DELETE, "cancelled_sessions");
+        });
+      });
+    }
 
     // Auto-create accrued expense for venue rental (per training session)
     const venueCp = counterparties.find(cp => cp.id === groupObj?.venueId);

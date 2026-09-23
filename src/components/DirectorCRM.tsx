@@ -64,6 +64,7 @@ import {
 } from "recharts";
 import { BirthdaysBanner } from "./BirthdaysBanner";
 import { calculateAge, formatSessionDateDisplay } from "../utils/dateUtils";
+import { isGroupMatch, isDateMatch } from "../utils/sessionMatching";
 
 // Mini Sparkline component for KPI top summary cards
 const MiniSparklineChart = ({
@@ -547,36 +548,19 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
 
         // Check if report exists in trainingSessions
         const hasReport = trainingSessions.some((ts) => {
-          const groupMatches =
-            (ts.groupId && ts.groupId === g.id) ||
-            (ts.groupName && ts.groupName.trim().toLowerCase() === g.name.trim().toLowerCase());
-          if (!groupMatches) return false;
-
-          const tsIsoDate = ts.date ? ts.date.substring(0, 10) : "";
-          const dateMatches =
-            tsIsoDate === dateStr ||
-            (ts.date && ts.date.startsWith(dateStr)) ||
-            (ts.dateString &&
-              (ts.dateString === ruDateStr ||
-                ts.dateString.startsWith(ruDateStr) ||
-                ts.dateString.includes(ruDateStr)));
-
-          return dateMatches;
+          return (
+            isGroupMatch(ts.groupId, ts.groupName, g.id, g.name) &&
+            isDateMatch(ts.date, ts.dateString, dateStr)
+          );
         });
 
         if (hasReport) return;
 
         // Check if session was cancelled (in cancelledSessions)
         const isCancelled = cancelledSessions.some((cs) => {
-          const groupMatches =
-            (cs.groupId && cs.groupId === g.id) ||
-            (cs.groupName && cs.groupName.trim().toLowerCase() === g.name.trim().toLowerCase());
-          if (!groupMatches) return false;
-
           return (
-            cs.date === dateStr ||
-            cs.date === ruDateStr ||
-            (cs.date && cs.date.startsWith(dateStr))
+            isGroupMatch(cs.groupId, cs.groupName, g.id, g.name) &&
+            isDateMatch(cs.date, undefined, dateStr)
           );
         });
 

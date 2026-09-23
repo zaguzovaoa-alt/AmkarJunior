@@ -18,6 +18,13 @@ import {
 import { useCRM } from "../context/CRMContext";
 import { TrainingGroup, CancellationReason, CancelledSession } from "../types";
 import { formatGroupNameDisplay } from "../utils/formatters";
+import {
+  isGroupMatch,
+  isDateMatch,
+  isSessionOverdue,
+  normalizeDateToYMD,
+  getLocalTodayYMD,
+} from "../utils/sessionMatching";
 
 interface TrainerCancelModalProps {
   isOpen: boolean;
@@ -30,6 +37,7 @@ interface TrainerCancelModalProps {
   coachName?: string;
   coachId?: string;
   onSuccess?: (count: number) => void;
+  onFillAttendance?: (groupId: string, dateStr: string) => void;
 }
 
 const REASONS_LIST: { label: CancellationReason; icon: string }[] = [
@@ -56,6 +64,7 @@ export const TrainerCancelModal: React.FC<TrainerCancelModalProps> = ({
   coachName,
   coachId,
   onSuccess,
+  onFillAttendance,
 }) => {
   const {
     groups,
@@ -292,6 +301,7 @@ export const TrainerCancelModal: React.FC<TrainerCancelModalProps> = ({
   }, [calculatedBatchSessions]);
 
   // Calculate unreported past sessions for Tab 3 (last 14 days)
+  // ONLY includes sessions that are overdue ("вовремя не заполнили")
   const unreportedPastSessions = useMemo(() => {
     const result: CalculatedSession[] = [];
     const checkDays = 14;
@@ -303,7 +313,6 @@ export const TrainerCancelModal: React.FC<TrainerCancelModalProps> = ({
       const m = String(pDate.getMonth() + 1).padStart(2, "0");
       const d = String(pDate.getDate()).padStart(2, "0");
       const dateStr = `${y}-${m}-${d}`;
-      const ruDateStr = `${d}.${m}.${y}`;
       const dayOfWeek = DAY_NAMES_RU[pDate.getDay()];
 
       availableGroups.forEach((g) => {
@@ -313,28 +322,28 @@ export const TrainerCancelModal: React.FC<TrainerCancelModalProps> = ({
         const slot = (g.scheduleDays || []).find((s) => s.startsWith(dayOfWeek));
         if (!slot) return;
 
+        // Check if report exists in trainingSessions
         const hasReport = trainingSessions.some((ts) => {
-          const groupMatch =
-            (ts.groupId && ts.groupId === g.id) ||
-            (ts.groupName && ts.groupName.trim().toLowerCase() === g.name.trim().toLowerCase());
-          if (!groupMatch) return false;
-          const tsIso = ts.date ? ts.date.substring(0, 10) : "";
           return (
-            tsIso === dateStr ||
-            (ts.date && ts.date.startsWith(dateStr)) ||
-            (ts.dateString && (ts.dateString === ruDateStr || ts.dateString.includes(ruDateStr)))
+            isGroupMatch(ts.groupId, ts.groupName, g.id, g.name) &&
+            isDateMatch(ts.date, ts.dateString, dateStr)
           );
         });
         if (hasReport) return;
 
+        // Check if session was cancelled
         const alreadyCancelled = cancelledSessions.some((cs) => {
-          const groupMatch =
-            (cs.groupId && cs.groupId === g.id) ||
-            (cs.groupName && cs.groupName.trim().toLowerCase() === g.name.trim().toLowerCase());
-          if (!groupMatch) return false;
-          return cs.date === dateStr || cs.date === ruDateStr || (cs.date && cs.date.startsWith(dateStr));
+          return (
+            isGroupMatch(cs.groupId, cs.groupName, g.id, g.name) &&
+            isDateMatch(cs.date, undefined, dateStr)
+          );
         });
         if (alreadyCancelled) return;
+
+        // Check if session is overdue ("вовремя не заполнили").
+        // On today, if session has not finished yet, do NOT flag it as unsubmitted/cancelled!
+        const isOverdue = isSessionOverdue(dateStr, slot);
+        if (!isOverdue) return;
 
         const key = `unrep_${g.id}_${dateStr}`;
         result.push({
@@ -1075,9 +1084,22 @@ export const TrainerCancelModal: React.FC<TrainerCancelModalProps> = ({
                             </div>
                           </div>
                         </div>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-900">
-                          Не состоялось
-                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                          {onFillAttendance && (
+                            <button
+                              type="button"
+                              onClick={() => onFillAttendance(s.groupId, s.date)}
+                              className="px-2 py-1 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold text-[10px] rounded-md transition shadow-2xs flex items-center gap-1"
+                              title="Если эта тренировка состоялась — нажмите, чтобы заполнить табель"
+                            >
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>Заполнить табель</span>
+                            </button>
+                          )}
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-900">
+                            {s.date < getLocalTodayYMD() ? "Не сдан табель" : "Время вышло"}
+                          </span>
+                        </div>
                       </div>
                     );
                   })}

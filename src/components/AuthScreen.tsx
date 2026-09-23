@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { motion, AnimatePresence } from "motion/react";
-import { Shield, Smartphone, Loader2, Info, Download } from "lucide-react";
+import { Shield, Smartphone, Loader2, Info, Download, Key, ArrowLeft } from "lucide-react";
 import { AmkarLogo } from "./AmkarLogo";
 
 import heroImage from "../assets/images/kids_soccer_background_1780828846133.jpg";
@@ -18,11 +18,11 @@ export const AuthScreen: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const [isResetMode, setIsResetMode] = useState(false);
 
-  
   const [verifyingPhone, setVerifyingPhone] = useState(false);
   const [verificationCode, setVerificationCode] = useState("");
-    const [checkId, setCheckId] = useState("");
+  const [checkId, setCheckId] = useState("");
   const [callPhonePretty, setCallPhonePretty] = useState("");
 
   const handleFastLogin = async (e: React.FormEvent) => {
@@ -54,6 +54,36 @@ export const AuthScreen: React.FC = () => {
       } else {
         setError(err.message === "PASSWORD_REQUIRED" ? "Требуется пароль" : err.message === "INVALID_PASSWORD" ? "Неверный пароль" : err.message);
       }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleStartPasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!phone || phone.length < 10 || !privacyAccepted) return;
+    if (password.length < 6) {
+      setError("Новый пароль должен содержать минимум 6 символов");
+      return;
+    }
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/callcheck/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+      });
+      const data = await res.json();
+      if (data.status === "OK" && data.check_id) {
+        setCheckId(data.check_id);
+        setCallPhonePretty(data.call_phone_pretty || data.call_phone);
+        setVerifyingPhone(true);
+      } else {
+        setError(data.status_text || data.message || "Ошибка инициализации звонка");
+      }
+    } catch (e: any) {
+      setError("Ошибка сети при проверке номера");
     } finally {
       setIsSubmitting(false);
     }
@@ -197,6 +227,76 @@ export const AuthScreen: React.FC = () => {
                   </button>
                 </div>
               </div>
+            ) : isResetMode ? (
+              <form onSubmit={handleStartPasswordReset} className="space-y-4">
+                <div className="flex items-center space-x-2 text-slate-800 pb-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsResetMode(false);
+                      setError(null);
+                    }}
+                    className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 transition cursor-pointer"
+                  >
+                    <ArrowLeft className="w-5 h-5" />
+                  </button>
+                  <h3 className="font-bold text-base">Восстановление пароля</h3>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    Номер телефона
+                  </label>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="+7 (999) 000-00-00"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    Новый пароль
+                  </label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Введите новый пароль (от 6 символов)"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition font-medium"
+                  />
+                  <p className="text-[11px] mt-1.5 text-slate-500">
+                    Для защиты аккаунта потребуется подтвердить номер бесплатным звонком.
+                  </p>
+                </div>
+
+                {(error || phoneError) && (
+                  <div className="p-3 bg-red-50 text-red-600 text-xs rounded-xl flex items-start space-x-2">
+                    <Info className="w-4 h-4 shrink-0" />
+                    <span>{error || phoneError}</span>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={
+                    isSubmitting || phone.length < 10 || !privacyAccepted || password.length < 6
+                  }
+                  className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3.5 rounded-xl transition flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {isSubmitting ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    "Подтвердить звонком и установить пароль"
+                  )}
+                </button>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-[11px] text-slate-500 leading-snug">
+                  Если у вас нет доступа к номеру, руководитель может задать пароль в разделе «Управление доступами».
+                </div>
+              </form>
             ) : (
               <form onSubmit={handleFastLogin} className="space-y-4">
                 <div>
@@ -212,9 +312,21 @@ export const AuthScreen: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                    Пароль (обязательно)
-                  </label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                      Пароль (обязательно)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsResetMode(true);
+                        setError(null);
+                      }}
+                      className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 transition cursor-pointer"
+                    >
+                      Забыли пароль?
+                    </button>
+                  </div>
                   <input
                     type="password"
                     value={password}
@@ -229,7 +341,23 @@ export const AuthScreen: React.FC = () => {
                 {(error || phoneError) && (
                   <div className="p-3 bg-red-50 text-red-600 text-xs rounded-xl flex items-start space-x-2">
                     <Info className="w-4 h-4 shrink-0" />
-                    <span>{error || phoneError}</span>
+                    <div className="flex-1">
+                      <span>{error || phoneError}</span>
+                      {error === "Неверный пароль" && (
+                        <div className="mt-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsResetMode(true);
+                              setError(null);
+                            }}
+                            className="font-bold underline hover:text-red-800 cursor-pointer"
+                          >
+                            Восстановить пароль по звонку
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
                 <button

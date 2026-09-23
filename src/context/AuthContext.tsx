@@ -63,22 +63,67 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const ensureDefaultDirector = async () => {
       if (sessionStorage.getItem('director_bychkov_checked')) return;
       try {
-        const qBychkov = query(collection(db, 'systemUsers'), where('email', '==', 'dmitriifnl@gmail.com'));
-        const snap = await getDocs(qBychkov);
+        const allUsersSnap = await getDocs(query(collection(db, 'systemUsers')));
         sessionStorage.setItem('director_bychkov_checked', 'true');
-        if (snap.empty) {
-          const qPhone = query(collection(db, 'systemUsers'), where('phone', '==', '+79194466199'));
-          const snapPhone = await getDocs(qPhone);
-          if (snapPhone.empty) {
-            const id = 'director_bychkov';
-            await setDoc(doc(db, 'systemUsers', id), {
-              uid: id,
-              fullName: 'Бычков Дмитрий Олегович',
-              email: 'dmitriifnl@gmail.com',
-              phone: '+79194466199',
-              role: 'director',
-              createdAt: Date.now()
-            }, { merge: true });
+        
+        // Find all documents belonging to Бычков Дмитрий Олегович
+        const matchingDocs: any[] = [];
+        allUsersSnap.forEach((d) => {
+          const data = d.data();
+          const cleanPhone = (data.phone || '').replace(/\D/g, '').slice(-10);
+          const emailLower = (data.email || '').trim().toLowerCase();
+          const nameLower = (data.fullName || '').trim().toLowerCase();
+
+          if (
+            d.id === 'director_bychkov' ||
+            cleanPhone === '9194466199' ||
+            emailLower === 'dmitriifnl@gmail.com' ||
+            nameLower.includes('бычков дмитрий')
+          ) {
+            matchingDocs.push({ id: d.id, ...data });
+          }
+        });
+
+        if (matchingDocs.length === 0) {
+          // If no doc exists, create canonical director doc
+          const id = 'director_bychkov';
+          await setDoc(doc(db, 'systemUsers', id), {
+            uid: id,
+            fullName: 'Бычков Дмитрий Олегович',
+            email: 'dmitriifnl@gmail.com',
+            phone: '+79194466199',
+            role: 'director',
+            createdAt: Date.now()
+          }, { merge: true });
+        } else if (matchingDocs.length > 1) {
+          // Merge duplicates into single canonical doc 'director_bychkov'
+          const canonicalId = 'director_bychkov';
+          // Find any existing password or preferred data across all duplicates
+          const foundPassword = matchingDocs.find(d => d.password)?.password;
+          const foundEmail = matchingDocs.find(d => d.email && d.email.includes('@'))?.email || 'dmitriifnl@gmail.com';
+          const foundPhone = matchingDocs.find(d => d.phone && d.phone.length >= 10)?.phone || '+79194466199';
+          const earliestCreated = Math.min(...matchingDocs.map(d => d.createdAt || Date.now()));
+
+          const canonicalPayload: any = {
+            uid: canonicalId,
+            fullName: 'Бычков Дмитрий Олегович',
+            email: foundEmail,
+            phone: foundPhone,
+            role: 'director',
+            createdAt: earliestCreated,
+          };
+          if (foundPassword) {
+            canonicalPayload.password = foundPassword;
+          }
+
+          // Save merged canonical document
+          await setDoc(doc(db, 'systemUsers', canonicalId), canonicalPayload, { merge: true });
+
+          // Delete all duplicate documents that are not the canonical ID
+          for (const d of matchingDocs) {
+            if (d.id !== canonicalId) {
+              await deleteDoc(doc(db, 'systemUsers', d.id)).catch(() => {});
+            }
           }
         }
       } catch (e: any) {
