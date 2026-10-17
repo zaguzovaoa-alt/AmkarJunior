@@ -140,12 +140,20 @@ async function sendTelegramAlertServer(botToken: string, chatId: string, text: s
   }
 }
 
-async function saveFirestoreDoc(collectionName: string, docId: string, fields: Record<string, any>) {
+async function saveFirestoreDoc(collectionName: string, docId: string, fields: Record<string, any>, merge: boolean = false) {
   if (!firebaseConfig.projectId || !firebaseConfig.firestoreDatabaseId || !firebaseConfig.apiKey) {
     return;
   }
   try {
-    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.firestoreDatabaseId}/documents/${collectionName}/${docId}?key=${firebaseConfig.apiKey}`;
+    let url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.firestoreDatabaseId}/documents/${collectionName}/${docId}?key=${firebaseConfig.apiKey}`;
+    if (merge) {
+      const maskParams = Object.keys(fields)
+        .map((k) => `updateMask.fieldPaths=${encodeURIComponent(k)}`)
+        .join("&");
+      if (maskParams) {
+        url += `&${maskParams}`;
+      }
+    }
     
     const formatValue = (val: any): any => {
       if (val === null || val === undefined) return { nullValue: null };
@@ -183,6 +191,76 @@ async function saveFirestoreDoc(collectionName: string, docId: string, fields: R
     }
   } catch (e) {
     console.error(`Error saving Firestore doc ${collectionName}/${docId}:`, e);
+  }
+}
+
+// Background auto-reconciler: automatically finds any unnotified leads in Firestore and delivers them to Telegram
+async function syncUnnotifiedLeads() {
+  if (!firebaseConfig.projectId || !firebaseConfig.firestoreDatabaseId || !firebaseConfig.apiKey) {
+    return;
+  }
+  try {
+    const config = await getCRMConfig();
+    if (!config?.telegramBotToken || !config?.telegramGroupChatId || config.telegramAlerts?.newLead === false) {
+      return;
+    }
+
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.firestoreDatabaseId}/documents/leads?key=${firebaseConfig.apiKey}&pageSize=50`;
+    const res = await fetch(url);
+    if (!res.ok) return;
+    const data = await res.json();
+    const docs = data.documents || [];
+
+    const now = Date.now();
+    const twoDaysMs = 48 * 60 * 60 * 1000;
+
+    for (const doc of docs) {
+      const docPath = doc.name || "";
+      const leadId = docPath.split("/").pop();
+      if (!leadId) continue;
+      const f = doc.fields || {};
+
+      const telegramNotified = f.telegramNotified?.booleanValue;
+      if (telegramNotified === true) continue;
+
+      const createdAtStr = f.createdAt?.stringValue;
+      const createdTime = createdAtStr ? new Date(createdAtStr).getTime() : 0;
+
+      // Only automatically send for recent leads (within 48 hours) to avoid mass-pinging old test data
+      if (createdTime && (now - createdTime > twoDaysMs)) {
+        continue;
+      }
+
+      const parentName = f.parentName?.stringValue || "Родитель";
+      const parentPhone = f.parentPhone?.stringValue || "Не указан";
+      const childName = f.childName?.stringValue || "";
+      const childSurname = f.childSurname?.stringValue || "";
+      const childAge = Number(f.childAge?.integerValue || f.childAge?.doubleValue || 0);
+      const childBirthYear = Number(f.childBirthYear?.integerValue || 2020);
+      const source = f.source?.stringValue || "Лендинг";
+      const notes = f.notes?.stringValue || f.note?.stringValue || "Заявка с посадочной страницы на бесплатную тренировку";
+      const timeString = f.timeString?.stringValue || "20:00";
+      const dateString = f.dateString?.stringValue || new Date().toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" });
+
+      const childDisplayName = [childSurname, childName].filter(Boolean).join(" ") || "Не указано";
+      const ageText = childAge > 0 ? ` (${childAge} лет, ${childBirthYear} г.р.)` : "";
+
+      const telegramMessage = `🚨 <b>НОВАЯ ЗАЯВКА (АМКАР ЮНИОР)</b>\n\n👤 <b>Родитель:</b> ${parentName}\n📞 <b>Телефон:</b> <code>${parentPhone}</code>\n⚽ <b>Ребенок:</b> ${childDisplayName}${ageText}\n📍 <b>Источник:</b> ${source}\n📋 <b>Статус:</b> Новая заявка\n🎯 <b>Действие:</b> ${notes}\n\n⏰ <i>${dateString} ${timeString} (МСК)</i>`;
+
+      console.log(`[Telegram Auto-Sync] Sending alert for lead ${leadId} (${parentName})...`);
+      const tgRes = await sendTelegramAlertServer(config.telegramBotToken, config.telegramGroupChatId, telegramMessage);
+      if (tgRes.success) {
+        console.log(`[Telegram Auto-Sync] Successfully notified Telegram for lead ${leadId}`);
+        await saveFirestoreDoc("leads", leadId, {
+          telegramNotified: true,
+          dateString: dateString,
+        }, true);
+      } else {
+        console.warn(`[Telegram Auto-Sync] Failed to send Telegram for lead ${leadId}:`, tgRes.error);
+      }
+    }
+  } catch (e) {
+    console.error("[Telegram Auto-Sync] Error during sync:", e);
   }
 }
 
@@ -646,6 +724,56 @@ async function startServer() {
     }
   });
 
+  // Manual trigger to send or resend lead notification to Telegram
+  app.post("/api/leads/:leadId/send-telegram", async (req, res) => {
+    try {
+      const { leadId } = req.params;
+      const config = await getCRMConfig();
+      if (!config?.telegramBotToken || !config?.telegramGroupChatId) {
+        return res.status(400).json({ status: "ERROR", message: "Токен Telegram или ID группы не настроены в настройках CRM" });
+      }
+
+      // Fetch lead document from Firestore
+      const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.firestoreDatabaseId}/documents/leads/${leadId}?key=${firebaseConfig.apiKey}`;
+      const firestoreRes = await fetch(url);
+      if (!firestoreRes.ok) {
+        return res.status(404).json({ status: "ERROR", message: "Заявка не найдена в базе данных" });
+      }
+      const docData = await firestoreRes.json();
+      const f = docData.fields || {};
+
+      const parentName = f.parentName?.stringValue || "Родитель";
+      const parentPhone = f.parentPhone?.stringValue || "Не указан";
+      const childName = f.childName?.stringValue || "";
+      const childSurname = f.childSurname?.stringValue || "";
+      const childAge = Number(f.childAge?.integerValue || f.childAge?.doubleValue || 0);
+      const childBirthYear = Number(f.childBirthYear?.integerValue || 2020);
+      const source = f.source?.stringValue || "Лендинг";
+      const notes = f.notes?.stringValue || f.note?.stringValue || "Заявка с посадочной страницы на бесплатную тренировку";
+      const timeString = f.timeString?.stringValue || "20:00";
+      const dateString = f.dateString?.stringValue || new Date().toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" });
+
+      const childDisplayName = [childSurname, childName].filter(Boolean).join(" ") || "Не указано";
+      const ageText = childAge > 0 ? ` (${childAge} лет, ${childBirthYear} г.р.)` : "";
+
+      const telegramMessage = `🚨 <b>НОВАЯ ЗАЯВКА (АМКАР ЮНИОР)</b>\n\n👤 <b>Родитель:</b> ${parentName}\n📞 <b>Телефон:</b> <code>${parentPhone}</code>\n⚽ <b>Ребенок:</b> ${childDisplayName}${ageText}\n📍 <b>Источник:</b> ${source}\n📋 <b>Статус:</b> Новая заявка\n🎯 <b>Действие:</b> ${notes}\n\n⏰ <i>${dateString} ${timeString} (МСК)</i>`;
+
+      const tgRes = await sendTelegramAlertServer(config.telegramBotToken, config.telegramGroupChatId, telegramMessage);
+      if (tgRes.success) {
+        await saveFirestoreDoc("leads", leadId, {
+          telegramNotified: true,
+          dateString: dateString
+        }, true);
+        return res.json({ status: "OK", message: "Уведомление успешно отправлено в Telegram" });
+      } else {
+        return res.status(500).json({ status: "ERROR", error: tgRes.error || "Не удалось отправить сообщение в Telegram" });
+      }
+    } catch (e: any) {
+      console.error("Error sending lead to Telegram:", e);
+      res.status(500).json({ status: "ERROR", message: String(e) });
+    }
+  });
+
   // AI Progress Report Generation Endpoint (Quarterly / 3-Month child progress analysis)
   app.post("/api/gemini/generate-progress-report", async (req, res) => {
     try {
@@ -909,6 +1037,9 @@ ${coachNotes.length > 0 ? coachNotes.map((n: string) => `- ${n}`).join('\n') : '
 
   const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
+    // Start background Telegram lead reconciler (runs on startup, then every 20 seconds)
+    syncUnnotifiedLeads();
+    setInterval(syncUnnotifiedLeads, 20000);
   });
 
   // WebSocket server for Gemini Live API

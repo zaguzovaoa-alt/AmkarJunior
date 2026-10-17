@@ -775,7 +775,7 @@ export default function App() {
     return () => window.removeEventListener("popstate", handleLocationChange);
   }, []);
 
-  if (currentPath === "/") {
+  if (currentPath === "/" || currentPath === "/blog" || currentPath.startsWith("/blog/")) {
     return (
       <CRMProvider>
         <JoinPage />

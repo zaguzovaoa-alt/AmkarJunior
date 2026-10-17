@@ -125,6 +125,7 @@ interface CRMContextType {
   addLead: (
     lead: Omit<Lead, "id" | "createdAt" | "timeString" | "status">,
   ) => void;
+  resendLeadTelegram: (leadId: string) => Promise<{ success: boolean; message: string }>;
   addClient: (
     clientData: Omit<
       Client,
@@ -1346,6 +1347,12 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       hour: "2-digit",
       minute: "2-digit",
     });
+    const moscowDate = now.toLocaleDateString("ru-RU", {
+      timeZone: "Europe/Moscow",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
     const newLead: Lead = {
       ...leadData,
       childName: parsedChildName,
@@ -1354,8 +1361,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       childBirthYear: parsedBirthYear || 2018,
       id: leadId,
       createdAt: now.toISOString(),
+      dateString: moscowDate,
       timeString: moscowTime,
       status: "new",
+      telegramNotified: false,
     };
 
     // Immediate local state update
@@ -1394,11 +1403,15 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
     // 1. Submit to server API (sends Telegram alert server-side, broadcasts OS Web Push, and writes to Firestore)
     try {
-      await fetch("/api/leads/submit", {
+      const serverRes = await fetch("/api/leads/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newLead),
       });
+      const resJson = await serverRes.json().catch(() => null);
+      if (resJson?.telegramSent) {
+        newLead.telegramNotified = true;
+      }
     } catch (err) {
       console.warn("Server lead submit notice:", err);
     }
@@ -1421,18 +1434,24 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       ]);
     }
 
-    // 3. Client-side Telegram alert backup
+    // 3. Client-side Telegram alert backup if server didn't already send
     try {
-      const configDoc = await getDoc(doc(db, "_config", "initialized"));
-      const latestConfig = configDoc.data()?.crmConfig || crmConfig;
-      
-      if (latestConfig.telegramAlerts?.newLead !== false) {
-        const ageTextTelegram = newLead.childAge > 0 ? ` (${newLead.childAge} лет, ${newLead.childBirthYear || currentYear - newLead.childAge} г.р.)` : "";
-        sendTelegramAlert(
-          latestConfig.telegramBotToken,
-          latestConfig.telegramGroupChatId,
-          `<b>НОВАЯ ЗАЯВКА (АМКАР ЮНИОР)</b>\n\n<b>Родитель:</b> ${newLead.parentName}\n<b>Телефон:</b> <code>${newLead.parentPhone}</code>\n<b>Ребенок:</b> ${childFullTitle}${ageTextTelegram}\n<b>Источник:</b> ${newLead.source}\n<b>Детали:</b> ${newLead.note || "Заявка с посадочной страницы"}\n\n<i>${now.toLocaleDateString("ru-RU")} ${newLead.timeString}</i>`,
-        );
+      if (!newLead.telegramNotified) {
+        const configDoc = await getDoc(doc(db, "_config", "initialized"));
+        const latestConfig = configDoc.data()?.crmConfig || crmConfig;
+        
+        if (latestConfig.telegramAlerts?.newLead !== false && latestConfig.telegramBotToken && latestConfig.telegramGroupChatId) {
+          const ageTextTelegram = newLead.childAge > 0 ? ` (${newLead.childAge} лет, ${newLead.childBirthYear || currentYear - newLead.childAge} г.р.)` : "";
+          const tgRes = await sendTelegramAlert(
+            latestConfig.telegramBotToken,
+            latestConfig.telegramGroupChatId,
+            `🚨 <b>НОВАЯ ЗАЯВКА (АМКАР ЮНИОР)</b>\n\n👤 <b>Родитель:</b> ${newLead.parentName}\n📞 <b>Телефон:</b> <code>${newLead.parentPhone}</code>\n⚽ <b>Ребенок:</b> ${childFullTitle}${ageTextTelegram}\n📍 <b>Источник:</b> ${newLead.source}\n📋 <b>Статус:</b> Новая заявка\n🎯 <b>Действие:</b> ${newLead.notes || newLead.note || "Заявка с посадочной страницы"}\n\n⏰ <i>${moscowDate} ${newLead.timeString} (МСК)</i>`,
+          );
+          if (tgRes.success) {
+            newLead.telegramNotified = true;
+            updateDoc(doc(db, "leads", leadId), { telegramNotified: true }).catch(() => {});
+          }
+        }
       }
     } catch (e) {
       console.warn("Client telegram alert fallback notice:", e);
@@ -1444,6 +1463,25 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       type: "system",
       targetRole: ["director", "admin", "manager"],
     });
+  };
+
+  const resendLeadTelegram = async (leadId: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      const res = await fetch(`/api/leads/${leadId}/send-telegram`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.status === "OK") {
+        setLeads((prev) =>
+          prev.map((l) => (l.id === leadId ? { ...l, telegramNotified: true } : l))
+        );
+        return { success: true, message: "Уведомление успешно доставлено в Telegram!" };
+      }
+      return { success: false, message: data?.error || data?.message || "Ошибка отправки в Telegram" };
+    } catch (e: any) {
+      return { success: false, message: e.message || "Ошибка связи с сервером" };
+    }
   };
 
   async function addClient(
@@ -3923,6 +3961,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         firestoreError,
         dismissFirestoreError,
         addLead,
+        resendLeadTelegram,
         addClient,
         updateLeadStatus,
         ensureClientFromLead,

@@ -94,10 +94,26 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
     finances,
     convertLeadToClient,
     ensureClientFromLead,
+    resendLeadTelegram,
   } = useCRM();
 
   const [paymentModalClient, setPaymentModalClient] = useState<Client | null>(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState<boolean>(false);
+  const [sendingTelegramLeadId, setSendingTelegramLeadId] = useState<string | null>(null);
+  const [telegramToast, setTelegramToast] = useState<{ text: string; error?: boolean } | null>(null);
+
+  const handleSendLeadTelegram = async (leadId: string) => {
+    setSendingTelegramLeadId(leadId);
+    try {
+      const res = await resendLeadTelegram(leadId);
+      setTelegramToast({ text: res.message, error: !res.success });
+    } catch (e: any) {
+      setTelegramToast({ text: e.message || "Ошибка отправки в Telegram", error: true });
+    } finally {
+      setSendingTelegramLeadId(null);
+      setTimeout(() => setTelegramToast(null), 4000);
+    }
+  };
 
   const totalBalance = useMemo(() => {
     const calculatedAccountsMap = new Map<
@@ -1033,6 +1049,20 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                           >
                             {lead.source}
                           </span>
+                          {lead.telegramNotified ? (
+                            <div className="mt-1 flex items-center gap-1 text-[9px] text-sky-700 font-semibold bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200 w-fit" title="Уведомление доставлено в группу Telegram">
+                              <Send className="w-2.5 h-2.5" /> В TG ✓
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handleSendLeadTelegram(lead.id)}
+                              disabled={sendingTelegramLeadId === lead.id}
+                              className="mt-1 flex items-center gap-1 text-[9px] text-amber-700 hover:text-white font-semibold bg-amber-50 hover:bg-amber-600 px-1.5 py-0.5 rounded border border-amber-300 transition w-fit disabled:opacity-50"
+                              title="Нажмите, чтобы отправить заявку в Telegram"
+                            >
+                              <Send className="w-2.5 h-2.5" /> {sendingTelegramLeadId === lead.id ? "Отправка..." : "Отправить в TG"}
+                            </button>
+                          )}
                         </td>
                         <td className="p-3">
                           <div className="font-bold">
@@ -1127,6 +1157,22 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                 d="M12 2C6.477 2 2 6.477 2 12c0 1.905.534 3.684 1.464 5.203.208.337.262.748.118 1.112l-1.246 3.165a.6.6 0 00.776.776l3.164-1.246a1.18 1.18 0 011.112.118C8.91 21.936 10.418 22.5 12 22.5c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 15.5c-3.037 0-5.5-2.463-5.5-5.5S8.963 6.5 12 6.5s5.5 2.463 5.5 5.5-2.463 5.5-5.5 5.5z"
                               />
                             </svg>
+                          </button>
+                          <button
+                            onClick={() => handleSendLeadTelegram(lead.id)}
+                            disabled={sendingTelegramLeadId === lead.id}
+                            className={`p-1.5 rounded-lg transition border ${
+                              lead.telegramNotified
+                                ? "text-sky-600 hover:bg-sky-50 border-sky-200 hover:border-sky-400"
+                                : "text-amber-600 hover:bg-amber-50 border-amber-300 hover:border-amber-500 animate-pulse"
+                            }`}
+                            title={
+                              lead.telegramNotified
+                                ? "Уведомление отправлено (нажмите для повторной отправки в Telegram)"
+                                : "Отправить заявку в Telegram прямо сейчас"
+                            }
+                          >
+                            <Send className="w-4 h-4" />
                           </button>
                           {lead.status === "new" ||
                           lead.status === "contacted" ? (
@@ -4872,6 +4918,17 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
           setPaymentModalClient(null);
         }}
       />
+
+      {telegramToast && (
+        <div
+          className={`fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl shadow-lg text-xs font-bold text-white flex items-center gap-2 transition-all animate-bounce ${
+            telegramToast.error ? "bg-red-600" : "bg-sky-600"
+          }`}
+        >
+          <Send className="w-4 h-4" />
+          <span>{telegramToast.text}</span>
+        </div>
+      )}
     </div>
   );
 };
