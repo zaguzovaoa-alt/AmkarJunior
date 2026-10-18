@@ -570,8 +570,63 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: true }));
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+
+  // Blog image upload and asset management endpoint
+  app.post("/api/upload-blog-image", (req, res) => {
+    try {
+      const { filename, base64 } = req.body;
+      if (!filename || !base64) {
+        return res.status(400).json({ error: "Missing filename or base64 data" });
+      }
+      const cleanBase64 = base64.replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, "");
+      const buffer = Buffer.from(cleanBase64, "base64");
+      
+      const publicDir = path.join(process.cwd(), "public");
+      const blogDir = path.join(publicDir, "blog-images");
+      if (!fs.existsSync(blogDir)) {
+        fs.mkdirSync(blogDir, { recursive: true });
+      }
+
+      // Save to public/blog-images and public/
+      fs.writeFileSync(path.join(blogDir, filename), buffer);
+      fs.writeFileSync(path.join(publicDir, filename), buffer);
+
+      // Handle names like "Амкар1.jfif" or "Амкар1.jpg" or "amkar1.jpg"
+      const match = filename.match(/(?:Амкар|amkar)[-_]?(\d+)/i);
+      if (match) {
+        const num = match[1];
+        fs.writeFileSync(path.join(blogDir, `amkar-${num}.jpg`), buffer);
+        fs.writeFileSync(path.join(publicDir, `amkar-${num}.jpg`), buffer);
+        fs.writeFileSync(path.join(publicDir, `Амкар${num}.jfif`), buffer);
+        fs.writeFileSync(path.join(publicDir, `Амкар${num}.jpg`), buffer);
+      }
+
+      return res.json({
+        success: true,
+        filename,
+        url: `/blog-images/${filename}`,
+        canonicalUrl: match ? `/blog-images/amkar-${match[1]}.jpg` : `/blog-images/${filename}`
+      });
+    } catch (e: any) {
+      console.error("Upload blog image error:", e);
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/blog-images", (req, res) => {
+    try {
+      const blogDir = path.join(process.cwd(), "public", "blog-images");
+      if (!fs.existsSync(blogDir)) {
+        return res.json({ images: [] });
+      }
+      const files = fs.readdirSync(blogDir);
+      return res.json({ images: files.map(f => `/blog-images/${f}`) });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
 
   const SMS_RU_API_ID = '9FB08C14-577B-E243-D5D1-E97A00106226';
 
@@ -1018,6 +1073,10 @@ ${coachNotes.length > 0 ? coachNotes.map((n: string) => `- ${n}`).join('\n') : '
       res.status(500).json({ status: "ERROR", message: String(e) });
     }
   });
+
+  // Serve static assets from public folder
+  const publicDir = path.join(process.cwd(), "public");
+  app.use(express.static(publicDir));
 
   // Vite middleware for development
   let vite: any;

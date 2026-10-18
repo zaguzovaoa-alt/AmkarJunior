@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#064e3b" />
+      <stop offset="40%" stop-color="#022c22" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+
+    <!-- Turf Pattern -->
+    <pattern id="turfPattern" width="40" height="40" patternUnits="userSpaceOnUse">
+      <rect width="40" height="20" fill="#047857" opacity="0.12" />
+      <rect y="20" width="40" height="20" fill="#065f46" opacity="0.12" />
+    </pattern>
+
+    <!-- Glow Radials -->
+    <radialGradient id="lightGlow" cx="50%" cy="30%" r="60%">
+      <stop offset="0%" stop-color="#34d399" stop-opacity="0.35" />
+      <stop offset="60%" stop-color="#059669" stop-opacity="0.05" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+
+    <radialGradient id="bottleGlow" cx="40%" cy="40%" r="50%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#0284c7" stop-opacity="0.6" />
+    </radialGradient>
+
+    <linearGradient id="appleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ef4444" />
+      <stop offset="100%" stop-color="#991b1b" />
+    </linearGradient>
+
+    <filter id="softShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="15" stdDeviation="25" flood-color="#000000" flood-opacity="0.6" />
+    </filter>
+  </defs>
+
+  <!-- Background Base -->
+  <rect width="1200" height="675" fill="url(#bgGrad)" />
+  <rect width="1200" height="675" fill="url(#turfPattern)" />
+  <rect width="1200" height="675" fill="url(#lightGlow)" />
+
+  <!-- Stadium Field Markings -->
+  <circle cx="600" cy="675" r="320" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.15" />
+  <line x1="0" y1="675" x2="1200" y2="675" stroke="#ffffff" stroke-width="4" opacity="0.2" />
+  <circle cx="600" cy="675" r="12" fill="#ffffff" opacity="0.25" />
+
+  <!-- Left Accent: Soccer Ball (Subtle Inset) -->
+  <g transform="translate(180, 360) scale(0.9)" filter="url(#softShadow)">
+    <circle cx="0" cy="0" r="130" fill="#f8fafc" />
+    <!-- Classic Pentagons -->
+    <polygon points="0,-45 42,-14 26,38 -26,38 -42,-14" fill="#1e293b" />
+    <polygon points="0,-130 35,-90 -35,-90" fill="#0f172a" />
+    <polygon points="124,-40 85,-40 60,-80 100,-85" fill="#0f172a" />
+    <polygon points="-124,-40 -85,-40 -60,-80 -100,-85" fill="#0f172a" />
+    <polygon points="76,105 50,60 90,40 120,70" fill="#0f172a" />
+    <polygon points="-76,105 -50,60 -90,40 -120,70" fill="#0f172a" />
+    <circle cx="0" cy="0" r="130" fill="none" stroke="#000000" stroke-width="4" opacity="0.15" />
+  </g>
+
+  <!-- Center Composition: Sports Hydration Bottle & Apple -->
+  <g transform="translate(620, 310)" filter="url(#softShadow)">
+    <!-- Water Bottle Body -->
+    <rect x="-65" y="-140" width="130" height="260" rx="36" fill="url(#bottleGlow)" />
+    <!-- Grip Grooves -->
+    <rect x="-55" y="-60" width="110" height="12" rx="6" fill="#0369a1" opacity="0.6" />
+    <rect x="-55" y="-30" width="110" height="12" rx="6" fill="#0369a1" opacity="0.6" />
+    <rect x="-55" y="0" width="110" height="12" rx="6" fill="#0369a1" opacity="0.6" />
+    <!-- Measurement Scale -->
+    <line x1="30" y1="-100" x2="48" y2="-100" stroke="#ffffff" stroke-width="3" opacity="0.7" />
+    <line x1="35" y1="-80" x2="48" y2="-80" stroke="#ffffff" stroke-width="2" opacity="0.7" />
+    <line x1="30" y1="-60" x2="48" y2="-60" stroke="#ffffff" stroke-width="3" opacity="0.7" />
+    <line x1="35" y1="-40" x2="48" y2="-40" stroke="#ffffff" stroke-width="2" opacity="0.7" />
+    <line x1="30" y1="-20" x2="48" y2="-20" stroke="#ffffff" stroke-width="3" opacity="0.7" />
+    <!-- Bottle Cap & Spout -->
+    <rect x="-42" y="-175" width="84" height="35" rx="10" fill="#0f172a" />
+    <rect x="-18" y="-205" width="36" height="30" rx="8" fill="#38bdf8" />
+    <!-- Water Droplet Highlights -->
+    <ellipse cx="-20" cy="-90" rx="6" ry="12" fill="#ffffff" opacity="0.5" transform="rotate(-15 -20 -90)" />
+    <ellipse cx="-25" cy="40" rx="8" ry="16" fill="#ffffff" opacity="0.4" transform="rotate(-15 -25 40)" />
+
+    <!-- Healthy Apple for Nutrition -->
+    <g transform="translate(100, 45)">
+      <circle cx="-15" cy="0" r="48" fill="url(#appleGrad)" />
+      <circle cx="15" cy="0" r="48" fill="url(#appleGrad)" />
+      <path d="M 0,-40 Q 15,-65 30,-55 Q 25,-40 0,-40" fill="#15803d" />
+      <ellipse cx="-20" cy="-15" rx="8" ry="16" fill="#fca5a5" opacity="0.4" transform="rotate(-25 -20 -15)" />
+    </g>
+  </g>
+
+  <!-- Right Accent: Stopwatch & Vitality Metrics -->
+  <g transform="translate(1000, 330)" filter="url(#softShadow)">
+    <circle cx="0" cy="0" r="95" fill="#0f172a" stroke="#dc2626" stroke-width="8" />
+    <circle cx="0" cy="0" r="82" fill="#1e293b" />
+    <!-- Stopwatch Tick Marks -->
+    <line x1="0" y1="-75" x2="0" y2="-65" stroke="#ffffff" stroke-width="3" />
+    <line x1="0" y1="75" x2="0" y2="65" stroke="#ffffff" stroke-width="3" />
+    <line x1="-75" y1="0" x2="-65" y2="0" stroke="#ffffff" stroke-width="3" />
+    <line x1="75" y1="0" x2="65" y2="0" stroke="#ffffff" stroke-width="3" />
+    <!-- Clock Hands -->
+    <line x1="0" y1="0" x2="35" y2="-35" stroke="#ef4444" stroke-width="4" stroke-linecap="round" />
+    <line x1="0" y1="0" x2="-25" y2="25" stroke="#38bdf8" stroke-width="3" stroke-linecap="round" />
+    <circle cx="0" cy="0" r="6" fill="#ffffff" />
+    <!-- Top Button -->
+    <rect x="-14" y="-120" width="28" height="25" rx="4" fill="#94a3b8" />
+  </g>
+
+  <!-- Atmospheric Glow Particles -->
+  <circle cx="420" cy="180" r="4" fill="#34d399" opacity="0.7" />
+  <circle cx="780" cy="150" r="3" fill="#38bdf8" opacity="0.8" />
+  <circle cx="920" cy="220" r="5" fill="#f59e0b" opacity="0.6" />
+</svg>

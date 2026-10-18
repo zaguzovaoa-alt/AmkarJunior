@@ -53,6 +53,19 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   const [privacyAccepted, setPrivacyAccepted] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [imgSrc, setImgSrc] = useState(article.coverImage);
+
+  useEffect(() => {
+    setImgSrc(article.coverImage);
+  }, [article.coverImage]);
+
+  const handleImgError = () => {
+    if (article.fallbackImage && imgSrc !== article.fallbackImage) {
+      setImgSrc(article.fallbackImage);
+    } else if (imgSrc !== "/kids_football.png") {
+      setImgSrc("/kids_football.png");
+    }
+  };
 
   // Scroll to top & set dynamic SEO on mount
   useEffect(() => {
@@ -140,7 +153,10 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
     setSubmitted(true);
   };
 
-  const relatedArticles = BLOG_ARTICLES.filter((a) => a.id !== article.id).slice(0, 3);
+  const relatedArticles = [
+    ...BLOG_ARTICLES.filter((a) => a.id !== article.id && a.category === article.category),
+    ...BLOG_ARTICLES.filter((a) => a.id !== article.id && a.category !== article.category),
+  ].slice(0, 3);
 
   const formattedDate = new Date(article.publishedAt).toLocaleDateString("ru-RU", {
     day: "numeric",
@@ -220,12 +236,6 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
             >
               {article.category}
             </span>
-            {article.geoContext && (
-              <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-900 text-white flex items-center space-x-1">
-                <MapPin className="w-3 h-3 text-red-500" />
-                <span>{article.geoContext.city}</span>
-              </span>
-            )}
             <span className="text-xs text-slate-500 flex items-center space-x-1 ml-auto">
               <Clock className="w-3.5 h-3.5" />
               <span>{article.readTimeMinutes} мин чтения</span>
@@ -289,16 +299,11 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
           {/* Hero Article Image */}
           <div className="relative rounded-3xl overflow-hidden shadow-lg border border-slate-200/80 max-h-[460px] bg-slate-900">
             <img
-              src={article.coverImage}
+              src={imgSrc}
               alt={article.title}
+              onError={handleImgError}
               className="w-full h-full object-cover"
             />
-            <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-slate-950/80 to-transparent text-white/90 text-xs flex justify-between items-center">
-              <span>Футбольная школа «Амкар Юниор» Пермь</span>
-              <span className="bg-red-600/90 text-white font-bold px-2.5 py-0.5 rounded-full text-[10px] uppercase">
-                Тренировочный процесс
-              </span>
-            </div>
           </div>
         </div>
 
@@ -318,6 +323,28 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
                   {p}
                 </p>
               ))}
+
+              {/* In-article contextual photo */}
+              {section.image && (
+                <figure className="my-6 rounded-2xl overflow-hidden border border-slate-200/80 shadow-md bg-slate-900 group">
+                  <img
+                    src={section.image.url}
+                    alt={section.image.alt || section.image.caption || section.title}
+                    loading="lazy"
+                    onError={(e) => {
+                      // Fallback to kids_football.png if broken
+                      (e.target as HTMLImageElement).src = "/kids_football.png";
+                    }}
+                    className="w-full max-h-[460px] object-cover group-hover:scale-[1.01] transition-transform duration-500"
+                  />
+                  {section.image.caption && (
+                    <figcaption className="bg-slate-900/95 text-slate-300 text-xs sm:text-sm px-4 py-3 border-t border-slate-800 flex items-center justify-between">
+                      <span className="font-medium text-slate-200">{section.image.caption}</span>
+                      <span className="text-[11px] text-red-400 font-bold uppercase tracking-wider ml-2 shrink-0">Амкар Юниор</span>
+                    </figcaption>
+                  )}
+                </figure>
+              )}
 
               {section.bulletPoints && section.bulletPoints.length > 0 && (
                 <div className="bg-slate-50/80 rounded-2xl p-5 border border-slate-200/60 space-y-2.5">

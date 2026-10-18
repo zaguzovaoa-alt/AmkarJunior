@@ -1,6 +1,6 @@
 import React from "react";
 import { BlogArticle } from "../data/blogArticles";
-import { Clock, Calendar, ArrowRight, User, MapPin } from "lucide-react";
+import { Clock, Calendar, ArrowRight } from "lucide-react";
 
 interface BlogCardProps {
   article: BlogArticle;
@@ -19,49 +19,44 @@ export const BlogCard: React.FC<BlogCardProps> = ({
     year: "numeric",
   });
 
+  const [imgSrc, setImgSrc] = React.useState(article.coverImage);
+
+  React.useEffect(() => {
+    setImgSrc(article.coverImage);
+  }, [article.coverImage]);
+
+  const handleImgError = () => {
+    if (article.fallbackImage && imgSrc !== article.fallbackImage) {
+      setImgSrc(article.fallbackImage);
+    } else if (imgSrc !== "/kids_football.png") {
+      setImgSrc("/kids_football.png");
+    }
+  };
+
   if (featured) {
     return (
       <article
         onClick={() => onSelect(article)}
         className="group relative bg-white rounded-3xl overflow-hidden border border-slate-200/80 shadow-xl shadow-slate-900/5 hover:shadow-2xl hover:shadow-red-500/10 hover:border-red-500/40 transition-all duration-300 cursor-pointer grid lg:grid-cols-12 gap-0"
       >
-        <div className="lg:col-span-7 relative min-h-[280px] lg:min-h-[420px] overflow-hidden">
+        <div className="lg:col-span-7 relative min-h-[280px] lg:min-h-[420px] overflow-hidden bg-slate-100">
           <img
-            src={article.coverImage}
+            src={imgSrc}
             alt={article.title}
+            onError={handleImgError}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
             loading="lazy"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/20 to-transparent lg:hidden" />
-          <div className="absolute top-4 left-4 flex flex-wrap gap-2">
-            <span
-              className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider backdrop-blur-md border ${article.categoryColor}`}
-            >
-              {article.category}
-            </span>
-            {article.geoContext && (
-              <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-900/80 text-white backdrop-blur-md flex items-center space-x-1">
-                <MapPin className="w-3 h-3 text-red-500" />
-                <span>Пермь</span>
-              </span>
-            )}
-          </div>
         </div>
 
         <div className="lg:col-span-5 p-6 lg:p-10 flex flex-col justify-between bg-white">
           <div className="space-y-4">
-            <div className="hidden lg:flex items-center space-x-3">
+            <div className="flex items-center space-x-3">
               <span
                 className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${article.categoryColor}`}
               >
                 {article.category}
               </span>
-              {article.geoContext && (
-                <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700 flex items-center space-x-1">
-                  <MapPin className="w-3 h-3 text-red-600" />
-                  <span>Пермь</span>
-                </span>
-              )}
             </div>
 
             <h3 className="text-xl lg:text-2xl font-black text-slate-900 tracking-tight leading-snug group-hover:text-red-600 transition-colors">
@@ -102,28 +97,24 @@ export const BlogCard: React.FC<BlogCardProps> = ({
     >
       <div className="relative h-48 overflow-hidden bg-slate-100">
         <img
-          src={article.coverImage}
+          src={imgSrc}
           alt={article.title}
+          onError={handleImgError}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
           loading="lazy"
         />
-        <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
-          <span
-            className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider backdrop-blur-md border ${article.categoryColor} bg-white/95`}
-          >
-            {article.category}
-          </span>
-          {article.geoContext && (
-            <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-900/90 text-white backdrop-blur-md flex items-center space-x-1">
-              <MapPin className="w-3 h-3 text-red-400" />
-              <span>Пермь</span>
-            </span>
-          )}
-        </div>
       </div>
 
       <div className="p-5 flex-1 flex flex-col justify-between">
         <div className="space-y-2.5">
+          <div className="flex items-center">
+            <span
+              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${article.categoryColor}`}
+            >
+              {article.category}
+            </span>
+          </div>
+
           <h3 className="font-extrabold text-slate-900 text-lg leading-snug group-hover:text-red-600 transition-colors line-clamp-2">
             {article.title}
           </h3>

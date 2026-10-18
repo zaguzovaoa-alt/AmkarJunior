@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { BlogArticle, BLOG_ARTICLES, getArticleBySlug } from "../data/blogArticles";
 import { BlogCard } from "./BlogCard";
 import { ArticleView } from "./ArticleView";
+import { BlogImageManagerModal } from "./BlogImageManagerModal";
 import { useCRM } from "../context/CRMContext";
 import { AmkarLogo } from "./AmkarLogo";
 import {
@@ -14,6 +15,7 @@ import {
   TrendingUp,
   Award,
   Filter,
+  Image as ImageIcon,
 } from "lucide-react";
 
 interface BlogPageProps {
@@ -38,6 +40,7 @@ export const BlogPage: React.FC<BlogPageProps> = ({ initialSlug, onGoHome }) => 
 
   const [activeCategory, setActiveCategory] = useState<string>("Все");
   const [searchQuery, setSearchQuery] = useState("");
+  const [showImageManager, setShowImageManager] = useState(false);
 
   const categories = [
     "Все",
@@ -129,7 +132,16 @@ export const BlogPage: React.FC<BlogPageProps> = ({ initialSlug, onGoHome }) => 
             </div>
           </div>
 
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2.5">
+            <button
+              onClick={() => setShowImageManager(true)}
+              title="Загрузка и управление фотографиями статей"
+              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center space-x-1.5 transition border border-slate-200"
+            >
+              <ImageIcon className="w-3.5 h-3.5 text-red-600" />
+              <span className="hidden sm:inline">Фото статей</span>
+            </button>
+
             <a
               href="/#trial-form"
               onClick={(e) => {
@@ -342,6 +354,12 @@ export const BlogPage: React.FC<BlogPageProps> = ({ initialSlug, onGoHome }) => 
           </div>
         </div>
       </footer>
+
+      {/* Image Manager Modal */}
+      <BlogImageManagerModal
+        isOpen={showImageManager}
+        onClose={() => setShowImageManager(false)}
+      />
     </div>
   );
 };

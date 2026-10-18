@@ -14,13 +14,11 @@ import {
   Heart,
   MapPin,
   BookOpen,
-  ArrowRight,
 } from "lucide-react";
 import { AmkarLogo } from "./AmkarLogo";
-import { BlogSection } from "./BlogSection";
 import { ArticleView } from "./ArticleView";
 import { BlogPage } from "./BlogPage";
-import { BlogArticle, BLOG_ARTICLES, getArticleBySlug } from "../data/blogArticles";
+import { BlogArticle, getArticleBySlug } from "../data/blogArticles";
 
 import heroImage from "../assets/images/kids_soccer_background_1780828846133.jpg";
 
@@ -220,16 +218,11 @@ export const JoinPage: React.FC = () => {
               Преимущества
             </button>
             <button
-              onClick={() => {
-                document.getElementById("blog")?.scrollIntoView({ behavior: "smooth" });
-              }}
+              onClick={handleOpenBlog}
               className="px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-slate-700 hover:text-red-600 transition rounded-lg hover:bg-red-50/50 flex items-center space-x-1.5 group"
             >
               <BookOpen className="w-3.5 h-3.5 text-red-600 group-hover:scale-110 transition-transform" />
               <span>Блог</span>
-              <span className="bg-red-100 text-red-600 text-[10px] px-1.5 py-0.2 rounded-full font-black">
-                4
-              </span>
             </button>
           </nav>
 
@@ -437,12 +430,6 @@ export const JoinPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Organic Blog Section on Landing */}
-      <BlogSection
-        onOpenArticle={handleOpenArticle}
-        onOpenBlog={handleOpenBlog}
-      />
-
       {/* Single Column Layout for Form */}
       <section id="trial-form" className="py-20 px-4 bg-slate-50">
         <div className="max-w-2xl mx-auto">
@@ -638,38 +625,54 @@ export const JoinPage: React.FC = () => {
             </div>
           </div>
 
-          {/* SEO Blog Links */}
-          <div className="md:col-span-4 space-y-3">
-            <div className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-red-500">
-              <BookOpen className="w-4 h-4" />
-              <span>Полезные статьи и блог</span>
-            </div>
+          {/* Quick Nav */}
+          <div className="md:col-span-3 space-y-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
+              Навигация
+            </span>
             <ul className="space-y-2 text-xs text-slate-400">
-              {BLOG_ARTICLES.map((art) => (
-                <li key={art.id}>
-                  <button
-                    onClick={() => handleOpenArticle(art)}
-                    className="hover:text-white transition text-left line-clamp-1 flex items-center space-x-1"
-                  >
-                    <span>•</span>
-                    <span>{art.title}</span>
-                  </button>
-                </li>
-              ))}
-              <li className="pt-1">
+              <li>
+                <button
+                  onClick={() => {
+                    document.getElementById("about")?.scrollIntoView({ behavior: "smooth" });
+                  }}
+                  className="hover:text-white transition"
+                >
+                  О школе
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => {
+                    document.getElementById("why-us")?.scrollIntoView({ behavior: "smooth" });
+                  }}
+                  className="hover:text-white transition"
+                >
+                  Преимущества
+                </button>
+              </li>
+              <li>
                 <button
                   onClick={handleOpenBlog}
-                  className="text-red-400 hover:text-red-300 font-bold flex items-center space-x-1"
+                  className="hover:text-white transition flex items-center space-x-1 text-red-400 hover:text-red-300 font-semibold"
                 >
-                  <span>Все статьи блога</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>Блог</span>
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={scrollToForm}
+                  className="hover:text-white transition"
+                >
+                  Записаться на занятие
                 </button>
               </li>
             </ul>
           </div>
 
           {/* Legal and Location */}
-          <div className="md:col-span-3 flex flex-col space-y-3 md:items-end">
+          <div className="md:col-span-4 flex flex-col space-y-3 md:items-end">
             <div className="flex space-x-2 items-center text-slate-300">
               <MapPin className="w-4 h-4 text-red-500" />
               <span className="text-xs font-semibold">
