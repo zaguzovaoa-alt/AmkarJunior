@@ -5,6 +5,14 @@ import { createServer as createViteServer } from "vite";
 import { WebSocketServer } from "ws";
 import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
 import webpush from "web-push";
+import {
+  injectSeoIntoHtml,
+  generateSitemapXml,
+  generateRssFeed,
+  generateLlmsTxt,
+  generateLlmsFullTxt,
+  generateRobotsTxt
+} from "./src/server/seoRenderer";
 
 // VAPID Configuration for Real Background Web Push
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "BBOoYURPv6mnX1R9OA2sppgEwLz4kbfFOrF0vuR0_BGGYpkHYwBOjLt7kMPGz6HI7iOz_nxBUe6l8skAjRveOgE";
@@ -1078,19 +1086,88 @@ ${coachNotes.length > 0 ? coachNotes.map((n: string) => `- ${n}`).join('\n') : '
   const publicDir = path.join(process.cwd(), "public");
   app.use(express.static(publicDir));
 
-  // Vite middleware for development
+  // Vite middleware initialization in development
   let vite: any;
   if (process.env.NODE_ENV !== "production") {
     vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
+  }
+
+  // 1. Dynamic Sitemap with Image Extensions (for Yandex & Google)
+  app.get("/sitemap.xml", (req, res) => {
+    const proto = req.headers["x-forwarded-proto"] || "http";
+    const origin = `${proto}://${req.headers.host}`;
+    res.set("Content-Type", "application/xml; charset=utf-8").send(generateSitemapXml(origin));
+  });
+
+  // 2. RSS / Atom Feed for syndication and quick search engine indexing
+  app.get(["/rss.xml", "/feed.xml"], (req, res) => {
+    const proto = req.headers["x-forwarded-proto"] || "http";
+    const origin = `${proto}://${req.headers.host}`;
+    res.set("Content-Type", "application/xml; charset=utf-8").send(generateRssFeed(origin));
+  });
+
+  // 3. LLMs.txt & LLMs-full.txt standard for AI crawlers & Neural Networks
+  app.get("/llms.txt", (req, res) => {
+    const proto = req.headers["x-forwarded-proto"] || "http";
+    const origin = `${proto}://${req.headers.host}`;
+    res.set("Content-Type", "text/plain; charset=utf-8").send(generateLlmsTxt(origin));
+  });
+
+  app.get("/llms-full.txt", (req, res) => {
+    const proto = req.headers["x-forwarded-proto"] || "http";
+    const origin = `${proto}://${req.headers.host}`;
+    res.set("Content-Type", "text/plain; charset=utf-8").send(generateLlmsFullTxt(origin));
+  });
+
+  // 4. Robots.txt
+  app.get("/robots.txt", (req, res) => {
+    const proto = req.headers["x-forwarded-proto"] || "http";
+    const origin = `${proto}://${req.headers.host}`;
+    res.set("Content-Type", "text/plain; charset=utf-8").send(generateRobotsTxt(origin));
+  });
+
+  // 5. SEO Pre-rendered HTML for Blog Catalog & Individual Articles
+  app.get(["/blog", "/blog/:slug"], async (req, res, next) => {
+    try {
+      const proto = req.headers["x-forwarded-proto"] || "http";
+      const origin = `${proto}://${req.headers.host}`;
+
+      let rawHtml = "";
+      if (process.env.NODE_ENV !== "production") {
+        const indexPath = path.join(process.cwd(), "index.html");
+        rawHtml = fs.readFileSync(indexPath, "utf8");
+        if (vite) {
+          rawHtml = await vite.transformIndexHtml(req.originalUrl, rawHtml);
+        }
+      } else {
+        const distIndexPath = path.join(process.cwd(), "dist", "index.html");
+        rawHtml = fs.readFileSync(distIndexPath, "utf8");
+      }
+
+      const seoHtml = injectSeoIntoHtml({
+        origin,
+        urlPath: req.path,
+        rawHtml,
+      });
+
+      res.status(200).set({ "Content-Type": "text/html; charset=utf-8" }).send(seoHtml);
+    } catch (err) {
+      console.error("Error serving SEO blog page:", err);
+      next(err);
+    }
+  });
+
+  // 6. Mount Vite middleware for SPA or static dist in production
+  if (vite) {
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
     });
   }
 

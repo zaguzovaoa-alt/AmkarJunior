@@ -249,6 +249,100 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
   const [selectedArticle, setSelectedArticle] = useState<any | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [homeworkFilter, setHomeworkFilter] = useState<"all" | "pending" | "done">("all");
+  const [activeMascotDrillIdx, setActiveMascotDrillIdx] = useState<number>(0);
+  const [selectedGoalTipId, setSelectedGoalTipId] = useState<string>("goal_attendance");
+  const [completedDrills, setCompletedDrills] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(`amkar_mascot_drills_${myClient?.id || "default"}`);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`amkar_mascot_drills_${myClient?.id || "default"}`);
+      setCompletedDrills(saved ? JSON.parse(saved) : []);
+    } catch {
+      setCompletedDrills([]);
+    }
+  }, [myClient?.id]);
+
+  const toggleMascotDrill = (drillId: string) => {
+    setCompletedDrills((prev) => {
+      const next = prev.includes(drillId)
+        ? prev.filter((id) => id !== drillId)
+        : [...prev, drillId];
+      try {
+        localStorage.setItem(`amkar_mascot_drills_${myClient?.id || "default"}`, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const mascotDrills = [
+    {
+      id: "drill_sole_taps",
+      title: "Контроль подошвой «Топ-тап»",
+      duration: "3 подхода по 45 сек",
+      focus: "Чувство мяча и координация",
+      description:
+        "Поставь мяч перед собой и поочередно касайся его верхней части подошвой правой и левой стопы в легком прыжке. Спина прямая, взгляд вперед, мяч остается строго на месте.",
+      mascotTip:
+        "Старайся касаться мяча мягко, подушечкой стопы, и поднимать глаза каждые 5 касаний — так на поле ты всегда будешь видеть партнеров!",
+    },
+    {
+      id: "drill_pendulum",
+      title: "Коридор «Маятник» внутренней стороной",
+      duration: "3 подхода по 60 сек",
+      focus: "Быстрый дриблинг и работа стоп",
+      description:
+        "Перекатывай мяч между правой и левой ногой внутренней стороной стопы («щечкой») на месте или с легким продвижением вперед-назад по комнате.",
+      mascotTip:
+        "Колени должны быть слегка согнуты! Чем ниже центр тяжести, тем быстрее ты сможешь обыграть защитника один в один.",
+    },
+    {
+      id: "drill_juggling_bounce",
+      title: "Чеканка с отскоком от пола",
+      duration: "Рекорд из 15 касаний",
+      focus: "Первое касание и мягкий прием",
+      description:
+        "Подбрось мяч руками, дай ему один раз удариться об пол и подбей подъемом стопы вверх на уровень груди. Чередуй правую и левую ногу после каждого отскока.",
+      mascotTip:
+        "Не бей по мячу слишком сильно! Подставляй стопу как мягкую платформу, чтобы мяч не улетал в стороны.",
+    },
+    {
+      id: "drill_heron_balance",
+      title: "Баланс чемпиона «Стойка Рысёнка»",
+      duration: "По 40 сек на каждую ногу",
+      focus: "Стабилизация голеностопа и корпуса",
+      description:
+        "Встань на одну ногу, вторую слегка согни и удерживай мяч в руках перед собой. Делай плавные повороты корпусом влево и вправо, сохраняя идеальное равновесие.",
+      mascotTip:
+        "Крепкий голеностоп — секрет точного удара и надежной защиты от микротравм на искусственном газоне!",
+    },
+  ];
+
+  const myAssignedHomeworks = homeworks.filter(
+    (hw) =>
+      hw.groupId === myClient.groupName ||
+      hw.groupName === myClient.groupName ||
+      !hw.groupId ||
+      !myClient.groupName,
+  );
+  const completedHomeworksCount = myAssignedHomeworks.filter((hw) =>
+    homeworkSubmissions.some(
+      (s) => s.homeworkId === hw.id && s.clientId === myClient.id,
+    ),
+  ).length;
+  const pendingHomeworksCount = Math.max(
+    0,
+    myAssignedHomeworks.length - completedHomeworksCount,
+  );
+  const totalPracticePoints =
+    completedHomeworksCount * 25 + completedDrills.length * 10;
 
   const myGroup = groups.find((g) => g.name === myClient.groupName);
   const mySelectTeams = groups.filter(
@@ -1989,100 +2083,452 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
           {/* 4. REZULATTY & ACHIEVEMENTS */}
           {activeTab === "parent_gamification" && (
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              className="space-y-6"
+              className="space-y-6 text-left"
             >
-              {/* Gamification progress dashboard elements */}
-              <div className="p-5 bg-gradient-to-r from-indigo-900 to-slate-900 rounded-2xl text-white shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
-                <div className="space-y-2">
-                  <div className="flex items-center space-x-2">
-                    <Trophy className="w-5 h-5 text-amber-400" />
-                    <span className="text-xs uppercase font-bold text-indigo-300 font-mono tracking-widest">
-                      Школа достижений АМКАР
-                    </span>
-                  </div>
-                  <h3 className="text-xl font-black font-sans leading-tight">
-                    Поддерживаем мотивацию будущего чемпиона!
-                  </h3>
-                  <p className="text-xs text-indigo-200 leading-relaxed max-w-xl">
-                    За каждую продуктивную тренировку, высокие спортивные оценки
-                    от тренера и стабильную дисциплину ребенок получает
-                    наградные значки-медали в своем Личном кабинете. Соберите 5
-                    достижений за сезон для получения специального подарка от
-                    клуба!
-                  </p>
-                </div>
-                <div className="h-28 w-28 rounded-full border-4 border-amber-400/40 flex flex-col items-center justify-center bg-slate-800 flex-shrink-0">
-                  <span className="text-3xl font-extrabold text-amber-400 font-mono">
-                    3 / 5
-                  </span>
-                  <span className="text-[10px] font-semibold text-slate-300">
-                    Наград
-                  </span>
-                </div>
-              </div>
+              {(() => {
+                const earnedList = myClient.achievements || [];
+                const earnedCount = earnedList.length;
+                const seasonTarget = Math.max(5, earnedCount + 2);
+                const avgSkill =
+                  Number(
+                    (
+                      ((myClient.progress?.technique || 4.5) +
+                        (myClient.progress?.tactics || 4.4) +
+                        (myClient.progress?.physical || 4.6) +
+                        (myClient.progress?.discipline || 4.8)) /
+                      4
+                    ).toFixed(1),
+                  ) || 4.6;
+                const totalPresentAllTime = attendanceAll.filter(
+                  (a) => a.status === "present",
+                ).length;
+                const cycleTarget = 12;
+                const cycleProgress = Math.min(
+                  cycleTarget,
+                  totalPresentAllTime > 0 ? totalPresentAllTime : presentCount || 8,
+                );
+                const playerRank =
+                  earnedCount >= 5
+                    ? "Золотой Рысёнок Академии"
+                    : earnedCount >= 3
+                      ? "Уверенный Игрок Основы"
+                      : "Юный Рысёнок «Амкар»";
 
-              {/* Achievements collection list */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {myClient.achievements.map((ach, i) => (
-                  <div
-                    key={i}
-                    className="bg-white rounded-xl p-4 border border-gray-100 shadow-xs flex items-center space-x-4 font-sans text-xs"
-                  >
-                    <div className="h-16 w-16 rounded-xl bg-orange-50 text-3xl flex items-center justify-center border border-orange-100 flex-shrink-0 shadow-inner">
-                      {ach.icon}
-                    </div>
-                    <div className="space-y-1">
-                      <div className="font-extrabold text-slate-800 text-sm">
-                        {ach.title}
+                const goalCards = [
+                  {
+                    id: "goal_attendance",
+                    title: "Железный Амкаровец",
+                    subtitle: "Стабильная посещаемость цикла",
+                    current: cycleProgress,
+                    target: cycleTarget,
+                    unit: "трен.",
+                    percent: Math.round((cycleProgress / cycleTarget) * 100),
+                    statusText:
+                      cycleProgress >= cycleTarget
+                        ? "Цель достигнута!"
+                        : `Осталось ${cycleTarget - cycleProgress} трен.`,
+                    mascotAdvice: `«${myClient.childName || "Чемпион"}, регулярность — главный секрет мастерства! Каждая тренировка без пропусков укрепляет мышечную память и приближает тебя к значку "Железный Амкаровец". Приходи за 15 минут до начала, чтобы спокойно размяться!»`,
+                    ctaLabel: "Открыть расписание",
+                    ctaTab: "parent_schedule",
+                  },
+                  {
+                    id: "goal_homework",
+                    title: "Мастер Домашней Практики",
+                    subtitle: "Домашние задания и разминка с мячом",
+                    current: completedHomeworksCount + completedDrills.length,
+                    target: Math.max(4, myAssignedHomeworks.length + 2),
+                    unit: "ур.",
+                    percent: Math.min(
+                      100,
+                      Math.round(
+                        ((completedHomeworksCount + completedDrills.length) /
+                          Math.max(4, myAssignedHomeworks.length + 2)) *
+                          100,
+                      ),
+                    ),
+                    statusText:
+                      pendingHomeworksCount > 0
+                        ? `Ждут сдачи: ${pendingHomeworksCount}`
+                        : "Активная серия",
+                    mascotAdvice: `«Всего 10–15 минут работы с мячом дома дают +30% к уверенности в дриблинге на поле! Загляни во вкладку "Домашнее задание" — я приготовил там 4 специальных упражнения для контроля стопы.»`,
+                    ctaLabel: "Перейти к домашним заданиям",
+                    ctaTab: "parent_homeworks",
+                  },
+                  {
+                    id: "goal_sniper",
+                    title: "Снайпер и Лидер Школы",
+                    subtitle: "Средний технический рейтинг 4.8+",
+                    current: avgSkill,
+                    target: 4.8,
+                    unit: "балла",
+                    percent: Math.min(100, Math.round((avgSkill / 4.8) * 100)),
+                    statusText:
+                      avgSkill >= 4.8
+                        ? "Норматив выполнен!"
+                        : `До планки: +${(4.8 - avgSkill).toFixed(1)}`,
+                    mascotAdvice: `«Сейчас твой средний рейтинг — ${avgSkill} из 5.0! Чтобы пробить отметку 4.8 и забрать медаль "Снайпер Школы", слушай подсказки тренера ${myClient.coachName || ""} и работай обеими ногами при ударах по воротам.»`,
+                    ctaLabel: "Смотреть прогресс",
+                    ctaTab: "parent_home",
+                  },
+                ];
+
+                const activeGoal =
+                  goalCards.find((g) => g.id === selectedGoalTipId) || goalCards[0];
+
+                return (
+                  <>
+                    {/* Hero Showcase Banner with Рысёнок */}
+                    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-rose-950 text-white border border-slate-800 shadow-xl">
+                      {/* Ambient красно-черное свечение Амкара */}
+                      <div className="pointer-events-none absolute -right-16 -top-16 h-72 w-72 rounded-full bg-red-600/20 blur-3xl" />
+                      <div className="pointer-events-none absolute left-1/3 -bottom-20 h-64 w-64 rounded-full bg-amber-500/10 blur-3xl" />
+
+                      <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 items-center gap-6 p-6 sm:p-8">
+                        {/* Left Column: Mission, Rank & Progress */}
+                        <div className="lg:col-span-7 space-y-5">
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
+                            <Trophy className="w-4 h-4 text-amber-400 shrink-0" />
+                            <span className="font-semibold text-amber-300">
+                              Школа достижений «Амкар Юниор»
+                            </span>
+                            <span aria-hidden="true">·</span>
+                            <span>Статус игрока: {playerRank}</span>
+                          </div>
+
+                          <div className="space-y-2">
+                            <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white leading-tight max-w-2xl">
+                              Путь чемпиона: награды и личные цели{" "}
+                              <span className="text-amber-400">
+                                {myClient.childName}
+                              </span>
+                            </h2>
+                            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-xl">
+                              Талисман клуба <strong className="text-white">Рысёнок</strong>{" "}
+                              следит за каждой тренировкой, домашней разминкой и оценками
+                              тренера. Соберите{" "}
+                              <span className="text-amber-300 font-bold tabular-nums">
+                                {seasonTarget} наград
+                              </span>{" "}
+                              за сезон, чтобы открыть именной диплом и клубный подарок от
+                              академии!
+                            </p>
+                          </div>
+
+                          {/* Key Metrics Strip (Tabular Numerals) */}
+                          <div className="grid grid-cols-3 gap-3 pt-1 max-w-xl">
+                            <div className="bg-white/5 border border-white/10 rounded-2xl p-3.5 backdrop-blur-xs">
+                              <div className="text-[11px] text-slate-400 font-medium">
+                                Собрано наград
+                              </div>
+                              <div className="text-xl sm:text-2xl font-black text-amber-400 font-mono tabular-nums mt-0.5">
+                                {earnedCount} / {seasonTarget}
+                              </div>
+                              <div className="text-[10px] text-slate-300 mt-0.5">
+                                До подарка: {Math.max(0, seasonTarget - earnedCount)}
+                              </div>
+                            </div>
+
+                            <div className="bg-white/5 border border-white/10 rounded-2xl p-3.5 backdrop-blur-xs">
+                              <div className="text-[11px] text-slate-400 font-medium">
+                                Рейтинг игрока
+                              </div>
+                              <div className="text-xl sm:text-2xl font-black text-emerald-400 font-mono tabular-nums mt-0.5">
+                                {avgSkill} <span className="text-xs text-slate-400">/ 5.0</span>
+                              </div>
+                              <div className="text-[10px] text-slate-300 mt-0.5">
+                                Оценка тренера
+                              </div>
+                            </div>
+
+                            <div className="bg-white/5 border border-white/10 rounded-2xl p-3.5 backdrop-blur-xs">
+                              <div className="text-[11px] text-slate-400 font-medium">
+                                Баллы практики
+                              </div>
+                              <div className="text-xl sm:text-2xl font-black text-white font-mono tabular-nums mt-0.5">
+                                +{totalPracticePoints}
+                              </div>
+                              <div className="text-[10px] text-rose-300 mt-0.5">
+                                Активность дома
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Season Progress Bar */}
+                          <div className="space-y-1.5 max-w-xl">
+                            <div className="flex justify-between text-xs">
+                              <span className="text-slate-300 font-medium">
+                                Прогресс кубка сезона
+                              </span>
+                              <span className="font-mono font-bold text-amber-400 tabular-nums">
+                                {Math.min(100, Math.round((earnedCount / seasonTarget) * 100))}%
+                              </span>
+                            </div>
+                            <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden p-0.5 border border-slate-700">
+                              <div
+                                className="h-full rounded-full bg-gradient-to-r from-red-500 via-amber-400 to-emerald-400 transition-all duration-300"
+                                style={{
+                                  width: `${Math.min(100, Math.max(12, Math.round((earnedCount / seasonTarget) * 100)))}%`,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Right Column: Stylish Рысёнок Mascot Showcase & Interactive Speech Card */}
+                        <div className="lg:col-span-5 flex flex-col sm:flex-row lg:flex-row items-center justify-end gap-4">
+                          {/* Speech Bubble from Рысёнок */}
+                          <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-2xl p-4 text-left max-w-xs space-y-2.5 shadow-lg order-2 sm:order-1">
+                            <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                              <span className="text-xs font-bold text-amber-300">
+                                Совет от Рысёнка
+                              </span>
+                              <span className="text-[10px] text-slate-300 font-mono">
+                                Наставник клуба
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-100 leading-relaxed">
+                              {activeGoal.mascotAdvice}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => setActiveTab(activeGoal.ctaTab)}
+                              className="w-full py-2 px-3 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                            >
+                              <span>{activeGoal.ctaLabel}</span>
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          {/* Mascot Image Container */}
+                          <div className="relative flex-shrink-0 order-1 sm:order-2 group">
+                            <div className="absolute inset-0 bg-gradient-to-t from-red-600/30 via-amber-400/15 to-transparent rounded-full blur-2xl scale-90 group-hover:scale-105 transition-transform duration-300" />
+                            <div className="relative w-40 h-44 sm:w-48 sm:h-52 rounded-2xl bg-gradient-to-b from-white/10 to-white/5 border border-white/15 p-2 flex items-end justify-center overflow-visible shadow-inner">
+                              <img
+                                src="/Рысенок1.png"
+                                onError={(e) => {
+                                  const target = e.currentTarget;
+                                  if (!target.src.includes("rysenok1.png")) {
+                                    target.src = "/rysenok1.png";
+                                  }
+                                }}
+                                alt="Талисман клуба Рысёнок Амкар"
+                                referrerPolicy="no-referrer"
+                                className="w-full h-full object-contain drop-shadow-[0_12px_20px_rgba(0,0,0,0.5)] transform group-hover:scale-105 transition-transform duration-200 select-none"
+                              />
+                              <div className="absolute -bottom-2.5 inset-x-4 bg-slate-900/95 border border-amber-400/40 rounded-xl px-2.5 py-1 text-center shadow-md">
+                                <span className="text-[10px] font-bold text-amber-300 tracking-wide block truncate">
+                                  Талисман «Амкар Юниор»
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <p className="text-[11px] text-gray-500 leading-normal">
-                        {ach.description}
-                      </p>
-                      <div className="text-[9px] font-mono text-gray-400 font-semibold uppercase">
-                        Получен: {ach.earnedAt}
+                    </div>
+
+                    {/* Interactive Active Goals Section (Click to get Рысёнок's tip) */}
+                    <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 pb-4">
+                        <div>
+                          <h3 className="text-base font-extrabold text-slate-900">
+                            Активные цели сезона
+                          </h3>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            Нажмите на любую цель, чтобы Рысёнок подсказал план её быстрого
+                            достижения
+                          </p>
+                        </div>
+                        <span className="text-xs text-slate-500 font-medium">
+                          Выбрана цель:{" "}
+                          <strong className="text-slate-900">{activeGoal.title}</strong>
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {goalCards.map((goal) => {
+                          const isSelected = goal.id === activeGoal.id;
+                          return (
+                            <div
+                              key={goal.id}
+                              onClick={() => setSelectedGoalTipId(goal.id)}
+                              className={`p-4 rounded-2xl border transition cursor-pointer flex flex-col justify-between space-y-4 ${
+                                isSelected
+                                  ? "bg-slate-900 text-white border-slate-900 shadow-md"
+                                  : "bg-slate-50/70 hover:bg-slate-100/80 text-slate-800 border-slate-200/80"
+                              }`}
+                            >
+                              <div className="space-y-1.5">
+                                <div className="flex items-center justify-between text-xs">
+                                  <span
+                                    className={`font-semibold ${
+                                      isSelected ? "text-amber-300" : "text-slate-500"
+                                    }`}
+                                  >
+                                    {goal.statusText}
+                                  </span>
+                                  <span
+                                    className={`font-mono font-bold tabular-nums ${
+                                      isSelected ? "text-white" : "text-slate-900"
+                                    }`}
+                                  >
+                                    {goal.current} / {goal.target} {goal.unit}
+                                  </span>
+                                </div>
+                                <h4
+                                  className={`font-extrabold text-sm ${
+                                    isSelected ? "text-white" : "text-slate-900"
+                                  }`}
+                                >
+                                  {goal.title}
+                                </h4>
+                                <p
+                                  className={`text-xs leading-relaxed ${
+                                    isSelected ? "text-slate-300" : "text-slate-500"
+                                  }`}
+                                >
+                                  {goal.subtitle}
+                                </p>
+                              </div>
+
+                              <div className="space-y-2">
+                                <div
+                                  className={`w-full h-2 rounded-full overflow-hidden ${
+                                    isSelected ? "bg-slate-700" : "bg-slate-200"
+                                  }`}
+                                >
+                                  <div
+                                    className={`h-full rounded-full transition-all duration-300 ${
+                                      isSelected ? "bg-amber-400" : "bg-emerald-500"
+                                    }`}
+                                    style={{ width: `${goal.percent}%` }}
+                                  />
+                                </div>
+                                <div className="flex items-center justify-between text-[11px]">
+                                  <span
+                                    className={
+                                      isSelected ? "text-slate-300" : "text-slate-500"
+                                    }
+                                  >
+                                    {isSelected
+                                      ? "Совет Рысёнка открыт выше"
+                                      : "Нажмите для совета Рысёнка"}
+                                  </span>
+                                  <span
+                                    className={`font-mono font-bold tabular-nums ${
+                                      isSelected ? "text-amber-300" : "text-emerald-600"
+                                    }`}
+                                  >
+                                    {goal.percent}%
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
-                  </div>
-                ))}
 
-                {/* Unearned achievement placeholders */}
-                <div className="bg-slate-50 border-2 border-dashed border-gray-200 rounded-xl p-4 flex items-center space-x-4 opacity-60">
-                  <div className="h-16 w-16 rounded-xl bg-slate-200 flex items-center justify-center border flex-shrink-0">
-                    <Target className="w-8 h-8 text-slate-500" />
-                  </div>
-                  <div className="space-y-1 text-left">
-                    <div className="font-extrabold text-gray-400 text-sm">
-                      Железный АМКАРОВЕЦ
-                    </div>
-                    <p className="text-[11px] text-gray-400 leading-normal">
-                      Посетите 12 тренировок в одном билинговом цикле.
-                    </p>
-                    <div className="text-[9px] font-mono text-orange-500 font-bold uppercase">
-                      В процессе (8/12)
-                    </div>
-                  </div>
-                </div>
+                    {/* Achievements Collection Grid */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-base font-extrabold text-slate-900">
+                          Коллекция наград и медалей
+                        </h3>
+                        <span className="text-xs text-slate-500 font-mono tabular-nums">
+                          Открыто: {earnedCount} из {seasonTarget}
+                        </span>
+                      </div>
 
-                <div className="bg-slate-50 border-2 border-dashed border-gray-200 rounded-xl p-4 flex items-center space-x-4 opacity-60">
-                  <div className="h-16 w-16 rounded-xl bg-slate-200 flex items-center justify-center border flex-shrink-0">
-                    <Heart className="w-8 h-8 text-slate-500" />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="font-extrabold text-gray-400 text-sm">
-                      Снайпер Школы
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {earnedList.map((ach: any, i: number) => (
+                          <div
+                            key={i}
+                            className="bg-white rounded-2xl p-5 border border-gray-200/80 shadow-xs flex items-start space-x-4 font-sans text-xs hover:border-amber-300 transition"
+                          >
+                            <div className="h-16 w-16 rounded-2xl bg-amber-50 text-3xl flex items-center justify-center border border-amber-200/70 flex-shrink-0">
+                              {ach.icon}
+                            </div>
+                            <div className="space-y-1.5 flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="font-extrabold text-slate-900 text-sm truncate">
+                                  {ach.title}
+                                </div>
+                                <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                              </div>
+                              <p className="text-xs text-slate-600 leading-relaxed">
+                                {ach.description}
+                              </p>
+                              <div className="pt-1 flex items-center gap-2 text-[11px] text-slate-400 font-mono tabular-nums">
+                                <span>Получена: {ach.earnedAt}</span>
+                                <span aria-hidden="true">·</span>
+                                <span className="text-emerald-600 font-sans font-semibold">
+                                  Подтверждено
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+
+                        {/* Unearned achievement cards with Рысёнок's encouragement */}
+                        <div
+                          onClick={() => setSelectedGoalTipId("goal_attendance")}
+                          className="bg-slate-50 border border-dashed border-slate-300 rounded-2xl p-5 flex items-start space-x-4 hover:bg-slate-100/70 transition cursor-pointer"
+                        >
+                          <div className="h-16 w-16 rounded-2xl bg-white flex items-center justify-center border border-slate-200 flex-shrink-0">
+                            <Target className="w-7 h-7 text-rose-600" />
+                          </div>
+                          <div className="space-y-1.5 text-left flex-1">
+                            <div className="font-extrabold text-slate-800 text-sm">
+                              Железный АМКАРОВЕЦ
+                            </div>
+                            <p className="text-xs text-slate-500 leading-relaxed">
+                              Посетите 12 тренировок в одном биллинговом цикле без пропусков.
+                            </p>
+                            <div className="pt-1 flex items-center gap-2 text-[11px] font-mono tabular-nums">
+                              <span className="text-amber-600 font-bold">
+                                В процессе ({cycleProgress}/{cycleTarget})
+                              </span>
+                              <span aria-hidden="true" className="text-slate-300">
+                                ·
+                              </span>
+                              <span className="text-slate-500 font-sans">Совет Рысёнка →</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div
+                          onClick={() => setSelectedGoalTipId("goal_sniper")}
+                          className="bg-slate-50 border border-dashed border-slate-300 rounded-2xl p-5 flex items-start space-x-4 hover:bg-slate-100/70 transition cursor-pointer"
+                        >
+                          <div className="h-16 w-16 rounded-2xl bg-white flex items-center justify-center border border-slate-200 flex-shrink-0">
+                            <Heart className="w-7 h-7 text-indigo-600" />
+                          </div>
+                          <div className="space-y-1.5 text-left flex-1">
+                            <div className="font-extrabold text-slate-800 text-sm">
+                              Снайпер Школы
+                            </div>
+                            <p className="text-xs text-slate-500 leading-relaxed">
+                              Заработайте средний балл 4.8+ за технику и точность ударов.
+                            </p>
+                            <div className="pt-1 flex items-center gap-2 text-[11px] font-mono tabular-nums">
+                              <span className="text-indigo-600 font-bold">
+                                Текущий: {avgSkill} / 4.8
+                              </span>
+                              <span aria-hidden="true" className="text-slate-300">
+                                ·
+                              </span>
+                              <span className="text-slate-500 font-sans">Совет Рысёнка →</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-[11px] text-gray-400 leading-normal">
-                      Заработайте наивысший бал 4.8+ за точность ударов.
-                    </p>
-                    <div className="text-[9px] font-mono text-indigo-500 font-bold uppercase">
-                      Новая планка
-                    </div>
-                  </div>
-                </div>
-              </div>
+                  </>
+                );
+              })()}
             </motion.div>
           )}
 
@@ -2743,101 +3189,377 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
               exit={{ opacity: 0 }}
               className="space-y-6 text-left"
             >
-              <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-                <h2 className="text-xl font-black text-slate-800 flex items-center mb-1">
-                  <FileText className="w-5 h-5 mr-2 text-emerald-500" />
-                  Мои домашние задания
-                </h2>
-                <p className="text-xs text-gray-500">
-                  Выполняйте задания тренера дома для улучшения индивидуальных
-                  навыков
-                </p>
-              </div>
+              {(() => {
+                const currentDrill = mascotDrills[activeMascotDrillIdx] || mascotDrills[0];
+                const isCurrentDrillDone = completedDrills.includes(currentDrill.id);
+                const filteredHomeworks = myAssignedHomeworks.filter((hw) => {
+                  const isDone = homeworkSubmissions.some(
+                    (s) => s.homeworkId === hw.id && s.clientId === myClient.id,
+                  );
+                  if (homeworkFilter === "done") return isDone;
+                  if (homeworkFilter === "pending") return !isDone;
+                  return true;
+                });
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {homeworks.filter(
-                  (hw) =>
-                    hw.groupId === myClient.groupName || !myClient.groupName,
-                ).length === 0 ? (
-                  <div className="col-span-full py-12 text-center text-gray-400 bg-white rounded-2xl border border-gray-100 shadow-sm">
-                    У вашего ребенка пока нет активных домашних заданий. Тренер
-                    добавит их по мере необходимости.
-                  </div>
-                ) : (
-                  homeworks
-                    .filter(
-                      (hw) =>
-                        hw.groupId === myClient.groupName ||
-                        hw.groupName === myClient.groupName ||
-                        !hw.groupId,
-                    )
-                    .map((hw) => {
-                      const isDone = homeworkSubmissions.some(
-                        (s) =>
-                          s.homeworkId === hw.id && s.clientId === myClient.id,
-                      );
-                      return (
-                        <div
-                          key={hw.id}
-                          className={`p-5 rounded-2xl border transition shadow-sm ${isDone ? "bg-emerald-50 border-emerald-100" : "bg-white border-gray-200"}`}
-                        >
-                          <div className="flex justify-between items-start mb-3">
-                            <h3 className="font-bold text-slate-800 text-sm whitespace-pre-wrap">
-                              {hw.title}
-                            </h3>
-                            {isDone ? (
-                              <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-[10px] font-bold uppercase tracking-wider flex items-center shrink-0 ml-2">
-                                <Check className="w-3 h-3 mr-1" /> Выполнено
-                              </span>
-                            ) : (
-                              <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded text-[10px] font-bold uppercase tracking-wider shrink-0 ml-2">
-                                Ожидает
-                              </span>
-                            )}
+                const mascotGreeting =
+                  myAssignedHomeworks.length > 0 && pendingHomeworksCount === 0
+                    ? `Отличная работа, ${myClient.childName}! Все задания тренера выполнены на 100%. Давай закрепим успех моей фирменной разминкой!`
+                    : pendingHomeworksCount > 0
+                      ? `Привет, ${myClient.childName}! У тебя ${pendingHomeworksCount} активное задание от тренера. Всего 15 минут практики дома — и мяч будет слушаться как влитой!`
+                      : `Привет, ${myClient.childName}! Пока тренер готовит новое задание для группы ${myClient.groupName || ""}, давай проведём домашнюю 10-минутную разминку чемпиона!`;
+
+                return (
+                  <>
+                    {/* Hero Mentor Card with Рысёнок */}
+                    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-white border border-slate-800 shadow-lg">
+                      <div className="pointer-events-none absolute -left-16 -top-16 h-64 w-64 rounded-full bg-red-600/15 blur-3xl" />
+                      <div className="pointer-events-none absolute right-10 -bottom-20 h-64 w-64 rounded-full bg-emerald-500/10 blur-3xl" />
+
+                      <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 items-center gap-6 p-6 sm:p-8">
+                        {/* Mascot Visual Column */}
+                        <div className="lg:col-span-4 flex flex-col items-center justify-center">
+                          <div className="relative group">
+                            <div className="absolute inset-0 bg-gradient-to-tr from-red-600/25 via-amber-500/15 to-transparent rounded-full blur-2xl" />
+                            <div className="relative w-40 h-44 sm:w-48 sm:h-52 rounded-3xl bg-white/5 border border-white/15 p-3 flex items-center justify-center shadow-inner">
+                              <img
+                                src="/Рысенок1.png"
+                                onError={(e) => {
+                                  const target = e.currentTarget;
+                                  if (!target.src.includes("rysenok1.png")) {
+                                    target.src = "/rysenok1.png";
+                                  }
+                                }}
+                                alt="Наставник Рысёнок — Домашние задания"
+                                referrerPolicy="no-referrer"
+                                className="w-full h-full object-contain drop-shadow-[0_12px_20px_rgba(0,0,0,0.45)] transform group-hover:scale-105 transition-transform duration-200 select-none"
+                              />
+                            </div>
                           </div>
-                          <p className="text-xs text-gray-600 mb-4 whitespace-pre-wrap leading-relaxed">
-                            {hw.description}
-                          </p>
-
-                          {hw.videoUrl && (
-                            <div className="mb-4">
-                              <a
-                                href={hw.videoUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center"
-                              >
-                                Смотреть обучающее видео{" "}
-                                <ArrowRight className="w-3 h-3 ml-1" />
-                              </a>
+                          <div className="mt-3 text-center">
+                            <div className="text-xs font-extrabold text-white tracking-tight">
+                              Рысёнок Амкарчик
                             </div>
-                          )}
-                          <div className="flex justify-between items-end border-t border-slate-100 pt-4 mt-2">
-                            <div className="text-[10px] text-gray-400 font-medium">
-                              Срок сдачи:{" "}
-                              {hw.dueDate
-                                ? new Date(hw.dueDate).toLocaleDateString(
-                                    "ru-RU",
-                                  )
-                                : "Не указан"}
+                            <div className="text-[11px] text-slate-400">
+                              Персональный наставник по домашней технике
                             </div>
-                            {!isDone && (
-                              <button
-                                onClick={() =>
-                                  submitHomework(hw.id, myClient.id)
-                                }
-                                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center transition shadow-sm"
-                              >
-                                <FileCheck className="w-4 h-4 mr-2" />
-                                Отметить выполненным
-                              </button>
-                            )}
                           </div>
                         </div>
-                      );
-                    })
-                )}
-              </div>
+
+                        {/* Mentor Content & Interactive Mini-Drill Column */}
+                        <div className="lg:col-span-8 space-y-5">
+                          <div className="space-y-2">
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
+                              <FileText className="w-4 h-4 text-emerald-400 shrink-0" />
+                              <span className="font-semibold text-emerald-400">
+                                Домашняя академия «Амкар Юниор»
+                              </span>
+                              <span aria-hidden="true">·</span>
+                              <span className="font-mono tabular-nums">
+                                Выполнено заданий: {completedHomeworksCount} из{" "}
+                                {myAssignedHomeworks.length}
+                              </span>
+                              <span aria-hidden="true">·</span>
+                              <span className="font-mono tabular-nums text-amber-300">
+                                Разминок с Рысёнком: {completedDrills.length} /{" "}
+                                {mascotDrills.length}
+                              </span>
+                            </div>
+
+                            <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight leading-tight">
+                              Мои домашние задания и разминка
+                            </h2>
+                            <p className="text-xs sm:text-sm text-slate-200 leading-relaxed bg-white/5 border border-white/10 rounded-2xl p-3.5">
+                              «{mascotGreeting}»
+                            </p>
+                          </div>
+
+                          {/* Interactive Daily Drill Box from Рысёнок */}
+                          <div className="bg-slate-900/90 border border-slate-700/80 rounded-2xl p-4 sm:p-5 space-y-3.5">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                              <div>
+                                <div className="text-[11px] font-semibold text-amber-400">
+                                  Интерактивная разминка от Рысёнка ({activeMascotDrillIdx + 1}{" "}
+                                  из {mascotDrills.length})
+                                </div>
+                                <h3 className="text-base font-extrabold text-white mt-0.5">
+                                  {currentDrill.title}
+                                </h3>
+                              </div>
+
+                              {/* Drill Switcher Buttons */}
+                              <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                                {mascotDrills.map((d, idx) => {
+                                  const done = completedDrills.includes(d.id);
+                                  return (
+                                    <button
+                                      key={d.id}
+                                      type="button"
+                                      onClick={() => setActiveMascotDrillIdx(idx)}
+                                      className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition cursor-pointer ${
+                                        activeMascotDrillIdx === idx
+                                          ? "bg-red-600 text-white"
+                                          : done
+                                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                            : "bg-slate-800 text-slate-400 hover:text-white"
+                                      }`}
+                                    >
+                                      #{idx + 1}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            <p className="text-xs text-slate-300 leading-relaxed">
+                              {currentDrill.description}
+                            </p>
+
+                            <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-xs text-amber-200 leading-relaxed">
+                              <strong className="text-amber-300 font-bold">
+                                Подсказка Рысёнка:{" "}
+                              </strong>
+                              {currentDrill.mascotTip}
+                            </div>
+
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                              <div className="flex items-center gap-2 text-xs text-slate-300 font-mono tabular-nums">
+                                <Clock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                <span>{currentDrill.duration}</span>
+                                <span aria-hidden="true">·</span>
+                                <span className="font-sans text-slate-400">
+                                  {currentDrill.focus}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleMascotDrill(currentDrill.id)}
+                                  className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                                    isCurrentDrillDone
+                                      ? "bg-emerald-500 text-white"
+                                      : "bg-white text-slate-900 hover:bg-slate-100"
+                                  }`}
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>
+                                    {isCurrentDrillDone
+                                      ? "Разминка выполнена!"
+                                      : "Я выполнил разминку"}
+                                  </span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setActiveMascotDrillIdx(
+                                      (prev) => (prev + 1) % mascotDrills.length,
+                                    )
+                                  }
+                                  className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold transition cursor-pointer whitespace-nowrap"
+                                >
+                                  Следующее →
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Filter Bar & Trainer Assignments Header */}
+                    <div className="bg-white rounded-2xl p-4 sm:p-5 border border-gray-100 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <h3 className="text-base font-extrabold text-slate-900">
+                          Персональные задания от тренера
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Группа: {myClient.groupName || "Общая подготовка"} · Тренер:{" "}
+                          {myClient.coachName || "Тренерский штаб АМКАР"}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl self-start sm:self-auto">
+                        {[
+                          {
+                            id: "all",
+                            label: `Все (${myAssignedHomeworks.length})`,
+                          },
+                          {
+                            id: "pending",
+                            label: `Ожидают (${pendingHomeworksCount})`,
+                          },
+                          {
+                            id: "done",
+                            label: `Выполнено (${completedHomeworksCount})`,
+                          },
+                        ].map((tab) => (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() =>
+                              setHomeworkFilter(tab.id as "all" | "pending" | "done")
+                            }
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                              homeworkFilter === tab.id
+                                ? "bg-white text-slate-900 shadow-2xs"
+                                : "text-slate-600 hover:text-slate-900"
+                            }`}
+                          >
+                            {tab.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Trainer Homework Cards Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {filteredHomeworks.length === 0 ? (
+                        <div className="col-span-full p-8 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-6">
+                          <div className="flex items-center gap-4">
+                            <img
+                              src="/Рысенок1.png"
+                              onError={(e) => {
+                                const target = e.currentTarget;
+                                if (!target.src.includes("rysenok1.png")) {
+                                  target.src = "/rysenok1.png";
+                                }
+                              }}
+                              alt="Рысёнок"
+                              referrerPolicy="no-referrer"
+                              className="w-20 h-20 object-contain shrink-0 drop-shadow-md"
+                            />
+                            <div className="space-y-1 text-left">
+                              <h4 className="text-sm font-extrabold text-slate-900">
+                                {homeworkFilter === "done"
+                                  ? "Пока нет отмеченных заданий тренера"
+                                  : homeworkFilter === "pending"
+                                    ? "Все текущие задания тренера уже выполнены!"
+                                    : "Новых заданий от тренера пока не назначено"}
+                              </h4>
+                              <p className="text-xs text-slate-500 max-w-xl leading-relaxed">
+                                {homeworkFilter === "pending"
+                                  ? "Рысёнок гордится твоей дисциплиной! Ты можешь выполнить дополнительные упражнения из карточки разминки выше, чтобы заработать бонусные баллы практики."
+                                  : "Пока тренер формирует следующее задание для вашей группы, используйте интерактивный комплекс упражнений от Рысёнка выше — каждое выполненное упражнение идет в зачет целей сезона!"}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab("parent_gamification")}
+                            className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition shrink-0 cursor-pointer whitespace-nowrap"
+                          >
+                            Проверить награды →
+                          </button>
+                        </div>
+                      ) : (
+                        filteredHomeworks.map((hw) => {
+                          const isDone = homeworkSubmissions.some(
+                            (s) =>
+                              s.homeworkId === hw.id && s.clientId === myClient.id,
+                          );
+                          return (
+                            <div
+                              key={hw.id}
+                              className={`p-5 rounded-2xl border transition shadow-sm flex flex-col justify-between ${
+                                isDone
+                                  ? "bg-emerald-50/70 border-emerald-200"
+                                  : "bg-white border-gray-200 hover:border-slate-300"
+                              }`}
+                            >
+                              <div>
+                                <div className="flex justify-between items-start gap-3 mb-3">
+                                  <h3 className="font-extrabold text-slate-900 text-sm whitespace-pre-wrap">
+                                    {hw.title}
+                                  </h3>
+                                  <span
+                                    className={`text-xs font-semibold shrink-0 flex items-center gap-1 ${
+                                      isDone ? "text-emerald-700" : "text-amber-700"
+                                    }`}
+                                  >
+                                    {isDone ? (
+                                      <>
+                                        <Check className="w-3.5 h-3.5" />
+                                        <span>Выполнено</span>
+                                      </>
+                                    ) : (
+                                      <span>Ожидает выполнения</span>
+                                    )}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-600 mb-4 whitespace-pre-wrap leading-relaxed">
+                                  {hw.description}
+                                </p>
+
+                                {hw.videoUrl && (
+                                  <div className="mb-4">
+                                    <a
+                                      href={hw.videoUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-xs font-bold text-blue-600 hover:text-blue-800 inline-flex items-center gap-1"
+                                    >
+                                      <span>Смотреть видеоразбор упражнения</span>
+                                      <ArrowRight className="w-3.5 h-3.5" />
+                                    </a>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flex items-center justify-between border-t border-slate-200/70 pt-4 mt-2 gap-3">
+                                <div className="flex items-center gap-2">
+                                  {isDone && (
+                                    <img
+                                      src="/Рысенок1.png"
+                                      onError={(e) => {
+                                        const target = e.currentTarget;
+                                        if (!target.src.includes("rysenok1.png")) {
+                                          target.src = "/rysenok1.png";
+                                        }
+                                      }}
+                                      alt="Рысёнок"
+                                      referrerPolicy="no-referrer"
+                                      className="w-7 h-7 object-contain shrink-0"
+                                    />
+                                  )}
+                                  <div className="text-[11px] text-slate-500 font-mono tabular-nums">
+                                    {isDone ? (
+                                      <span className="font-sans font-semibold text-emerald-800">
+                                        Рысёнок одобряет! (+25 баллов)
+                                      </span>
+                                    ) : (
+                                      <>
+                                        Срок сдачи:{" "}
+                                        {hw.dueDate
+                                          ? new Date(hw.dueDate).toLocaleDateString(
+                                              "ru-RU",
+                                            )
+                                          : "Без ограничений"}
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {!isDone && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      submitHomework(hw.id, myClient.id)
+                                    }
+                                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-sm cursor-pointer whitespace-nowrap"
+                                  >
+                                    <FileCheck className="w-4 h-4" />
+                                    <span>Отметить выполненным</span>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
             </motion.div>
           )}
 

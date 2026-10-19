@@ -227,7 +227,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
         </span>
       </nav>
 
-      <main className="max-w-4xl mx-auto px-4 py-6 md:py-10">
+      <main itemScope itemType="https://schema.org/Article" className="max-w-4xl mx-auto px-4 py-6 md:py-10">
         {/* Article Header Card */}
         <div className="space-y-6">
           <div className="flex flex-wrap items-center gap-2">
@@ -242,31 +242,35 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
             </span>
           </div>
 
-          <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-slate-900 tracking-tight leading-[1.2]">
+          <h1 itemProp="headline" className="text-2xl sm:text-4xl md:text-5xl font-black text-slate-900 tracking-tight leading-[1.2]">
             {article.title}
           </h1>
 
-          <p className="text-base sm:text-lg md:text-xl text-slate-600 leading-relaxed font-normal bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm border-l-4 border-l-red-500">
+          <p itemProp="description" className="text-base sm:text-lg md:text-xl text-slate-600 leading-relaxed font-normal bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm border-l-4 border-l-red-500">
             {article.leadExcerpt}
           </p>
 
           {/* Author & Meta Bar */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-4 border-y border-slate-200 text-xs sm:text-sm text-slate-600">
-            <div className="flex items-center space-x-3">
+            <div itemProp="author" itemScope itemType="https://schema.org/Person" className="flex items-center space-x-3">
               <div className="w-10 h-10 rounded-full bg-red-600/10 border border-red-600/20 flex items-center justify-center text-red-600 font-black">
                 <Award className="w-5 h-5" />
               </div>
               <div>
-                <p className="font-bold text-slate-900">{article.author}</p>
-                <p className="text-xs text-slate-500">{article.authorRole}</p>
+                <p itemProp="name" className="font-bold text-slate-900">{article.author}</p>
+                <p itemProp="jobTitle" className="text-xs text-slate-500">{article.authorRole}</p>
               </div>
             </div>
 
             <div className="flex items-center space-x-4">
-              <span className="flex items-center space-x-1 text-slate-500">
+              <time
+                itemProp="datePublished"
+                dateTime={`${article.publishedAt}T08:00:00+05:00`}
+                className="flex items-center space-x-1 text-slate-500"
+              >
                 <Calendar className="w-3.5 h-3.5" />
                 <span>{formattedDate}</span>
-              </span>
+              </time>
 
               {/* Share triggers */}
               <div className="flex items-center space-x-1.5 pl-3 border-l border-slate-200">
@@ -308,7 +312,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
         </div>
 
         {/* Article Body Content */}
-        <article className="mt-10 space-y-10">
+        <article itemProp="articleBody" className="mt-10 space-y-10">
           {article.sections.map((section, idx) => (
             <section key={idx} className="space-y-5 bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/70 shadow-sm">
               <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-snug flex items-start space-x-3">

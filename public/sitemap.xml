@@ -1,146 +1,201 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <!-- Главная страница -->
   <url>
     <loc>https://amkar-junior.ru/</loc>
-    <lastmod>2026-10-17</lastmod>
+    <lastmod>2026-10-19</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
+    <image:image>
+      <image:loc>https://amkar-junior.ru/kids_football.png</image:loc>
+      <image:title>Детская футбольная школа «Амкар Юниор» в Перми</image:title>
+      <image:caption>Профессиональные тренировки по футболу для детей от 4 до 12 лет в Перми</image:caption>
+    </image:image>
   </url>
 
   <!-- Каталог Блога -->
   <url>
     <loc>https://amkar-junior.ru/blog</loc>
-    <lastmod>2026-10-17</lastmod>
+    <lastmod>2026-10-19</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
 
-  <!-- Статья 1 -->
   <url>
     <loc>https://amkar-junior.ru/blog/detskiy-futbol-s-chego-nachat</loc>
     <lastmod>2026-10-17</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+    <image:image>
+      <image:loc>https://amkar-junior.ru/blog-images/amkar-1.jpg</image:loc>
+      <image:title>Детский футбол с 4–7 лет: с чего начать путь юного чемпиона и как привить любовь к спорту</image:title>
+      <image:caption>Первые шаги ребенка в футболе определяют его отношение к спорту на всю жизнь. Рассказываем, как без стресса и слез вовлечь малыша в командную игру, развить координацию и заложить фундамент будущего чемпиона.</image:caption>
+    </image:image>
   </url>
-
-  <!-- Статья 2 -->
   <url>
     <loc>https://amkar-junior.ru/blog/detskiy-futbol-v-permi-gde-trenirovatsya</loc>
     <lastmod>2026-10-17</lastmod>
     <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
+    <priority>0.85</priority>
+    <image:image>
+      <image:loc>https://amkar-junior.ru/blog-images/amkar-2.jpg</image:loc>
+      <image:title>Детский футбол в Перми: где тренироваться ребенку от 4 до 12 лет, манежи и цены</image:title>
+      <image:caption>Пермь — город с богатыми футбольными традициями. Если вы ищете проверенную футбольную школу рядом с домом, где растят чемпионов и заботятся о здоровье ребенка — этот гид для вас.</image:caption>
+    </image:image>
   </url>
-
-  <!-- Статья 3 -->
   <url>
     <loc>https://amkar-junior.ru/blog/fizicheskoe-razvitie-detey-cherez-futbol</loc>
     <lastmod>2026-10-17</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+    <image:image>
+      <image:loc>https://amkar-junior.ru/blog-images/amkar-12.jpg</image:loc>
+      <image:title>Физическое развитие детей через футбол: осанка, выносливость, координация и здоровье</image:title>
+      <image:caption>Футбол — один из самых гармоничных видов спорта для растущего организма. Он развивает не только ноги, как думают многие, а равномерно прокачивает все группы мышц, дыхательную систему и реакцию.</image:caption>
+    </image:image>
   </url>
-
-  <!-- Статья 4 -->
   <url>
     <loc>https://amkar-junior.ru/blog/uprazhneniya-po-futbolu-dlya-malchikov</loc>
     <lastmod>2026-10-17</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+    <image:image>
+      <image:loc>https://amkar-junior.ru/blog-images/amkar-8.jpg</image:loc>
+      <image:title>ТОП-7 эффективных футбольных упражнений для мальчиков: развиваем дриблинг, пас и координацию</image:title>
+      <image:caption>Хотите, чтобы ребенок уверенно обращался с мячом обеими ногами? Мы собрали 7 базовых упражнений из арсенала методики «Амкар Юниор», которые можно выполнять как на тренировке, так и на спортплощадке во дворе.</image:caption>
+    </image:image>
   </url>
-
-  <!-- Статья 5 -->
   <url>
     <loc>https://amkar-junior.ru/blog/kak-vybrat-futbolnuyu-obuv-dlya-rebenka</loc>
     <lastmod>2026-10-17</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+    <image:image>
+      <image:loc>https://amkar-junior.ru/blog-images/amkar-15.jpg</image:loc>
+      <image:title>Как выбрать футбольную обувь для ребенка: бутсы, сороконожки (турфы) или футзалки?</image:title>
+      <image:caption>Неправильно подобранная обувь может отбить интерес к тренировкам за пару недель из-за мозолей, скольжения или болей в пятках. Разбираем типы подошв, критерии примерки и частые ошибки родителей при покупке.</image:caption>
+    </image:image>
   </url>
-
-  <!-- Статья 6 -->
   <url>
     <loc>https://amkar-junior.ru/blog/pitanie-i-vodny-rezhim-yunogo-futbolista</loc>
     <lastmod>2026-10-17</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+    <image:image>
+      <image:loc>https://amkar-junior.ru/blog-images/amkar-3.jpg</image:loc>
+      <image:title>Питание юного футболиста: рацион перед тренировкой, восстановление и питьевой режим</image:title>
+      <image:caption>Энергия, скорость мышления на поле и скорость восстановления напрямую зависят от того, что лежит в тарелке юного спортсмена. Разбираем простые правила сбалансированного детского меню без строгих диет и крайностей.</image:caption>
+    </image:image>
   </url>
-
-  <!-- Статья 7 -->
   <url>
     <loc>https://amkar-junior.ru/blog/detskiy-sportivny-manezh-perm-gde-igrat-zimoy</loc>
     <lastmod>2026-10-17</lastmod>
     <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
+    <priority>0.85</priority>
+    <image:image>
+      <image:loc>https://amkar-junior.ru/blog-images/amkar-2.jpg</image:loc>
+      <image:title>Зимний футбол для детей в Перми: где тренироваться в тепле, крытые манежи и температурный комфорт</image:title>
+      <image:caption>Зима в Пермском крае длится до 5 месяцев с морозами до -25°C. Как не прекращать футбольное развитие ребенка и тренироваться в комфортных теплых условиях круглый год?</image:caption>
+    </image:image>
   </url>
-
-  <!-- Статья 8 -->
   <url>
     <loc>https://amkar-junior.ru/blog/strah-myacha-i-styd-oshibki-kak-pomoch-rebenku</loc>
     <lastmod>2026-10-17</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+    <image:image>
+      <image:loc>https://amkar-junior.ru/blog-images/amkar-7.jpg</image:loc>
+      <image:title>Психология юного игрока: как преодолеть страх мяча, стыд за ошибки и неуверенность</image:title>
+      <image:caption>Каждый второй ребенок на первых тренировках зажмуривается при летящем мяче или расстраивается до слез после неточного паса. Как тренер и родители могут бережно превратить робость в спортивную уверенность?</image:caption>
+    </image:image>
   </url>
-
-  <!-- Статья 9 -->
   <url>
     <loc>https://amkar-junior.ru/blog/skorost-i-lovkost-uprazhneniya-dlya-malchikov</loc>
     <lastmod>2026-10-17</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+    <image:image>
+      <image:loc>https://amkar-junior.ru/blog-images/amkar-9.jpg</image:loc>
+      <image:title>Развитие взрывной скорости и ловкости у мальчиков: 5 упражнений с конусами и фишками</image:title>
+      <image:caption>В современном футболе выигрывает не тот, кто просто быстро бежит по прямой, а тот, кто быстрее стартует с места, мгновенно меняет направление и быстрее думает. Разбираем 5 топ-упражнений на быстроту.</image:caption>
+    </image:image>
   </url>
-
-  <!-- Статья 10 -->
   <url>
     <loc>https://amkar-junior.ru/blog/ploskostopie-i-osanka-profilaktika-v-futbole</loc>
     <lastmod>2026-10-17</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+    <image:image>
+      <image:loc>https://amkar-junior.ru/blog-images/amkar-14.jpg</image:loc>
+      <image:title>Профилактика плоскостопия и сколиоза: как футбол формирует здоровый опорно-двигательный аппарат</image:title>
+      <image:caption>Сидячий образ жизни за школьной партой и со смартфоном в руках — главная причина ранних нарушений осанки у 65% современных первоклассников. Как футбол естественным образом решает эту проблему?</image:caption>
+    </image:image>
   </url>
-
-  <!-- Статья 11 -->
   <url>
     <loc>https://amkar-junior.ru/blog/vratar-ili-polevoy-kak-ponyat-poziciyu-rebenka</loc>
     <lastmod>2026-10-17</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+    <image:image>
+      <image:loc>https://amkar-junior.ru/blog-images/amkar-13.jpg</image:loc>
+      <image:title>Амплуа в детском футболе: вратарь, защитник или нападающий — как понять призвание ребенка</image:title>
+      <image:caption>«Мой сын хочет только забивать голы!» или «А наш мальчик обожает стоять на воротах». Стоит ли закреплять позицию за ребенком в 6–8 лет, и как раскрыть истинный потенциал маленького футболиста?</image:caption>
+    </image:image>
   </url>
-
-  <!-- Статья 12 -->
   <url>
     <loc>https://amkar-junior.ru/blog/igry-1-na-1-dribling-i-obvodka-uprazhneniya</loc>
     <lastmod>2026-10-17</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+    <image:image>
+      <image:loc>https://amkar-junior.ru/blog-images/amkar-10.jpg</image:loc>
+      <image:title>Обыгрыш 1 в 1: базовые футбольные финты для начинающих (ложный замах, уход корпусом)</image:title>
+      <image:caption>Способность обыграть соперника один в один — самое ценное и зрелищное качество в футболе. Разбираем анатомию базовых финтов, которые легко освоит любой мальчик от 6 лет.</image:caption>
+    </image:image>
   </url>
-
-  <!-- Статья 13 -->
   <url>
     <loc>https://amkar-junior.ru/blog/detskie-turniry-i-pervye-matchi-v-permi</loc>
     <lastmod>2026-10-17</lastmod>
     <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
+    <priority>0.85</priority>
+    <image:image>
+      <image:loc>https://amkar-junior.ru/blog-images/amkar-5.jpg</image:loc>
+      <image:title>Первые соревнования и матчи в Перми: как проходят детские турниры и лига «Амкар Юниор»</image:title>
+      <image:caption>Первый официальный матч в настоящей форме с эмблемой клуба — незабываемое событие для каждого мальчишки и его родителей. Рассказываем, как устроены детские футбольные фестивали в Перми.</image:caption>
+    </image:image>
   </url>
-
-  <!-- Статья 14 -->
   <url>
     <loc>https://amkar-junior.ru/blog/futbol-i-uspevaemost-v-shkole-distsiplina-i-taym-menedzhment</loc>
     <lastmod>2026-10-17</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+    <image:image>
+      <image:loc>https://amkar-junior.ru/blog-images/amkar-6.jpg</image:loc>
+      <image:title>Футбол и успеваемость в школе: как спорт учит самодисциплине, концентрации и режиму дня</image:title>
+      <image:caption>Многие родители первоклассников опасаются: «Пойдет в школу — спорт придется бросить, не будет успевать делать уроки». Разбираемся с научными фактами, почему спортивные дети учатся лучше и быстрее.</image:caption>
+    </image:image>
   </url>
-
-  <!-- Статья 15 -->
   <url>
     <loc>https://amkar-junior.ru/blog/vosstanovlenie-i-son-yunogo-sportsmena-profilaktika-pereutomleniya</loc>
     <lastmod>2026-10-17</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+    <image:image>
+      <image:loc>https://amkar-junior.ru/blog-images/amkar-4.jpg</image:loc>
+      <image:title>Восстановление и сон юного футболиста: как избежать переутомления, травм и эмоционального выгорания</image:title>
+      <image:caption>Мышцы, связки и футбольные навыки растут не во время самой тренировки, а во сне и в дни качественного восстановления. Разбираем физиологию детского организма 4–10 лет: сколько часов сна необходимо, как правильно расслаблять мышцы ног и как вовремя заметить скрытое переутомление.</image:caption>
+    </image:image>
   </url>
-
-  <!-- Статья 16 -->
   <url>
     <loc>https://amkar-junior.ru/blog/razminka-i-rastyazhka-dlya-detey-pered-futbolom</loc>
     <lastmod>2026-10-17</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+    <image:image>
+      <image:loc>https://amkar-junior.ru/blog-images/amkar-11.jpg</image:loc>
+      <image:title>Разминка перед футболом для детей 4–10 лет: игровые упражнения и почему нельзя сразу бить по воротам</image:title>
+      <image:caption>Каждый ребенок, заходя в спортивный зал или на футбольный манеж, первым делом хватает мяч и со всей силы бьет по воротам. Рассказываем, почему тренеры строго запрещают этот «дворовый» старт, чем опасен удар «на холодную» и как выглядит правильная 12-минутная разминка.</image:caption>
+    </image:image>
   </url>
 </urlset>

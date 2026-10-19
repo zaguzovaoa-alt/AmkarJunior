@@ -42,7 +42,40 @@ export function updateSEOForArticle(article: BlogArticle) {
     document.head.appendChild(newOgUrl);
   }
 
-  // 5. Canonical link
+  // 5. Twitter Card tags
+  let twCard = document.querySelector('meta[name="twitter:card"]');
+  if (!twCard) {
+    twCard = document.createElement("meta");
+    twCard.setAttribute("name", "twitter:card");
+    document.head.appendChild(twCard);
+  }
+  twCard.setAttribute("content", "summary_large_image");
+
+  let twTitle = document.querySelector('meta[name="twitter:title"]');
+  if (!twTitle) {
+    twTitle = document.createElement("meta");
+    twTitle.setAttribute("name", "twitter:title");
+    document.head.appendChild(twTitle);
+  }
+  twTitle.setAttribute("content", article.metaTitle);
+
+  let twDesc = document.querySelector('meta[name="twitter:description"]');
+  if (!twDesc) {
+    twDesc = document.createElement("meta");
+    twDesc.setAttribute("name", "twitter:description");
+    document.head.appendChild(twDesc);
+  }
+  twDesc.setAttribute("content", article.metaDescription);
+
+  let twImage = document.querySelector('meta[name="twitter:image"]');
+  if (!twImage) {
+    twImage = document.createElement("meta");
+    twImage.setAttribute("name", "twitter:image");
+    document.head.appendChild(twImage);
+  }
+  twImage.setAttribute("content", window.location.origin + article.coverImage);
+
+  // 6. Canonical link
   let canonical = document.querySelector('link[rel="canonical"]');
   if (!canonical) {
     canonical = document.createElement("link");
@@ -51,7 +84,7 @@ export function updateSEOForArticle(article: BlogArticle) {
   }
   canonical.setAttribute("href", `${window.location.origin}/blog/${article.slug}`);
 
-  // 6. Schema.org Structured Data: Article, Breadcrumbs & FAQPage
+  // 7. Schema.org Structured Data: Article, Breadcrumbs & FAQPage
   const existingJsonLd = document.getElementById("article-jsonld");
   if (existingJsonLd) {
     existingJsonLd.remove();

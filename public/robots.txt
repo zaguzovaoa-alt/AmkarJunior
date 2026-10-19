@@ -1,4 +1,51 @@
+# robots.txt for «Амкар Юниор» Пермь (https://amkar-junior.ru)
+
+# All standard search engine crawlers (Yandex, Google, Mail.ru, Bing)
 User-agent: *
 Allow: /
+Disallow: /api/
+Disallow: /admin/
+Allow: /api/blog-images/
+Allow: /blog/
 
-Sitemap: /sitemap.xml
+# AI Search & Neural Network Crawlers (ChatGPT / SearchGPT, Perplexity, Claude, Gemini, Copilot)
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+User-agent: Yandex
+Allow: /
+Clean-param: ref /
+Clean-param: utm_source&utm_medium&utm_campaign&utm_content&utm_term /
+
+# LLM Documentation & Machine-Readable Knowledge Base
+# AI agents can read direct structured summaries here:
+# https://amkar-junior.ru/llms.txt
+# https://amkar-junior.ru/llms-full.txt
+
+# Sitemaps and Feeds
+Sitemap: https://amkar-junior.ru/sitemap.xml
+Host: amkar-junior.ru
