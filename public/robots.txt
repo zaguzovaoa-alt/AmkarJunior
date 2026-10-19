@@ -1,4 +1,4 @@
-# robots.txt for «Амкар Юниор» Пермь (https://amkar-junior.ru)
+# robots.txt for «Амкар Юниор» Пермь (https://amkarjunior.ru)
 
 # All standard search engine crawlers (Yandex, Google, Mail.ru, Bing)
 User-agent: *
@@ -43,9 +43,9 @@ Clean-param: utm_source&utm_medium&utm_campaign&utm_content&utm_term /
 
 # LLM Documentation & Machine-Readable Knowledge Base
 # AI agents can read direct structured summaries here:
-# https://amkar-junior.ru/llms.txt
-# https://amkar-junior.ru/llms-full.txt
+# https://amkarjunior.ru/llms.txt
+# https://amkarjunior.ru/llms-full.txt
 
 # Sitemaps and Feeds
-Sitemap: https://amkar-junior.ru/sitemap.xml
-Host: amkar-junior.ru
+Sitemap: https://amkarjunior.ru/sitemap.xml
+Host: amkarjunior.ru

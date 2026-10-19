@@ -1,5 +1,7 @@
 import { BlogArticle } from "../data/blogArticles";
 
+const CANONICAL_ORIGIN = "https://amkarjunior.ru";
+
 export function updateSEOForArticle(article: BlogArticle) {
   // 1. Update Title
   document.title = `${article.metaTitle} | Детская футбольная школа Амкар Юниор Пермь`;
@@ -30,15 +32,15 @@ export function updateSEOForArticle(article: BlogArticle) {
   if (ogDesc) ogDesc.setAttribute("content", article.metaDescription);
 
   const ogImage = document.querySelector('meta[property="og:image"]');
-  if (ogImage) ogImage.setAttribute("content", window.location.origin + article.coverImage);
+  if (ogImage) ogImage.setAttribute("content", CANONICAL_ORIGIN + article.coverImage);
 
   const ogUrl = document.querySelector('meta[property="og:url"]');
   if (ogUrl) {
-    ogUrl.setAttribute("content", `${window.location.origin}/blog/${article.slug}`);
+    ogUrl.setAttribute("content", `${CANONICAL_ORIGIN}/blog/${article.slug}`);
   } else {
     const newOgUrl = document.createElement("meta");
     newOgUrl.setAttribute("property", "og:url");
-    newOgUrl.setAttribute("content", `${window.location.origin}/blog/${article.slug}`);
+    newOgUrl.setAttribute("content", `${CANONICAL_ORIGIN}/blog/${article.slug}`);
     document.head.appendChild(newOgUrl);
   }
 
@@ -73,7 +75,7 @@ export function updateSEOForArticle(article: BlogArticle) {
     twImage.setAttribute("name", "twitter:image");
     document.head.appendChild(twImage);
   }
-  twImage.setAttribute("content", window.location.origin + article.coverImage);
+  twImage.setAttribute("content", CANONICAL_ORIGIN + article.coverImage);
 
   // 6. Canonical link
   let canonical = document.querySelector('link[rel="canonical"]');
@@ -82,7 +84,7 @@ export function updateSEOForArticle(article: BlogArticle) {
     canonical.setAttribute("rel", "canonical");
     document.head.appendChild(canonical);
   }
-  canonical.setAttribute("href", `${window.location.origin}/blog/${article.slug}`);
+  canonical.setAttribute("href", `${CANONICAL_ORIGIN}/blog/${article.slug}`);
 
   // 7. Schema.org Structured Data: Article, Breadcrumbs & FAQPage
   const existingJsonLd = document.getElementById("article-jsonld");
@@ -100,20 +102,20 @@ export function updateSEOForArticle(article: BlogArticle) {
       "@type": "Article",
       "headline": article.title,
       "description": article.metaDescription,
-      "image": [window.location.origin + article.coverImage],
+      "image": [CANONICAL_ORIGIN + article.coverImage],
       "datePublished": `${article.publishedAt}T08:00:00+05:00`,
       "dateModified": `${article.updatedAt}T08:00:00+05:00`,
       "author": {
         "@type": "SportsOrganization",
         "name": article.author,
-        "url": window.location.origin
+        "url": CANONICAL_ORIGIN
       },
       "publisher": {
         "@type": "SportsClub",
         "name": "АМКАР ЮНИОР Пермь",
         "logo": {
           "@type": "ImageObject",
-          "url": window.location.origin + "/logo.png"
+          "url": CANONICAL_ORIGIN + "/logo.png"
         },
         "address": {
           "@type": "PostalAddress",
@@ -124,7 +126,7 @@ export function updateSEOForArticle(article: BlogArticle) {
       },
       "mainEntityOfPage": {
         "@type": "WebPage",
-        "@id": `${window.location.origin}/blog/${article.slug}`
+        "@id": `${CANONICAL_ORIGIN}/blog/${article.slug}`
       }
     },
     {
@@ -135,19 +137,19 @@ export function updateSEOForArticle(article: BlogArticle) {
           "@type": "ListItem",
           "position": 1,
           "name": "Главная",
-          "item": window.location.origin
+          "item": CANONICAL_ORIGIN
         },
         {
           "@type": "ListItem",
           "position": 2,
           "name": "Блог",
-          "item": `${window.location.origin}/blog`
+          "item": `${CANONICAL_ORIGIN}/blog`
         },
         {
           "@type": "ListItem",
           "position": 3,
           "name": article.title,
-          "item": `${window.location.origin}/blog/${article.slug}`
+          "item": `${CANONICAL_ORIGIN}/blog/${article.slug}`
         }
       ]
     }
@@ -181,6 +183,16 @@ export function resetDefaultSEO() {
       "content",
       "Детская футбольная школа АМКАР ЮНИОР в Перми. Профессиональные тренировки по футболу для детей от 4 до 12 лет. Запишите ребенка на бесплатное пробное занятие!"
     );
+  }
+
+  const canonical = document.querySelector('link[rel="canonical"]');
+  if (canonical) {
+    canonical.setAttribute("href", `${CANONICAL_ORIGIN}/`);
+  }
+
+  const ogUrl = document.querySelector('meta[property="og:url"]');
+  if (ogUrl) {
+    ogUrl.setAttribute("content", `${CANONICAL_ORIGIN}/`);
   }
 
   const existingJsonLd = document.getElementById("article-jsonld");

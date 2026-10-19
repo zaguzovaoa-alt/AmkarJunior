@@ -1,7 +1,9 @@
 import { BLOG_ARTICLES, BlogArticle, getArticleBySlug } from "../data/blogArticles";
 
+export const CANONICAL_ORIGIN = "https://amkarjunior.ru";
+
 export interface SEORenderOptions {
-  origin: string;
+  origin?: string;
   urlPath: string;
   rawHtml: string;
 }
@@ -174,7 +176,8 @@ function generateSemanticBlogCatalogHtml(origin: string): string {
  * Injects dynamic SEO meta tags, OpenGraph, Twitter, canonical, and Schema.org JSON-LD into index.html
  */
 export function injectSeoIntoHtml(opts: SEORenderOptions): string {
-  const { origin, urlPath, rawHtml } = opts;
+  const { urlPath, rawHtml } = opts;
+  const origin = CANONICAL_ORIGIN;
 
   // 1. Check if specific article is requested: /blog/:slug
   const articleMatch = urlPath.match(/^\/blog\/([^/?#]+)/);
@@ -314,6 +317,7 @@ export function injectSeoIntoHtml(opts: SEORenderOptions): string {
     html = html.replace(/<meta\s+property="og:image"[^>]*>/i, "");
     html = html.replace(/<meta\s+property="og:url"[^>]*>/i, "");
     html = html.replace(/<meta\s+property="og:type"[^>]*>/i, "");
+    html = html.replace(/<link\s+rel="canonical"[^>]*>/i, "");
 
     // Inject head tags before </head>
     html = html.replace("</head>", `${dynamicHeadTags}\n</head>`);
@@ -378,6 +382,7 @@ export function injectSeoIntoHtml(opts: SEORenderOptions): string {
     let html = rawHtml;
     html = html.replace(/<title>.*?<\/title>/i, "");
     html = html.replace(/<meta\s+name="description"[^>]*>/i, "");
+    html = html.replace(/<link\s+rel="canonical"[^>]*>/i, "");
     html = html.replace("</head>", `${dynamicHeadTags}\n</head>`);
     html = html.replace('<div id="root"></div>', `<div id="root">${generateSemanticBlogCatalogHtml(origin)}</div>`);
     return html;
@@ -390,7 +395,8 @@ export function injectSeoIntoHtml(opts: SEORenderOptions): string {
 /**
  * Generates an advanced XML Sitemap including images extension for Yandex & Google Images
  */
-export function generateSitemapXml(origin: string): string {
+export function generateSitemapXml(_origin: string = CANONICAL_ORIGIN): string {
+  const origin = CANONICAL_ORIGIN;
   const today = new Date().toISOString().split("T")[0];
 
   const articlesXml = BLOG_ARTICLES.map((a) => {
@@ -441,7 +447,8 @@ ${articlesXml}
 /**
  * Generates RSS 2.0 Feed for Yandex.Webmaster & Google News / RSS aggregators
  */
-export function generateRssFeed(origin: string): string {
+export function generateRssFeed(_origin: string = CANONICAL_ORIGIN): string {
+  const origin = CANONICAL_ORIGIN;
   const nowRfc822 = new Date().toUTCString();
 
   const items = BLOG_ARTICLES.map((a) => {
@@ -456,7 +463,7 @@ export function generateRssFeed(origin: string): string {
       <description><![CDATA[${a.leadExcerpt}]]></description>
       <category><![CDATA[${a.category}]]></category>
       <pubDate>${pubDate}</pubDate>
-      <author>info@amkar-junior.ru (${a.author})</author>
+      <author>info@amkarjunior.ru (${a.author})</author>
       <enclosure url="${imgUrl}" type="image/jpeg" length="500000" />
     </item>`;
   }).join("\n");
@@ -479,7 +486,8 @@ ${items}
  * Generates llms.txt standard (https://llmstxt.org) for LLMs & AI crawlers
  * (SearchGPT, Perplexity, Claude, Gemini, Copilot, DeepSeek).
  */
-export function generateLlmsTxt(origin: string): string {
+export function generateLlmsTxt(_origin: string = CANONICAL_ORIGIN): string {
+  const origin = CANONICAL_ORIGIN;
   const articlesList = BLOG_ARTICLES.map(
     (a, idx) => `- [${a.title}](${origin}/blog/${a.slug}): ${a.category}. ${a.leadExcerpt} (Ключевые темы: ${a.keywords.slice(0, 4).join(", ")})`
   ).join("\n");
@@ -524,7 +532,8 @@ ${articlesList}
  * Generates llms-full.txt containing the consolidated complete text of all 16 articles
  * for direct ingestion by LLM models, RAG systems, and AI search engines.
  */
-export function generateLlmsFullTxt(origin: string): string {
+export function generateLlmsFullTxt(_origin: string = CANONICAL_ORIGIN): string {
+  const origin = CANONICAL_ORIGIN;
   const articlesFull = BLOG_ARTICLES.map((a, idx) => {
     const sectionsText = a.sections
       .map((s, sIdx) => {
@@ -575,7 +584,8 @@ ${articlesFull}
 /**
  * Generates robots.txt optimized for all modern search engines and AI crawlers
  */
-export function generateRobotsTxt(origin: string): string {
+export function generateRobotsTxt(_origin: string = CANONICAL_ORIGIN): string {
+  const origin = CANONICAL_ORIGIN;
   return `# robots.txt for «Амкар Юниор» Пермь (${origin})
 
 # All standard search engine crawlers (Yandex, Google, Mail.ru, Bing)
@@ -626,6 +636,6 @@ Clean-param: utm_source&utm_medium&utm_campaign&utm_content&utm_term /
 
 # Sitemaps and Feeds
 Sitemap: ${origin}/sitemap.xml
-Host: amkar-junior.ru
+Host: amkarjunior.ru
 `;
 }

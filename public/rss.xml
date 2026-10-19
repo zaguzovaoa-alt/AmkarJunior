@@ -2,170 +2,170 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>Блог детской футбольной школы «Амкар Юниор» Пермь</title>
-    <link>https://amkar-junior.ru/blog</link>
+    <link>https://amkarjunior.ru/blog</link>
     <description>Экспертные статьи о детском футболе, тренировках мальчиков от 4 до 12 лет, манежах и спорте в Перми.</description>
     <language>ru-RU</language>
-    <lastBuildDate>Mon, 19 Oct 2026 10:52:05 GMT</lastBuildDate>
-    <atom:link href="https://amkar-junior.ru/rss.xml" rel="self" type="application/rss+xml" />
-    <item>
-      <title><![CDATA[Детский футбол с 4–7 лет: с чего начать путь юного чемпиона и как привить любовь к спорту]]></title>
-      <link>https://amkar-junior.ru/blog/detskiy-futbol-s-chego-nachat</link>
-      <guid isPermaLink="true">https://amkar-junior.ru/blog/detskiy-futbol-s-chego-nachat</guid>
-      <description><![CDATA[Первые шаги ребенка в футболе определяют его отношение к спорту на всю жизнь. Рассказываем, как без стресса и слез вовлечь малыша в командную игру, развить координацию и заложить фундамент будущего чемпиона.]]></description>
-      <category><![CDATA[Детский спорт]]></category>
-      <pubDate>Tue, 15 Sep 2026 03:00:00 GMT</pubDate>
-      <author>info@amkar-junior.ru (Алексей Загузов)</author>
-      <enclosure url="https://amkar-junior.ru/blog-images/amkar-1.jpg" type="image/jpeg" length="500000" />
-    </item>
-    <item>
-      <title><![CDATA[Детский футбол в Перми: где тренироваться ребенку от 4 до 12 лет, манежи и цены]]></title>
-      <link>https://amkar-junior.ru/blog/detskiy-futbol-v-permi-gde-trenirovatsya</link>
-      <guid isPermaLink="true">https://amkar-junior.ru/blog/detskiy-futbol-v-permi-gde-trenirovatsya</guid>
-      <description><![CDATA[Пермь — город с богатыми футбольными традициями. Если вы ищете проверенную футбольную школу рядом с домом, где растят чемпионов и заботятся о здоровье ребенка — этот гид для вас.]]></description>
-      <category><![CDATA[Футбол в Перми]]></category>
-      <pubDate>Tue, 22 Sep 2026 03:00:00 GMT</pubDate>
-      <author>info@amkar-junior.ru (Пресс-служба «Амкар Юниор»)</author>
-      <enclosure url="https://amkar-junior.ru/blog-images/amkar-2.jpg" type="image/jpeg" length="500000" />
-    </item>
+    <lastBuildDate>Mon, 19 Oct 2026 13:13:06 GMT</lastBuildDate>
+    <atom:link href="https://amkarjunior.ru/rss.xml" rel="self" type="application/rss+xml" />
     <item>
       <title><![CDATA[Физическое развитие детей через футбол: осанка, выносливость, координация и здоровье]]></title>
-      <link>https://amkar-junior.ru/blog/fizicheskoe-razvitie-detey-cherez-futbol</link>
-      <guid isPermaLink="true">https://amkar-junior.ru/blog/fizicheskoe-razvitie-detey-cherez-futbol</guid>
+      <link>https://amkarjunior.ru/blog/fizicheskoe-razvitie-detey-cherez-futbol</link>
+      <guid isPermaLink="true">https://amkarjunior.ru/blog/fizicheskoe-razvitie-detey-cherez-futbol</guid>
       <description><![CDATA[Футбол — один из самых гармоничных видов спорта для растущего организма. Он развивает не только ноги, как думают многие, а равномерно прокачивает все группы мышц, дыхательную систему и реакцию.]]></description>
       <category><![CDATA[Физическое развитие]]></category>
       <pubDate>Thu, 01 Oct 2026 03:00:00 GMT</pubDate>
-      <author>info@amkar-junior.ru (Михаил Григорьев)</author>
-      <enclosure url="https://amkar-junior.ru/blog-images/amkar-12.jpg" type="image/jpeg" length="500000" />
+      <author>info@amkarjunior.ru (Михаил Григорьев)</author>
+      <enclosure url="https://amkarjunior.ru/blog-images/amkar-12.jpg" type="image/jpeg" length="500000" />
+    </item>
+    <item>
+      <title><![CDATA[Детский футбол с 4–7 лет: с чего начать путь юного чемпиона и как привить любовь к спорту]]></title>
+      <link>https://amkarjunior.ru/blog/detskiy-futbol-s-chego-nachat</link>
+      <guid isPermaLink="true">https://amkarjunior.ru/blog/detskiy-futbol-s-chego-nachat</guid>
+      <description><![CDATA[Первые шаги ребенка в футболе определяют его отношение к спорту на всю жизнь. Рассказываем, как без стресса и слез вовлечь малыша в командную игру, развить координацию и заложить фундамент будущего чемпиона.]]></description>
+      <category><![CDATA[Детский спорт]]></category>
+      <pubDate>Tue, 15 Sep 2026 03:00:00 GMT</pubDate>
+      <author>info@amkarjunior.ru (Алексей Загузов)</author>
+      <enclosure url="https://amkarjunior.ru/blog-images/amkar-1.jpg" type="image/jpeg" length="500000" />
+    </item>
+    <item>
+      <title><![CDATA[Детский футбол в Перми: где тренироваться ребенку от 4 до 12 лет, манежи и цены]]></title>
+      <link>https://amkarjunior.ru/blog/detskiy-futbol-v-permi-gde-trenirovatsya</link>
+      <guid isPermaLink="true">https://amkarjunior.ru/blog/detskiy-futbol-v-permi-gde-trenirovatsya</guid>
+      <description><![CDATA[Пермь — город с богатыми футбольными традициями. Если вы ищете проверенную футбольную школу рядом с домом, где растят чемпионов и заботятся о здоровье ребенка — этот гид для вас.]]></description>
+      <category><![CDATA[Футбол в Перми]]></category>
+      <pubDate>Tue, 22 Sep 2026 03:00:00 GMT</pubDate>
+      <author>info@amkarjunior.ru (Пресс-служба «Амкар Юниор»)</author>
+      <enclosure url="https://amkarjunior.ru/blog-images/amkar-2.jpg" type="image/jpeg" length="500000" />
     </item>
     <item>
       <title><![CDATA[ТОП-7 эффективных футбольных упражнений для мальчиков: развиваем дриблинг, пас и координацию]]></title>
-      <link>https://amkar-junior.ru/blog/uprazhneniya-po-futbolu-dlya-malchikov</link>
-      <guid isPermaLink="true">https://amkar-junior.ru/blog/uprazhneniya-po-futbolu-dlya-malchikov</guid>
+      <link>https://amkarjunior.ru/blog/uprazhneniya-po-futbolu-dlya-malchikov</link>
+      <guid isPermaLink="true">https://amkarjunior.ru/blog/uprazhneniya-po-futbolu-dlya-malchikov</guid>
       <description><![CDATA[Хотите, чтобы ребенок уверенно обращался с мячом обеими ногами? Мы собрали 7 базовых упражнений из арсенала методики «Амкар Юниор», которые можно выполнять как на тренировке, так и на спортплощадке во дворе.]]></description>
       <category><![CDATA[Примеры упражнений]]></category>
       <pubDate>Sat, 10 Oct 2026 03:00:00 GMT</pubDate>
-      <author>info@amkar-junior.ru (Дмитрий Власов)</author>
-      <enclosure url="https://amkar-junior.ru/blog-images/amkar-8.jpg" type="image/jpeg" length="500000" />
+      <author>info@amkarjunior.ru (Дмитрий Власов)</author>
+      <enclosure url="https://amkarjunior.ru/blog-images/amkar-8.jpg" type="image/jpeg" length="500000" />
     </item>
     <item>
       <title><![CDATA[Как выбрать футбольную обувь для ребенка: бутсы, сороконожки (турфы) или футзалки?]]></title>
-      <link>https://amkar-junior.ru/blog/kak-vybrat-futbolnuyu-obuv-dlya-rebenka</link>
-      <guid isPermaLink="true">https://amkar-junior.ru/blog/kak-vybrat-futbolnuyu-obuv-dlya-rebenka</guid>
+      <link>https://amkarjunior.ru/blog/kak-vybrat-futbolnuyu-obuv-dlya-rebenka</link>
+      <guid isPermaLink="true">https://amkarjunior.ru/blog/kak-vybrat-futbolnuyu-obuv-dlya-rebenka</guid>
       <description><![CDATA[Неправильно подобранная обувь может отбить интерес к тренировкам за пару недель из-за мозолей, скольжения или болей в пятках. Разбираем типы подошв, критерии примерки и частые ошибки родителей при покупке.]]></description>
       <category><![CDATA[Детский спорт]]></category>
       <pubDate>Mon, 12 Oct 2026 03:00:00 GMT</pubDate>
-      <author>info@amkar-junior.ru (Алексей Загузов)</author>
-      <enclosure url="https://amkar-junior.ru/blog-images/amkar-15.jpg" type="image/jpeg" length="500000" />
+      <author>info@amkarjunior.ru (Алексей Загузов)</author>
+      <enclosure url="https://amkarjunior.ru/blog-images/amkar-15.jpg" type="image/jpeg" length="500000" />
     </item>
     <item>
       <title><![CDATA[Питание юного футболиста: рацион перед тренировкой, восстановление и питьевой режим]]></title>
-      <link>https://amkar-junior.ru/blog/pitanie-i-vodny-rezhim-yunogo-futbolista</link>
-      <guid isPermaLink="true">https://amkar-junior.ru/blog/pitanie-i-vodny-rezhim-yunogo-futbolista</guid>
+      <link>https://amkarjunior.ru/blog/pitanie-i-vodny-rezhim-yunogo-futbolista</link>
+      <guid isPermaLink="true">https://amkarjunior.ru/blog/pitanie-i-vodny-rezhim-yunogo-futbolista</guid>
       <description><![CDATA[Энергия, скорость мышления на поле и скорость восстановления напрямую зависят от того, что лежит в тарелке юного спортсмена. Разбираем простые правила сбалансированного детского меню без строгих диет и крайностей.]]></description>
       <category><![CDATA[Физическое развитие]]></category>
       <pubDate>Tue, 13 Oct 2026 03:00:00 GMT</pubDate>
-      <author>info@amkar-junior.ru (Михаил Григорьев)</author>
-      <enclosure url="https://amkar-junior.ru/blog-images/amkar-3.jpg" type="image/jpeg" length="500000" />
+      <author>info@amkarjunior.ru (Михаил Григорьев)</author>
+      <enclosure url="https://amkarjunior.ru/blog-images/amkar-3.jpg" type="image/jpeg" length="500000" />
     </item>
     <item>
       <title><![CDATA[Зимний футбол для детей в Перми: где тренироваться в тепле, крытые манежи и температурный комфорт]]></title>
-      <link>https://amkar-junior.ru/blog/detskiy-sportivny-manezh-perm-gde-igrat-zimoy</link>
-      <guid isPermaLink="true">https://amkar-junior.ru/blog/detskiy-sportivny-manezh-perm-gde-igrat-zimoy</guid>
+      <link>https://amkarjunior.ru/blog/detskiy-sportivny-manezh-perm-gde-igrat-zimoy</link>
+      <guid isPermaLink="true">https://amkarjunior.ru/blog/detskiy-sportivny-manezh-perm-gde-igrat-zimoy</guid>
       <description><![CDATA[Зима в Пермском крае длится до 5 месяцев с морозами до -25°C. Как не прекращать футбольное развитие ребенка и тренироваться в комфортных теплых условиях круглый год?]]></description>
       <category><![CDATA[Футбол в Перми]]></category>
       <pubDate>Wed, 14 Oct 2026 03:00:00 GMT</pubDate>
-      <author>info@amkar-junior.ru (Пресс-служба «Амкар Юниор»)</author>
-      <enclosure url="https://amkar-junior.ru/blog-images/amkar-2.jpg" type="image/jpeg" length="500000" />
+      <author>info@amkarjunior.ru (Пресс-служба «Амкар Юниор»)</author>
+      <enclosure url="https://amkarjunior.ru/blog-images/amkar-2.jpg" type="image/jpeg" length="500000" />
     </item>
     <item>
       <title><![CDATA[Психология юного игрока: как преодолеть страх мяча, стыд за ошибки и неуверенность]]></title>
-      <link>https://amkar-junior.ru/blog/strah-myacha-i-styd-oshibki-kak-pomoch-rebenku</link>
-      <guid isPermaLink="true">https://amkar-junior.ru/blog/strah-myacha-i-styd-oshibki-kak-pomoch-rebenku</guid>
+      <link>https://amkarjunior.ru/blog/strah-myacha-i-styd-oshibki-kak-pomoch-rebenku</link>
+      <guid isPermaLink="true">https://amkarjunior.ru/blog/strah-myacha-i-styd-oshibki-kak-pomoch-rebenku</guid>
       <description><![CDATA[Каждый второй ребенок на первых тренировках зажмуривается при летящем мяче или расстраивается до слез после неточного паса. Как тренер и родители могут бережно превратить робость в спортивную уверенность?]]></description>
       <category><![CDATA[Детский спорт]]></category>
       <pubDate>Thu, 15 Oct 2026 03:00:00 GMT</pubDate>
-      <author>info@amkar-junior.ru (Алексей Загузов)</author>
-      <enclosure url="https://amkar-junior.ru/blog-images/amkar-7.jpg" type="image/jpeg" length="500000" />
+      <author>info@amkarjunior.ru (Алексей Загузов)</author>
+      <enclosure url="https://amkarjunior.ru/blog-images/amkar-7.jpg" type="image/jpeg" length="500000" />
     </item>
     <item>
       <title><![CDATA[Развитие взрывной скорости и ловкости у мальчиков: 5 упражнений с конусами и фишками]]></title>
-      <link>https://amkar-junior.ru/blog/skorost-i-lovkost-uprazhneniya-dlya-malchikov</link>
-      <guid isPermaLink="true">https://amkar-junior.ru/blog/skorost-i-lovkost-uprazhneniya-dlya-malchikov</guid>
+      <link>https://amkarjunior.ru/blog/skorost-i-lovkost-uprazhneniya-dlya-malchikov</link>
+      <guid isPermaLink="true">https://amkarjunior.ru/blog/skorost-i-lovkost-uprazhneniya-dlya-malchikov</guid>
       <description><![CDATA[В современном футболе выигрывает не тот, кто просто быстро бежит по прямой, а тот, кто быстрее стартует с места, мгновенно меняет направление и быстрее думает. Разбираем 5 топ-упражнений на быстроту.]]></description>
       <category><![CDATA[Примеры упражнений]]></category>
       <pubDate>Thu, 15 Oct 2026 03:00:00 GMT</pubDate>
-      <author>info@amkar-junior.ru (Дмитрий Власов)</author>
-      <enclosure url="https://amkar-junior.ru/blog-images/amkar-9.jpg" type="image/jpeg" length="500000" />
+      <author>info@amkarjunior.ru (Дмитрий Власов)</author>
+      <enclosure url="https://amkarjunior.ru/blog-images/amkar-9.jpg" type="image/jpeg" length="500000" />
     </item>
     <item>
       <title><![CDATA[Профилактика плоскостопия и сколиоза: как футбол формирует здоровый опорно-двигательный аппарат]]></title>
-      <link>https://amkar-junior.ru/blog/ploskostopie-i-osanka-profilaktika-v-futbole</link>
-      <guid isPermaLink="true">https://amkar-junior.ru/blog/ploskostopie-i-osanka-profilaktika-v-futbole</guid>
+      <link>https://amkarjunior.ru/blog/ploskostopie-i-osanka-profilaktika-v-futbole</link>
+      <guid isPermaLink="true">https://amkarjunior.ru/blog/ploskostopie-i-osanka-profilaktika-v-futbole</guid>
       <description><![CDATA[Сидячий образ жизни за школьной партой и со смартфоном в руках — главная причина ранних нарушений осанки у 65% современных первоклассников. Как футбол естественным образом решает эту проблему?]]></description>
       <category><![CDATA[Физическое развитие]]></category>
       <pubDate>Fri, 16 Oct 2026 03:00:00 GMT</pubDate>
-      <author>info@amkar-junior.ru (Михаил Григорьев)</author>
-      <enclosure url="https://amkar-junior.ru/blog-images/amkar-14.jpg" type="image/jpeg" length="500000" />
+      <author>info@amkarjunior.ru (Михаил Григорьев)</author>
+      <enclosure url="https://amkarjunior.ru/blog-images/amkar-14.jpg" type="image/jpeg" length="500000" />
     </item>
     <item>
       <title><![CDATA[Амплуа в детском футболе: вратарь, защитник или нападающий — как понять призвание ребенка]]></title>
-      <link>https://amkar-junior.ru/blog/vratar-ili-polevoy-kak-ponyat-poziciyu-rebenka</link>
-      <guid isPermaLink="true">https://amkar-junior.ru/blog/vratar-ili-polevoy-kak-ponyat-poziciyu-rebenka</guid>
+      <link>https://amkarjunior.ru/blog/vratar-ili-polevoy-kak-ponyat-poziciyu-rebenka</link>
+      <guid isPermaLink="true">https://amkarjunior.ru/blog/vratar-ili-polevoy-kak-ponyat-poziciyu-rebenka</guid>
       <description><![CDATA[«Мой сын хочет только забивать голы!» или «А наш мальчик обожает стоять на воротах». Стоит ли закреплять позицию за ребенком в 6–8 лет, и как раскрыть истинный потенциал маленького футболиста?]]></description>
       <category><![CDATA[Детский спорт]]></category>
       <pubDate>Fri, 16 Oct 2026 03:00:00 GMT</pubDate>
-      <author>info@amkar-junior.ru (Алексей Загузов)</author>
-      <enclosure url="https://amkar-junior.ru/blog-images/amkar-13.jpg" type="image/jpeg" length="500000" />
+      <author>info@amkarjunior.ru (Алексей Загузов)</author>
+      <enclosure url="https://amkarjunior.ru/blog-images/amkar-13.jpg" type="image/jpeg" length="500000" />
     </item>
     <item>
       <title><![CDATA[Обыгрыш 1 в 1: базовые футбольные финты для начинающих (ложный замах, уход корпусом)]]></title>
-      <link>https://amkar-junior.ru/blog/igry-1-na-1-dribling-i-obvodka-uprazhneniya</link>
-      <guid isPermaLink="true">https://amkar-junior.ru/blog/igry-1-na-1-dribling-i-obvodka-uprazhneniya</guid>
+      <link>https://amkarjunior.ru/blog/igry-1-na-1-dribling-i-obvodka-uprazhneniya</link>
+      <guid isPermaLink="true">https://amkarjunior.ru/blog/igry-1-na-1-dribling-i-obvodka-uprazhneniya</guid>
       <description><![CDATA[Способность обыграть соперника один в один — самое ценное и зрелищное качество в футболе. Разбираем анатомию базовых финтов, которые легко освоит любой мальчик от 6 лет.]]></description>
       <category><![CDATA[Примеры упражнений]]></category>
       <pubDate>Fri, 16 Oct 2026 03:00:00 GMT</pubDate>
-      <author>info@amkar-junior.ru (Дмитрий Власов)</author>
-      <enclosure url="https://amkar-junior.ru/blog-images/amkar-10.jpg" type="image/jpeg" length="500000" />
+      <author>info@amkarjunior.ru (Дмитрий Власов)</author>
+      <enclosure url="https://amkarjunior.ru/blog-images/amkar-10.jpg" type="image/jpeg" length="500000" />
     </item>
     <item>
       <title><![CDATA[Первые соревнования и матчи в Перми: как проходят детские турниры и лига «Амкар Юниор»]]></title>
-      <link>https://amkar-junior.ru/blog/detskie-turniry-i-pervye-matchi-v-permi</link>
-      <guid isPermaLink="true">https://amkar-junior.ru/blog/detskie-turniry-i-pervye-matchi-v-permi</guid>
+      <link>https://amkarjunior.ru/blog/detskie-turniry-i-pervye-matchi-v-permi</link>
+      <guid isPermaLink="true">https://amkarjunior.ru/blog/detskie-turniry-i-pervye-matchi-v-permi</guid>
       <description><![CDATA[Первый официальный матч в настоящей форме с эмблемой клуба — незабываемое событие для каждого мальчишки и его родителей. Рассказываем, как устроены детские футбольные фестивали в Перми.]]></description>
       <category><![CDATA[Футбол в Перми]]></category>
       <pubDate>Sat, 17 Oct 2026 03:00:00 GMT</pubDate>
-      <author>info@amkar-junior.ru (Пресс-служба «Амкар Юниор»)</author>
-      <enclosure url="https://amkar-junior.ru/blog-images/amkar-5.jpg" type="image/jpeg" length="500000" />
+      <author>info@amkarjunior.ru (Пресс-служба «Амкар Юниор»)</author>
+      <enclosure url="https://amkarjunior.ru/blog-images/amkar-5.jpg" type="image/jpeg" length="500000" />
     </item>
     <item>
       <title><![CDATA[Футбол и успеваемость в школе: как спорт учит самодисциплине, концентрации и режиму дня]]></title>
-      <link>https://amkar-junior.ru/blog/futbol-i-uspevaemost-v-shkole-distsiplina-i-taym-menedzhment</link>
-      <guid isPermaLink="true">https://amkar-junior.ru/blog/futbol-i-uspevaemost-v-shkole-distsiplina-i-taym-menedzhment</guid>
+      <link>https://amkarjunior.ru/blog/futbol-i-uspevaemost-v-shkole-distsiplina-i-taym-menedzhment</link>
+      <guid isPermaLink="true">https://amkarjunior.ru/blog/futbol-i-uspevaemost-v-shkole-distsiplina-i-taym-menedzhment</guid>
       <description><![CDATA[Многие родители первоклассников опасаются: «Пойдет в школу — спорт придется бросить, не будет успевать делать уроки». Разбираемся с научными фактами, почему спортивные дети учатся лучше и быстрее.]]></description>
       <category><![CDATA[Детский спорт]]></category>
       <pubDate>Sat, 17 Oct 2026 03:00:00 GMT</pubDate>
-      <author>info@amkar-junior.ru (Алексей Загузов)</author>
-      <enclosure url="https://amkar-junior.ru/blog-images/amkar-6.jpg" type="image/jpeg" length="500000" />
+      <author>info@amkarjunior.ru (Алексей Загузов)</author>
+      <enclosure url="https://amkarjunior.ru/blog-images/amkar-6.jpg" type="image/jpeg" length="500000" />
     </item>
     <item>
       <title><![CDATA[Восстановление и сон юного футболиста: как избежать переутомления, травм и эмоционального выгорания]]></title>
-      <link>https://amkar-junior.ru/blog/vosstanovlenie-i-son-yunogo-sportsmena-profilaktika-pereutomleniya</link>
-      <guid isPermaLink="true">https://amkar-junior.ru/blog/vosstanovlenie-i-son-yunogo-sportsmena-profilaktika-pereutomleniya</guid>
+      <link>https://amkarjunior.ru/blog/vosstanovlenie-i-son-yunogo-sportsmena-profilaktika-pereutomleniya</link>
+      <guid isPermaLink="true">https://amkarjunior.ru/blog/vosstanovlenie-i-son-yunogo-sportsmena-profilaktika-pereutomleniya</guid>
       <description><![CDATA[Мышцы, связки и футбольные навыки растут не во время самой тренировки, а во сне и в дни качественного восстановления. Разбираем физиологию детского организма 4–10 лет: сколько часов сна необходимо, как правильно расслаблять мышцы ног и как вовремя заметить скрытое переутомление.]]></description>
       <category><![CDATA[Физическое развитие]]></category>
       <pubDate>Sat, 17 Oct 2026 03:00:00 GMT</pubDate>
-      <author>info@amkar-junior.ru (Алексей Загузов)</author>
-      <enclosure url="https://amkar-junior.ru/blog-images/amkar-4.jpg" type="image/jpeg" length="500000" />
+      <author>info@amkarjunior.ru (Алексей Загузов)</author>
+      <enclosure url="https://amkarjunior.ru/blog-images/amkar-4.jpg" type="image/jpeg" length="500000" />
     </item>
     <item>
       <title><![CDATA[Разминка перед футболом для детей 4–10 лет: игровые упражнения и почему нельзя сразу бить по воротам]]></title>
-      <link>https://amkar-junior.ru/blog/razminka-i-rastyazhka-dlya-detey-pered-futbolom</link>
-      <guid isPermaLink="true">https://amkar-junior.ru/blog/razminka-i-rastyazhka-dlya-detey-pered-futbolom</guid>
+      <link>https://amkarjunior.ru/blog/razminka-i-rastyazhka-dlya-detey-pered-futbolom</link>
+      <guid isPermaLink="true">https://amkarjunior.ru/blog/razminka-i-rastyazhka-dlya-detey-pered-futbolom</guid>
       <description><![CDATA[Каждый ребенок, заходя в спортивный зал или на футбольный манеж, первым делом хватает мяч и со всей силы бьет по воротам. Рассказываем, почему тренеры строго запрещают этот «дворовый» старт, чем опасен удар «на холодную» и как выглядит правильная 12-минутная разминка.]]></description>
       <category><![CDATA[Примеры упражнений]]></category>
       <pubDate>Sat, 17 Oct 2026 03:00:00 GMT</pubDate>
-      <author>info@amkar-junior.ru (Максим Шестаков)</author>
-      <enclosure url="https://amkar-junior.ru/blog-images/amkar-11.jpg" type="image/jpeg" length="500000" />
+      <author>info@amkarjunior.ru (Максим Шестаков)</author>
+      <enclosure url="https://amkarjunior.ru/blog-images/amkar-11.jpg" type="image/jpeg" length="500000" />
     </item>
   </channel>
 </rss>

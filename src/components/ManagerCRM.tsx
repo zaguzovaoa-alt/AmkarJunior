@@ -703,7 +703,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
       await addLead({
         parentName: newParentName,
         parentPhone: newPhone || "+7 (900) 123-45-67",
-        parentEmail: "client@amkar-junior.ru",
+        parentEmail: "client@amkarjunior.ru",
         childName: newChildName,
         childSurname: newChildSurname || "Иванов",
         childBirthDate: newChildBirthDate || undefined,
