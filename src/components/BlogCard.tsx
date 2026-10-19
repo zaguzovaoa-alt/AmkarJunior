@@ -45,7 +45,8 @@ export const BlogCard: React.FC<BlogCardProps> = ({
             alt={article.title}
             onError={handleImgError}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
-            loading="lazy"
+            loading="eager"
+            decoding="async"
           />
         </div>
 
@@ -102,6 +103,7 @@ export const BlogCard: React.FC<BlogCardProps> = ({
           onError={handleImgError}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
           loading="lazy"
+          decoding="async"
         />
       </div>
 

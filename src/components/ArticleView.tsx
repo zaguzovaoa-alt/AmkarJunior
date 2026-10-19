@@ -306,6 +306,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
               src={imgSrc}
               alt={article.title}
               onError={handleImgError}
+              decoding="async"
               className="w-full h-full object-cover"
             />
           </div>
@@ -335,6 +336,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
                     src={section.image.url}
                     alt={section.image.alt || section.image.caption || section.title}
                     loading="lazy"
+                    decoding="async"
                     onError={(e) => {
                       // Fallback to kids_football.png if broken
                       (e.target as HTMLImageElement).src = "/kids_football.png";

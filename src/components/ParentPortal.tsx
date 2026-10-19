@@ -51,6 +51,14 @@ import { OfferAgreement } from "./OfferAgreement";
 import { useAuth } from "../context/AuthContext";
 import { Product } from "../types";
 import { AIProgressReportCard } from "./AIProgressReportCard";
+import {
+  PARENT_KB_ARTICLES,
+  PARENT_KB_CATEGORIES,
+  TRAINING_DAY_SCHEDULES,
+  PSYCHOLOGY_SCENARIOS,
+  ParentKBCategory,
+  ParentKBArticle,
+} from "../data/parentKnowledgeBase";
 
 interface ParentPortalProps {
   activeTab: string;
@@ -246,7 +254,64 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
     attendance: myClientRaw?.attendance || [],
     achievements: myClientRaw?.achievements || [],
   } as any;
-  const [selectedArticle, setSelectedArticle] = useState<any | null>(null);
+  const [selectedArticle, setSelectedArticle] = useState<ParentKBArticle | null>(null);
+  const [kbCategory, setKbCategory] = useState<ParentKBCategory>("Все разделы");
+  const [kbSearchQuery, setKbSearchQuery] = useState<string>("");
+  const [kbShowSavedOnly, setKbShowSavedOnly] = useState<boolean>(false);
+  const [activeScheduleSlotId, setActiveScheduleSlotId] = useState<string>("slot_1800");
+  const [activePsychScenarioId, setActivePsychScenarioId] = useState<string>("scen_loss");
+  const [savedKbIds, setSavedKbIds] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(`amkar_kb_saved_${myClient?.id || "default"}`);
+      return raw ? JSON.parse(raw) : ["kb-nutr-1", "kb-psych-1"];
+    } catch {
+      return ["kb-nutr-1", "kb-psych-1"];
+    }
+  });
+  const [readKbIds, setReadKbIds] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(`amkar_kb_read_${myClient?.id || "default"}`);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const toggleSaveKbArticle = (articleId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setSavedKbIds((prev) => {
+      const next = prev.includes(articleId)
+        ? prev.filter((id) => id !== articleId)
+        : [...prev, articleId];
+      try {
+        localStorage.setItem(
+          `amkar_kb_saved_${myClient?.id || "default"}`,
+          JSON.stringify(next),
+        );
+      } catch {}
+      return next;
+    });
+  };
+
+  const markKbArticleRead = (articleId: string) => {
+    setReadKbIds((prev) => {
+      if (prev.includes(articleId)) return prev;
+      const next = [...prev, articleId];
+      try {
+        localStorage.setItem(
+          `amkar_kb_read_${myClient?.id || "default"}`,
+          JSON.stringify(next),
+        );
+      } catch {}
+      return next;
+    });
+  };
+
+  const handleOpenKbArticle = (article: ParentKBArticle) => {
+    setSelectedArticle(article);
+    markKbArticleRead(article.id);
+  };
+
   const [copiedLink, setCopiedLink] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [homeworkFilter, setHomeworkFilter] = useState<"all" | "pending" | "done">("all");
@@ -683,57 +748,8 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
     }
   };
 
-  // Knowledge base mock articles matching Image 1
-  const kbArticles = [
-    {
-      id: "art1",
-      title: "Что нужно взять с собой на тренировку?",
-      category: "Тренировки",
-      views: 1256,
-      content:
-        "Все просто, но важно ничего не упустить! Вашему будущему чемпиону понадобится фирменная черная экипировка АМКАР ЮНИОР, футбольные бутсы (или многошиповки для зала/манежа), защитные щитки (обязательно для безопасности берцовой кости), чистые гетры, и индивидуальная брендированная бутылка для питьевой негазированной воды. Также рекомендуем положить маленькое полотенце.",
-    },
-    {
-      id: "art2",
-      title: "Как происходит оплата абонемента?",
-      category: "Оплата и абонементы",
-      views: 987,
-      content:
-        "Оплата абонемента происходит в безналичном формате через платежную систему ЮKassa. Ссылка на оплату формируется менеджером CRM после успешного прохождения пробной тренировки и высылается вам в Личный кабинет. Вы можете оплатить картами любых банков РФ, СБП или СберПей. После оплаты чеки автоматически регистрируются в ФНС, а абонемент активируется.",
-    },
-    {
-      id: "art3",
-      title: "Можно ли пропустить тренировку?",
-      category: "Родителям",
-      views: 765,
-      content:
-        "Пропускать тренировки без уважительной причины не рекомендуется, так как ребенок выбивается из тренировочного цикла. Однако в случае болезни (при наличии медицинской справки), либо предупреждения тренера или менеджера не менее чем за 5 часов до начала, занятие сохраняется на балансе. Просим своевременно отмечать статус в приложении.",
-    },
-    {
-      id: "art4",
-      title: "Как записаться на турнир или сборы?",
-      category: "Тренировки",
-      views: 654,
-      content:
-        'Все выездные мероприятия, лагеря и турниры отображаются во вкладке "Ближайшие события" вашего кабинета. Для бронирования участия вам достаточно нажать кнопку "Подать заявку", после чего менеджер вызовер вас для утверждения логистики и меддопусков.',
-    },
-    {
-      id: "art5",
-      title: "Требования к игровой форме",
-      category: "Форма и экипировка",
-      views: 543,
-      content:
-        "Игровая форма школы АМКАР ЮНИОР разработана с учетом анатомии юных спортсменов из гипоаллергенной дышащей ткани. В комплект входят футболка, шорты и брендированные гетры. Стирать форму рекомендуется при температуре не более 30 градусов без агрессивных отбеливателей.",
-    },
-    {
-      id: "art6",
-      title: "Договор публичной оферты и правила школы",
-      category: "Родителям",
-      views: 1842,
-      content:
-        "Официальный договор публичной оферты ИП Тюкалов Е.Е. регулирует права и обязанности родителей и детской футбольной школы «Амкар Юниор». Он доступен круглосуточно во вкладке «Договор-оферта» меню, а также в разделе «Настройки». В договоре подробно описаны правила посещения, расписания, отработки пропусков по болезни и безопасность.",
-    },
-  ];
+  // Knowledge base articles are imported from ../data/parentKnowledgeBase
+  const kbArticles = PARENT_KB_ARTICLES;
 
   if (!myClient || !myClient.id) {
     return (
@@ -2307,14 +2323,15 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                             <div className="absolute inset-0 bg-gradient-to-t from-red-600/30 via-amber-400/15 to-transparent rounded-full blur-2xl scale-90 group-hover:scale-105 transition-transform duration-300" />
                             <div className="relative w-40 h-44 sm:w-48 sm:h-52 rounded-2xl bg-gradient-to-b from-white/10 to-white/5 border border-white/15 p-2 flex items-end justify-center overflow-visible shadow-inner">
                               <img
-                                src="/Рысенок1.png"
+                                src="/rysenok1.png"
                                 onError={(e) => {
                                   const target = e.currentTarget;
-                                  if (!target.src.includes("rysenok1.png")) {
-                                    target.src = "/rysenok1.png";
+                                  if (!target.src.includes("%D0%A0")) {
+                                    target.src = "/Рысенок1.png";
                                   }
                                 }}
                                 alt="Талисман клуба Рысёнок Амкар"
+                                decoding="async"
                                 referrerPolicy="no-referrer"
                                 className="w-full h-full object-contain drop-shadow-[0_12px_20px_rgba(0,0,0,0.5)] transform group-hover:scale-105 transition-transform duration-200 select-none"
                               />
@@ -2850,222 +2867,854 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
             </motion.div>
           )}
 
-          {/* 7. KNOWLEDGE BASE TAB (МАТЧИТ ИЗОБРАЖЕНИЕ №1) */}
+          {/* 7. KNOWLEDGE BASE TAB — АКАДЕМИЯ РОДИТЕЛЕЙ «АМКАР ЮНИОР» */}
           {activeTab === "parent_knowledge" && (
             <motion.div
               id="knowledge-base-root"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="space-y-6"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="space-y-6 text-left"
             >
-              {/* Popular Categories Grid from photo */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                {[
-                  {
-                    cat: "Тренировки",
-                    desc: "Все о тренировочном процессе, формах, выездах",
-                    count: 12,
-                    bg: "bg-orange-50 text-orange-600 border-orange-100/40",
-                  },
-                  {
-                    cat: "Оплата и абонементы",
-                    desc: "Информация об оплате, пакетах и тарифах",
-                    count: 8,
-                    bg: "bg-emerald-50 text-emerald-600 border-emerald-100/40",
-                  },
-                  {
-                    cat: "Форма и экипировка",
-                    desc: "Требования к форме, гетрам, конусам",
-                    count: 6,
-                    bg: "bg-blue-50 text-blue-600 border-blue-100/40",
-                  },
-                  {
-                    cat: "Родителям",
-                    desc: "Рекомендации, правила клуба и памятки",
-                    count: 15,
-                    bg: "bg-amber-50 text-amber-600 border-amber-100/40",
-                  },
-                  {
-                    cat: "Здоровье и безопасность",
-                    desc: "Безопасность суставов, справки, допуски",
-                    count: 7,
-                    bg: "bg-indigo-50 text-indigo-700 border-indigo-100/40",
-                  },
-                ].map((category, i) => (
-                  <div
-                    key={i}
-                    className={`p-4 rounded-2xl border ${category.bg} shadow-xs flex flex-col justify-between h-36 border-transparent hover:scale-[1.02] transition duration-200`}
-                  >
-                    <div className="space-y-1 text-left">
-                      <BookOpen className="w-4.5 h-4.5 mb-1" />
-                      <div className="font-extrabold text-[12px] leading-snug">
-                        {category.cat}
+              {(() => {
+                // Determine personal focus area based on child's metrics
+                const pTech = myClient.progress?.technique || 4.5;
+                const pTact = myClient.progress?.tactics || 4.4;
+                const pPhys = myClient.progress?.physical || 4.5;
+                const pDisc = myClient.progress?.discipline || 4.7;
+
+                const lowestMetric = Math.min(pTech, pTact, pPhys, pDisc);
+                const recommendedFocus: "physical" | "technique" | "tactics" | "discipline" =
+                  lowestMetric === pPhys
+                    ? "physical"
+                    : lowestMetric === pTech
+                      ? "technique"
+                      : lowestMetric === pTact
+                        ? "tactics"
+                        : "discipline";
+
+                const focusLabelMap = {
+                  physical: "ОФП, скорость и питание для энергии",
+                  technique: "Футбольная техника и работа обеими ногами",
+                  tactics: "Игровое мышление и видение поля",
+                  discipline: "Психология уверенности и внутренняя мотивация",
+                };
+
+                const personalRecommendations = kbArticles
+                  .filter((a) => a.skillFocus === recommendedFocus || a.featured)
+                  .slice(0, 3);
+
+                const queryNorm = kbSearchQuery.trim().toLowerCase();
+                const filteredArticles = kbArticles.filter((art) => {
+                  if (kbShowSavedOnly && !savedKbIds.includes(art.id)) return false;
+                  if (kbCategory !== "Все разделы" && art.category !== kbCategory) {
+                    return false;
+                  }
+                  if (!queryNorm) return true;
+                  return (
+                    art.title.toLowerCase().includes(queryNorm) ||
+                    art.subtitle.toLowerCase().includes(queryNorm) ||
+                    art.summary.toLowerCase().includes(queryNorm) ||
+                    art.category.toLowerCase().includes(queryNorm) ||
+                    art.keyTakeaways.some((t) => t.toLowerCase().includes(queryNorm))
+                  );
+                });
+
+                const activeScheduleSlot =
+                  TRAINING_DAY_SCHEDULES.find((s) => s.id === activeScheduleSlotId) ||
+                  TRAINING_DAY_SCHEDULES[0];
+                const activePsychScenario =
+                  PSYCHOLOGY_SCENARIOS.find((s) => s.id === activePsychScenarioId) ||
+                  PSYCHOLOGY_SCENARIOS[0];
+
+                return (
+                  <>
+                    {/* 1. Smart Hero Header with Рысёнок & Personal Recommendations */}
+                    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-white border border-slate-800 shadow-lg">
+                      <div className="pointer-events-none absolute -right-16 -top-16 h-72 w-72 rounded-full bg-red-600/15 blur-3xl" />
+                      <div className="pointer-events-none absolute left-1/4 -bottom-20 h-64 w-64 rounded-full bg-emerald-500/10 blur-3xl" />
+
+                      <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 items-center gap-6 p-6 sm:p-8">
+                        <div className="lg:col-span-8 space-y-4">
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
+                            <BookOpen className="w-4 h-4 text-emerald-400 shrink-0" />
+                            <span className="font-semibold text-emerald-400">
+                              Академия родителей «Амкар Юниор»
+                            </span>
+                            <span aria-hidden="true">·</span>
+                            <span className="font-mono tabular-nums">
+                              {kbArticles.length} экспертных руководств
+                            </span>
+                            <span aria-hidden="true">·</span>
+                            <span className="font-mono tabular-nums text-amber-300">
+                              Изучено вами: {readKbIds.length} из {kbArticles.length}
+                            </span>
+                          </div>
+
+                          <div className="space-y-2">
+                            <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white leading-tight max-w-2xl">
+                              Умная база знаний: ОФП, футбол, питание и психология чемпиона
+                            </h2>
+                            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-2xl">
+                              Методисты, тренеры и спортивные врачи нашего клуба собрали
+                              практические руководства для родителей. Узнайте, как укрепить
+                              физическую форму{" "}
+                              <strong className="text-white">
+                                {myClient.childName || "ребенка"}
+                              </strong>
+                              , составить рацион в день игры и поддержать мотивацию без
+                              давления.
+                            </p>
+                          </div>
+
+                          {/* Smart Personalized Strip for the Child */}
+                          <div className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-3">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                              <div className="text-xs font-bold text-amber-300">
+                                Персональный фокус для {myClient.childName} (
+                                {myClient.groupName || "Воспитанник клуба"}):{" "}
+                                <span className="text-white">
+                                  {focusLabelMap[recommendedFocus]}
+                                </span>
+                              </div>
+                              <span className="text-[11px] text-slate-400 font-mono">
+                                Подобрано по профилю игрока
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                              {personalRecommendations.map((rec) => (
+                                <button
+                                  key={rec.id}
+                                  type="button"
+                                  onClick={() => handleOpenKbArticle(rec)}
+                                  className="p-3 rounded-xl bg-slate-900/80 hover:bg-slate-900 border border-white/10 hover:border-amber-400/50 transition text-left flex flex-col justify-between gap-2 cursor-pointer group"
+                                >
+                                  <div className="space-y-1">
+                                    <div className="text-[10px] text-emerald-400 font-medium">
+                                      {rec.category} · {rec.readTime}
+                                    </div>
+                                    <div className="text-xs font-bold text-white group-hover:text-amber-300 transition line-clamp-2 leading-snug">
+                                      {rec.title}
+                                    </div>
+                                  </div>
+                                  <div className="text-[11px] text-slate-400 group-hover:text-white flex items-center gap-1 font-semibold">
+                                    <span>Читать статью</span>
+                                    <ArrowRight className="w-3 h-3" />
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Right Column: Mascot Mentor & Quick Stats */}
+                        <div className="lg:col-span-4 flex flex-col items-center justify-center space-y-3">
+                          <div className="relative group">
+                            <div className="absolute inset-0 bg-gradient-to-tr from-red-600/25 via-amber-400/15 to-transparent rounded-full blur-2xl" />
+                            <div className="relative w-36 h-40 sm:w-44 sm:h-48 rounded-3xl bg-white/5 border border-white/15 p-3 flex items-center justify-center">
+                              <img
+                                src="/rysenok1.png"
+                                onError={(e) => {
+                                  const target = e.currentTarget;
+                                  if (!target.src.includes("%D0%A0")) {
+                                    target.src = "/Рысенок1.png";
+                                  }
+                                }}
+                                alt="Рысёнок — Навигатор базы знаний"
+                                decoding="async"
+                                referrerPolicy="no-referrer"
+                                className="w-full h-full object-contain drop-shadow-[0_12px_20px_rgba(0,0,0,0.45)] transform group-hover:scale-105 transition-transform duration-200 select-none"
+                              />
+                            </div>
+                          </div>
+                          <div className="bg-white/10 border border-white/15 rounded-2xl p-3.5 text-center max-w-xs">
+                            <div className="text-xs font-bold text-amber-300">
+                              Совет Рысёнка родителям
+                            </div>
+                            <p className="text-[11px] text-slate-200 leading-relaxed mt-1">
+                              «Сохраняйте полезные памятки по питанию и психологии в
+                              закладки — они всегда будут под рукой перед выездом на турнир!»
+                            </p>
+                          </div>
+                        </div>
                       </div>
-                      <p className="text-[10px] text-gray-500 leading-normal">
-                        {category.desc}
-                      </p>
                     </div>
-                    <div className="text-[10px] font-bold text-slate-600">
-                      {category.count} статей →
+
+                    {/* 2. Interactive Category Cards (Click to filter) */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+                      {PARENT_KB_CATEGORIES.map((cat) => {
+                        const isSelected = kbCategory === cat.id;
+                        const count = kbArticles.filter(
+                          (a) => a.category === cat.id,
+                        ).length;
+                        return (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => {
+                              setKbCategory((prev) =>
+                                prev === cat.id ? "Все разделы" : cat.id,
+                              );
+                              setKbShowSavedOnly(false);
+                            }}
+                            className={`p-4 rounded-2xl border text-left transition flex flex-col justify-between h-36 cursor-pointer ${
+                              isSelected
+                                ? "bg-slate-900 text-white border-slate-900 shadow-md"
+                                : "bg-white hover:bg-slate-50 text-slate-800 border-gray-200/80 shadow-2xs"
+                            }`}
+                          >
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <BookOpen
+                                  className={`w-4 h-4 ${
+                                    isSelected ? "text-amber-400" : cat.accentClass
+                                  }`}
+                                />
+                                <span
+                                  className={`text-[11px] font-mono font-bold tabular-nums ${
+                                    isSelected ? "text-amber-300" : "text-slate-400"
+                                  }`}
+                                >
+                                  {count} ст.
+                                </span>
+                              </div>
+                              <div
+                                className={`font-extrabold text-xs leading-snug ${
+                                  isSelected ? "text-white" : "text-slate-900"
+                                }`}
+                              >
+                                {cat.title}
+                              </div>
+                              <p
+                                className={`text-[11px] leading-relaxed line-clamp-2 ${
+                                  isSelected ? "text-slate-300" : "text-slate-500"
+                                }`}
+                              >
+                                {cat.shortDesc}
+                              </p>
+                            </div>
+                            <div
+                              className={`text-[11px] font-bold flex items-center justify-between pt-2 border-t ${
+                                isSelected
+                                  ? "border-slate-800 text-amber-300"
+                                  : "border-slate-100 text-slate-700"
+                              }`}
+                            >
+                              <span>
+                                {isSelected ? "Активный фильтр" : "Открыть раздел"}
+                              </span>
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
-                  </div>
-                ))}
-              </div>
 
-              {/* Main row split - Popular Articles list vs side info */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Popular Articles column */}
-                <div className="lg:col-span-2 space-y-4">
-                  <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-4">
-                    <h3 className="font-extrabold text-slate-900 border-b pb-1.5 text-sm">
-                      Популярные статьи базы
-                    </h3>
+                    {/* 3. Search Bar & Segmented Filter Controls */}
+                    <div className="bg-white rounded-2xl p-4 border border-gray-200/80 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+                      <div className="relative flex-1">
+                        <input
+                          type="text"
+                          value={kbSearchQuery}
+                          onChange={(e) => setKbSearchQuery(e.target.value)}
+                          placeholder="Поиск по темам: ОФП, растяжка, банан, перед матчем, мотивация, бутсы..."
+                          className="w-full pl-4 pr-9 py-2.5 bg-slate-50 focus:bg-white border border-slate-200 focus:border-slate-900 rounded-xl text-xs text-slate-800 outline-none transition"
+                        />
+                        {kbSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setKbSearchQuery("")}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
+                            title="Очистить поиск"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
 
-                    <div className="divide-y divide-gray-100">
-                      {kbArticles.map((art, idx) => (
-                        <div
-                          key={idx}
-                          onClick={() => setSelectedArticle(art)}
-                          className="py-3.5 flex items-center justify-between hover:bg-slate-50 cursor-pointer rounded-lg px-2 transition -mx-2"
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setKbCategory("Все разделы");
+                            setKbShowSavedOnly(false);
+                          }}
+                          className={`px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                            kbCategory === "Все разделы" && !kbShowSavedOnly
+                              ? "bg-slate-900 text-white"
+                              : "bg-slate-100 text-slate-600 hover:text-slate-900"
+                          }`}
                         >
-                          <div className="space-y-0.5 text-left">
-                            <h4 className="font-bold text-xs text-slate-800 hover:text-emerald-500 transition">
-                              {art.title}
-                            </h4>
-                            <span className="text-[10px] text-gray-400 font-mono font-medium">
-                              {art.category}
-                            </span>
-                          </div>
-                          <div className="flex items-center space-x-4 text-[10px] text-gray-400">
-                            <span className="flex items-center space-x-1 font-mono">
-                              <Eye className="w-3 h-3" />
-                              <span>{art.views}</span>
-                            </span>
-                            <ArrowRight className="w-3.5 h-3.5" />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Useful materials list column (Photo 1 right) */}
-                <div className="space-y-4">
-                  <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-4">
-                    <h3 className="font-extrabold text-slate-900 border-b pb-1.5 text-sm">
-                      Полезные материалы
-                    </h3>
-
-                    {/* Featured Offer Agreement Item */}
-                    <div
-                      onClick={() => setActiveTab("parent_offer")}
-                      className="p-3.5 bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-xl shadow-xs transition text-left space-y-2 cursor-pointer hover:shadow-md border border-slate-700"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="font-bold text-xs text-white flex items-center gap-1.5">
-                          <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                          <span>Договор-оферта</span>
-                        </div>
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 uppercase">
-                          Активен
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-slate-300 leading-relaxed font-medium">
-                        Официальный договор на оказание услуг. Доступен для чтения, печати и скачивания.
-                      </p>
-                      <div className="text-[10px] font-bold text-emerald-400 flex items-center space-x-1">
-                        <Eye className="w-3 h-3" />
-                        <span>Открыть и читать</span>
-                      </div>
-                    </div>
-
-                    {[
-                      {
-                        title: "Памятка/Правила Клуба",
-                        desc: "Ценности и культура нашей школы.",
-                        file: "Читать правила",
-                        action: () => setActiveTab("parent_offer"),
-                      },
-                      {
-                        title: "Календарь Сезона 2025/2026",
-                        desc: "Даты турниров, выездов и вех.",
-                        file: "Смотреть график",
-                        action: () => setActiveTab("parent_schedule"),
-                      },
-                      {
-                        title: "Инструкция по питанию игроков",
-                        desc: "Рацион питания для спортсменов 4-12 лет.",
-                        file: "Открыть PDF",
-                        action: undefined,
-                      },
-                      {
-                        title: "Контакты тренеров и медицина",
-                        desc: "Телефоны дежурной помощи клиники.",
-                        file: "Показать контакты",
-                        action: () => setActiveTab("parent_messages"),
-                      },
-                    ].map((mat, id) => (
-                      <div
-                        key={id}
-                        onClick={mat.action}
-                        className={`p-3 bg-slate-50 border rounded-xl hover:shadow-xs transition text-left space-y-1.5 ${
-                          mat.action ? "cursor-pointer hover:bg-slate-100/80" : ""
-                        }`}
-                      >
-                        <div className="font-bold text-xs text-slate-800">
-                          {mat.title}
-                        </div>
-                        <p className="text-[10px] text-gray-500 leading-relaxed font-medium">
-                          {mat.desc}
-                        </p>
-                        <button className="text-[10px] font-bold text-emerald-600 flex items-center space-x-1">
-                          <Download className="w-3 h-3" />
-                          <span>{mat.file}</span>
+                          Все статьи ({kbArticles.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setKbShowSavedOnly((prev) => !prev)}
+                          className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                            kbShowSavedOnly
+                              ? "bg-amber-500 text-white"
+                              : "bg-slate-100 text-slate-600 hover:text-slate-900"
+                          }`}
+                        >
+                          <Heart className="w-3.5 h-3.5" />
+                          <span>Мои закладки ({savedKbIds.length})</span>
                         </button>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
+                    </div>
 
-              {/* Read Popup Dialog */}
-              {selectedArticle && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 z-50">
-                  <div className="bg-white rounded-3xl w-full max-w-lg flex flex-col max-h-[90vh] overflow-hidden border shadow-xl">
-                    <div className="p-5 border-b flex justify-between items-start shrink-0 bg-slate-50">
-                      <div>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700 uppercase">
-                          {selectedArticle.category}
-                        </span>
-                        <h4 className="font-black text-slate-900 mt-1 max-w-md text-sm">
-                          {selectedArticle.title}
-                        </h4>
+                    {/* 4. Main Content Grid: Articles List (2 cols) + Quick Club Materials & Offer (1 col) */}
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                      {/* Articles Column */}
+                      <div className="lg:col-span-8 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-base font-extrabold text-slate-900">
+                            {kbShowSavedOnly
+                              ? "Сохраненные материалы в закладках"
+                              : kbCategory === "Все разделы"
+                                ? "Все экспертные статьи и памятки"
+                                : `Раздел: ${kbCategory}`}
+                          </h3>
+                          <span className="text-xs text-slate-500 font-mono tabular-nums">
+                            Найдено: {filteredArticles.length}
+                          </span>
+                        </div>
+
+                        {filteredArticles.length === 0 ? (
+                          <div className="bg-white rounded-2xl p-8 border border-gray-200/80 text-center space-y-3">
+                            <div className="text-sm font-bold text-slate-800">
+                              По вашему запросу статей не найдено
+                            </div>
+                            <p className="text-xs text-slate-500 max-w-md mx-auto">
+                              Попробуйте сбросить фильтры или выбрать другой раздел базы
+                              знаний.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setKbCategory("Все разделы");
+                                setKbSearchQuery("");
+                                setKbShowSavedOnly(false);
+                              }}
+                              className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold cursor-pointer"
+                            >
+                              Показать все статьи
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {filteredArticles.map((art) => {
+                              const isSaved = savedKbIds.includes(art.id);
+                              const isRead = readKbIds.includes(art.id);
+                              return (
+                                <div
+                                  key={art.id}
+                                  onClick={() => handleOpenKbArticle(art)}
+                                  className="bg-white rounded-2xl border border-gray-200/80 hover:border-slate-400 shadow-2xs transition cursor-pointer overflow-hidden flex flex-col justify-between group"
+                                >
+                                  <div>
+                                    {/* Cover Image */}
+                                    <div className="relative h-40 w-full overflow-hidden bg-slate-100">
+                                      <img
+                                        src={art.coverImage}
+                                        alt={art.title}
+                                        loading="lazy"
+                                        decoding="async"
+                                        referrerPolicy="no-referrer"
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                      />
+                                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/75 via-slate-950/20 to-transparent" />
+                                      <button
+                                        type="button"
+                                        onClick={(e) => toggleSaveKbArticle(art.id, e)}
+                                        title={
+                                          isSaved
+                                            ? "Убрать из закладок"
+                                            : "Сохранить в закладки"
+                                        }
+                                        className={`absolute top-3 right-3 p-2 rounded-xl backdrop-blur-md border transition cursor-pointer ${
+                                          isSaved
+                                            ? "bg-amber-500 text-white border-amber-400"
+                                            : "bg-slate-900/60 text-white/90 border-white/20 hover:bg-slate-900"
+                                        }`}
+                                      >
+                                        <Heart
+                                          className={`w-3.5 h-3.5 ${
+                                            isSaved ? "fill-current" : ""
+                                          }`}
+                                        />
+                                      </button>
+                                      <div className="absolute bottom-2.5 left-3 right-3 flex items-center justify-between text-[11px] text-white/90">
+                                        <span className="font-semibold">
+                                          {art.category}
+                                        </span>
+                                        <span className="font-mono tabular-nums">
+                                          {art.readTime} · {art.ageRange}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    {/* Card Text */}
+                                    <div className="p-4 space-y-2">
+                                      <h4 className="font-extrabold text-sm text-slate-900 group-hover:text-emerald-700 transition leading-snug">
+                                        {art.title}
+                                      </h4>
+                                      <p className="text-xs text-slate-600 leading-relaxed line-clamp-3">
+                                        {art.summary}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="px-4 pb-4 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                                    <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono tabular-nums">
+                                      <span className="flex items-center gap-1">
+                                        <Eye className="w-3 h-3" />
+                                        <span>{art.views}</span>
+                                      </span>
+                                      {isRead && (
+                                        <>
+                                          <span aria-hidden="true">·</span>
+                                          <span className="text-emerald-600 font-sans font-semibold">
+                                            Прочитано
+                                          </span>
+                                        </>
+                                      )}
+                                    </div>
+                                    <span className="font-bold text-slate-900 group-hover:text-emerald-600 flex items-center gap-1 transition">
+                                      <span>Читать</span>
+                                      <ArrowRight className="w-3.5 h-3.5" />
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                      <button
+
+                      {/* Right Sidebar Column: Interactive Nutrition Planner + Club Documents */}
+                      <div className="lg:col-span-4 space-y-5">
+                        {/* Interactive Widget 1: Конструктор режима и питания в день тренировки */}
+                        <div className="bg-white rounded-2xl p-5 border border-gray-200/80 shadow-2xs space-y-4">
+                          <div className="space-y-1 border-b border-gray-100 pb-3">
+                            <div className="text-[11px] font-bold text-amber-600">
+                              Умный калькулятор режима
+                            </div>
+                            <h3 className="font-extrabold text-slate-900 text-sm">
+                              Таймлайн питания в день тренировки
+                            </h3>
+                            <p className="text-xs text-slate-500">
+                              Выберите время занятия {myClient.childName}, чтобы увидеть
+                              оптимальные часы еды и воды:
+                            </p>
+                          </div>
+
+                          {/* Slot selector buttons */}
+                          <div className="grid grid-cols-1 gap-1.5">
+                            {TRAINING_DAY_SCHEDULES.map((slot) => (
+                              <button
+                                key={slot.id}
+                                type="button"
+                                onClick={() => setActiveScheduleSlotId(slot.id)}
+                                className={`px-3 py-2 rounded-xl text-xs font-bold text-left transition flex items-center justify-between cursor-pointer ${
+                                  activeScheduleSlot.id === slot.id
+                                    ? "bg-slate-900 text-white"
+                                    : "bg-slate-50 hover:bg-slate-100 text-slate-700"
+                                }`}
+                              >
+                                <span>{slot.label}</span>
+                                <span className="font-mono text-[11px] opacity-80 tabular-nums">
+                                  {slot.trainingTime}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Timeline steps */}
+                          <div className="space-y-3 pt-1">
+                            {activeScheduleSlot.steps.map((step, sIdx) => (
+                              <div
+                                key={sIdx}
+                                className="p-3 rounded-xl bg-slate-50 border border-slate-200/70 space-y-1"
+                              >
+                                <div className="flex items-center justify-between text-[11px]">
+                                  <span className="font-mono font-extrabold text-slate-900 tabular-nums">
+                                    {step.time}
+                                  </span>
+                                  <span className="text-amber-700 font-medium">
+                                    {step.phase}
+                                  </span>
+                                </div>
+                                <div className="text-xs font-bold text-slate-800">
+                                  {step.title}
+                                </div>
+                                <p className="text-[11px] text-slate-600 leading-relaxed">
+                                  {step.details}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Quick Club Documents & Rules */}
+                        <div className="bg-white rounded-2xl p-5 border border-gray-200/80 shadow-2xs space-y-4">
+                          <h3 className="font-extrabold text-slate-900 border-b border-gray-100 pb-2.5 text-sm">
+                            Официальные документы и памятки
+                          </h3>
+
+                          {/* Featured Offer Agreement Item */}
+                          <div
+                            onClick={() => setActiveTab("parent_offer")}
+                            className="p-4 bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-2xl shadow-xs transition text-left space-y-2 cursor-pointer hover:shadow-md border border-slate-700"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="font-bold text-xs text-white flex items-center gap-1.5">
+                                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                                <span>Договор публичной оферты</span>
+                              </div>
+                              <span className="text-[10px] font-semibold text-emerald-300">
+                                Действует
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-300 leading-relaxed">
+                              Официальный договор ИП Тюкалов Е.Е. Доступен для чтения,
+                              печати и скачивания.
+                            </p>
+                            <div className="text-xs font-bold text-emerald-400 flex items-center gap-1">
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>Открыть договор →</span>
+                            </div>
+                          </div>
+
+                          {[
+                            {
+                              title: "Комплекс домашней разминки с Рысёнком",
+                              desc: "4 базовых упражнения на чувство мяча и баланс.",
+                              file: "Перейти к разминке →",
+                              action: () => setActiveTab("parent_homeworks"),
+                            },
+                            {
+                              title: "Календарь тренировок и турниров",
+                              desc: "Расписание вашей группы и ближайшие события.",
+                              file: "Смотреть график →",
+                              action: () => setActiveTab("parent_schedule"),
+                            },
+                            {
+                              title: "Связь с тренером и администрацией",
+                              desc: "Быстрый чат по вопросам посещения и здоровья.",
+                              file: "Открыть чат школы →",
+                              action: () => setActiveTab("parent_messages"),
+                            },
+                          ].map((mat, id) => (
+                            <div
+                              key={id}
+                              onClick={mat.action}
+                              className="p-3.5 bg-slate-50 hover:bg-slate-100/80 border border-slate-200/70 rounded-xl transition text-left space-y-1 cursor-pointer"
+                            >
+                              <div className="font-bold text-xs text-slate-900">
+                                {mat.title}
+                              </div>
+                              <p className="text-[11px] text-slate-500 leading-relaxed">
+                                {mat.desc}
+                              </p>
+                              <div className="text-[11px] font-bold text-emerald-700 pt-0.5">
+                                {mat.file}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 5. Interactive Psychology Phrasebook («Словарь поддержки чемпиона») */}
+                    <div className="bg-white rounded-3xl p-6 sm:p-7 border border-gray-200/80 shadow-2xs space-y-5">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-gray-100 pb-4">
+                        <div>
+                          <div className="text-xs font-bold text-indigo-600">
+                            Практикум детского спортивного психолога
+                          </div>
+                          <h3 className="text-lg font-black text-slate-900 mt-0.5">
+                            Словарь поддержки чемпиона: как общаться с ребенком эффективно
+                          </h3>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            Выберите жизненную ситуацию, чтобы сравнить типичную фразу на
+                            эмоциях и поддерживающую формулировку, укрепляющую уверенность
+                            игрока
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Situation selector tabs */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                        {PSYCHOLOGY_SCENARIOS.map((scen, idx) => {
+                          const isSelected = scen.id === activePsychScenario.id;
+                          return (
+                            <button
+                              key={scen.id}
+                              type="button"
+                              onClick={() => setActivePsychScenarioId(scen.id)}
+                              className={`p-3.5 rounded-2xl border text-left transition cursor-pointer flex flex-col justify-between gap-2 ${
+                                isSelected
+                                  ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                                  : "bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200/80"
+                              }`}
+                            >
+                              <div
+                                className={`text-[11px] font-mono font-bold ${
+                                  isSelected ? "text-amber-300" : "text-slate-400"
+                                }`}
+                              >
+                                Ситуация 0{idx + 1}
+                              </div>
+                              <div className="text-xs font-extrabold leading-snug">
+                                {scen.situation}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Comparison Content */}
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+                        {/* Avoid Column */}
+                        <div className="lg:col-span-5 p-5 rounded-2xl bg-rose-50/60 border border-rose-200/80 space-y-2.5 flex flex-col justify-between">
+                          <div className="space-y-2">
+                            <div className="text-xs font-bold text-rose-700">
+                              Фраза на эмоциях (снижает инициативу)
+                            </div>
+                            <p className="text-sm font-bold text-slate-900 leading-snug">
+                              {activePsychScenario.avoidPhrase}
+                            </p>
+                          </div>
+                          <p className="text-xs text-slate-600 leading-relaxed pt-2 border-t border-rose-200/60">
+                            <strong className="text-slate-800">Почему не работает: </strong>
+                            {activePsychScenario.avoidReason}
+                          </p>
+                        </div>
+
+                        {/* Wise Support Column */}
+                        <div className="lg:col-span-5 p-5 rounded-2xl bg-emerald-50/70 border border-emerald-200/80 space-y-2.5 flex flex-col justify-between">
+                          <div className="space-y-2">
+                            <div className="text-xs font-bold text-emerald-800">
+                              Фраза крыльев (формирует характер лидера)
+                            </div>
+                            <p className="text-sm font-bold text-slate-900 leading-snug">
+                              {activePsychScenario.wisePhrase}
+                            </p>
+                          </div>
+                          <p className="text-xs text-slate-600 leading-relaxed pt-2 border-t border-emerald-200/60">
+                            <strong className="text-slate-800">Эффект для ребенка: </strong>
+                            {activePsychScenario.wiseEffect}
+                          </p>
+                        </div>
+
+                        {/* Mascot Note Column */}
+                        <div className="lg:col-span-2 p-4 rounded-2xl bg-slate-900 text-white flex flex-col items-center justify-center text-center space-y-2">
+                          <img
+                            src="/rysenok1.png"
+                            onError={(e) => {
+                              const target = e.currentTarget;
+                              if (!target.src.includes("%D0%A0")) {
+                                target.src = "/Рысенок1.png";
+                              }
+                            }}
+                            alt="Рысёнок"
+                            loading="lazy"
+                            decoding="async"
+                            referrerPolicy="no-referrer"
+                            className="w-16 h-16 object-contain drop-shadow-md"
+                          />
+                          <div className="text-[11px] font-bold text-amber-300">
+                            Мысль Рысёнка
+                          </div>
+                          <p className="text-[11px] text-slate-200 leading-relaxed">
+                            {activePsychScenario.mascotNote}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 6. Full Editorial Article Reader Modal */}
+                    {selectedArticle && (
+                      <div
                         onClick={() => setSelectedArticle(null)}
-                        className="p-1 text-gray-400 hover:text-gray-600 transition ml-2"
-                        title="Закрыть"
+                        className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 z-50"
                       >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-                    <div className="p-5 sm:p-6 text-xs text-slate-700 leading-relaxed whitespace-pre-line text-left overflow-y-auto flex-1">
-                      {selectedArticle.content}
-                    </div>
-                    <div className="p-4 sm:p-5 bg-slate-50 border-t flex justify-between items-center shrink-0">
-                      <span className="text-[11px] text-gray-400">
-                        Просмотров: {selectedArticle.views}
-                      </span>
-                      <button
-                        onClick={() => setSelectedArticle(null)}
-                        className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold"
-                      >
-                        Закрыть статью
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          className="bg-white rounded-3xl w-full max-w-3xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-200 shadow-2xl"
+                        >
+                          {/* Modal Hero Cover */}
+                          <div className="relative h-48 sm:h-56 w-full shrink-0 bg-slate-900 overflow-hidden">
+                            <img
+                              src={selectedArticle.coverImage}
+                              alt={selectedArticle.title}
+                              decoding="async"
+                              referrerPolicy="no-referrer"
+                              className="w-full h-full object-cover opacity-85"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/45 to-transparent" />
+                            <button
+                              type="button"
+                              onClick={() => setSelectedArticle(null)}
+                              className="absolute top-4 right-4 p-2 rounded-full bg-slate-900/70 hover:bg-slate-900 text-white transition cursor-pointer"
+                              title="Закрыть"
+                            >
+                              <X className="w-5 h-5" />
+                            </button>
+                            <div className="absolute bottom-4 left-6 right-6 space-y-1.5 text-left">
+                              <div className="flex flex-wrap items-center gap-2 text-xs text-amber-300 font-medium">
+                                <span>{selectedArticle.category}</span>
+                                <span aria-hidden="true">·</span>
+                                <span className="font-mono tabular-nums">
+                                  Чтение: {selectedArticle.readTime}
+                                </span>
+                                <span aria-hidden="true">·</span>
+                                <span>Возраст: {selectedArticle.ageRange}</span>
+                                <span aria-hidden="true">·</span>
+                                <span>{selectedArticle.author}</span>
+                              </div>
+                              <h3 className="text-lg sm:text-2xl font-black text-white leading-tight">
+                                {selectedArticle.title}
+                              </h3>
+                            </div>
+                          </div>
+
+                          {/* Modal Scrollable Body */}
+                          <div className="p-6 sm:p-8 overflow-y-auto flex-1 space-y-6 text-left">
+                            <p className="text-sm sm:text-base text-slate-700 font-medium leading-relaxed">
+                              {selectedArticle.subtitle}
+                            </p>
+
+                            {/* Key Takeaways Box */}
+                            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
+                              <div className="text-xs font-extrabold text-slate-900">
+                                Главное для родителя (чек-лист памятки):
+                              </div>
+                              <ul className="space-y-2">
+                                {selectedArticle.keyTakeaways.map((item, idx) => (
+                                  <li
+                                    key={idx}
+                                    className="flex items-start gap-2.5 text-xs sm:text-sm text-slate-700 leading-relaxed"
+                                  >
+                                    <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                                    <span>{item}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+
+                            {/* Detailed Sections */}
+                            <div className="space-y-5">
+                              {selectedArticle.sections.map((sec, sIdx) => (
+                                <div key={sIdx} className="space-y-2.5">
+                                  <h4 className="text-base font-extrabold text-slate-900">
+                                    {sec.heading}
+                                  </h4>
+                                  <p className="text-xs sm:text-sm text-slate-700 leading-relaxed">
+                                    {sec.body}
+                                  </p>
+                                  {sec.bullets && sec.bullets.length > 0 && (
+                                    <ul className="space-y-2 pt-1 pl-1">
+                                      {sec.bullets.map((b, bIdx) => (
+                                        <li
+                                          key={bIdx}
+                                          className="flex items-start gap-2.5 text-xs sm:text-sm text-slate-700 leading-relaxed"
+                                        >
+                                          <span className="font-mono font-bold text-slate-400 select-none">
+                                            —
+                                          </span>
+                                          <span>{b}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Mascot Advice Callout inside Article */}
+                            <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 text-white flex flex-col sm:flex-row items-center gap-4">
+                              <img
+                                src="/rysenok1.png"
+                                onError={(e) => {
+                                  const target = e.currentTarget;
+                                  if (!target.src.includes("%D0%A0")) {
+                                    target.src = "/Рысенок1.png";
+                                  }
+                                }}
+                                alt="Рысёнок"
+                                loading="lazy"
+                                decoding="async"
+                                referrerPolicy="no-referrer"
+                                className="w-16 h-16 object-contain shrink-0 drop-shadow-md"
+                              />
+                              <div className="space-y-1 text-center sm:text-left">
+                                <div className="text-xs font-bold text-amber-300">
+                                  Напутствие от Рысёнка для {myClient.childName}
+                                </div>
+                                <p className="text-xs sm:text-sm text-slate-200 leading-relaxed">
+                                  «{selectedArticle.mascotTip}»
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Modal Footer */}
+                          <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 shrink-0">
+                            <button
+                              type="button"
+                              onClick={(e) => toggleSaveKbArticle(selectedArticle.id, e)}
+                              className={`px-4 py-2 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer ${
+                                savedKbIds.includes(selectedArticle.id)
+                                  ? "bg-amber-50 text-amber-800 border-amber-300"
+                                  : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100"
+                              }`}
+                            >
+                              <Heart
+                                className={`w-3.5 h-3.5 ${
+                                  savedKbIds.includes(selectedArticle.id)
+                                    ? "fill-current text-amber-500"
+                                    : ""
+                                }`}
+                              />
+                              <span>
+                                {savedKbIds.includes(selectedArticle.id)
+                                  ? "Сохранено в закладках"
+                                  : "В закладки"}
+                              </span>
+                            </button>
+
+                            <div className="flex items-center gap-2">
+                              {selectedArticle.relatedTab && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const targetTab = selectedArticle.relatedTab!.tabId;
+                                    setSelectedArticle(null);
+                                    setActiveTab(targetTab);
+                                  }}
+                                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                                >
+                                  <span>{selectedArticle.relatedTab.buttonLabel}</span>
+                                  <ArrowRight className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setSelectedArticle(null)}
+                                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition cursor-pointer"
+                              >
+                                Закрыть
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </motion.div>
           )}
 
@@ -3222,14 +3871,15 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                             <div className="absolute inset-0 bg-gradient-to-tr from-red-600/25 via-amber-500/15 to-transparent rounded-full blur-2xl" />
                             <div className="relative w-40 h-44 sm:w-48 sm:h-52 rounded-3xl bg-white/5 border border-white/15 p-3 flex items-center justify-center shadow-inner">
                               <img
-                                src="/Рысенок1.png"
+                                src="/rysenok1.png"
                                 onError={(e) => {
                                   const target = e.currentTarget;
-                                  if (!target.src.includes("rysenok1.png")) {
-                                    target.src = "/rysenok1.png";
+                                  if (!target.src.includes("%D0%A0")) {
+                                    target.src = "/Рысенок1.png";
                                   }
                                 }}
                                 alt="Наставник Рысёнок — Домашние задания"
+                                decoding="async"
                                 referrerPolicy="no-referrer"
                                 className="w-full h-full object-contain drop-shadow-[0_12px_20px_rgba(0,0,0,0.45)] transform group-hover:scale-105 transition-transform duration-200 select-none"
                               />
@@ -3417,14 +4067,16 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                         <div className="col-span-full p-8 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-6">
                           <div className="flex items-center gap-4">
                             <img
-                              src="/Рысенок1.png"
+                              src="/rysenok1.png"
                               onError={(e) => {
                                 const target = e.currentTarget;
-                                if (!target.src.includes("rysenok1.png")) {
-                                  target.src = "/rysenok1.png";
+                                if (!target.src.includes("%D0%A0")) {
+                                  target.src = "/Рысенок1.png";
                                 }
                               }}
                               alt="Рысёнок"
+                              loading="lazy"
+                              decoding="async"
                               referrerPolicy="no-referrer"
                               className="w-20 h-20 object-contain shrink-0 drop-shadow-md"
                             />
@@ -3509,14 +4161,16 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                                 <div className="flex items-center gap-2">
                                   {isDone && (
                                     <img
-                                      src="/Рысенок1.png"
+                                      src="/rysenok1.png"
                                       onError={(e) => {
                                         const target = e.currentTarget;
-                                        if (!target.src.includes("rysenok1.png")) {
-                                          target.src = "/rysenok1.png";
+                                        if (!target.src.includes("%D0%A0")) {
+                                          target.src = "/Рысенок1.png";
                                         }
                                       }}
                                       alt="Рысёнок"
+                                      loading="lazy"
+                                      decoding="async"
                                       referrerPolicy="no-referrer"
                                       className="w-7 h-7 object-contain shrink-0"
                                     />
