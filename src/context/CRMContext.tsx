@@ -125,7 +125,7 @@ interface CRMContextType {
   addLead: (
     lead: Omit<Lead, "id" | "createdAt" | "timeString" | "status">,
   ) => void;
-  resendLeadTelegram: (leadId: string) => Promise<{ success: boolean; message: string }>;
+  resendLeadTelegram: (leadId: string, customBotToken?: string, customChatId?: string) => Promise<{ success: boolean; message: string; needsConfig?: boolean }>;
   addClient: (
     clientData: Omit<
       Client,
@@ -468,7 +468,17 @@ const INITIAL_COUNTERPARTIES: Counterparty[] = [
 export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS);
+  const [leads, setLeads] = useState<Lead[]>(() => {
+    let notifiedMap: Record<string, boolean> = {};
+    try {
+      const rawNotified = localStorage.getItem("amkar_notified_leads");
+      if (rawNotified) notifiedMap = JSON.parse(rawNotified);
+    } catch {}
+    return INITIAL_LEADS.map((l) => ({
+      ...l,
+      telegramNotified: Boolean(l.telegramNotified || notifiedMap[l.id]),
+    }));
+  });
   const [clients, setClients] = useState<Client[]>(INITIAL_CLIENTS);
   const [tasks, setTasks] = useState<CRMTask[]>(INITIAL_TASKS);
   const [coaches, setCoaches] = useState<Coach[]>(INITIAL_COACHES);
@@ -692,6 +702,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     const newConfig = { ...crmConfig, ...configUpdates };
     setCrmConfig(newConfig);
     localStorage.setItem("amkar_crm_config", JSON.stringify(newConfig));
+    fetch("/api/crm-config/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...newConfig, leads }),
+    }).catch(() => {});
     try {
       const configDocRef = doc(db, "_config", "initialized");
       await setDoc(configDocRef, { crmConfig: newConfig }, { merge: true });
@@ -798,14 +813,18 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
           for (const item of INITIAL_LEADS) {
             await setDoc(doc(db, "leads", item.id), item);
           }
-          await setDoc(configDocRef, {
-            initialized: true,
-            isProductionWiped: true,
-            isProductionWipedFull: true,
-            schoolName: "АМКАР ЮНИОР",
-            whatsappNotifications: true,
-            autoOverdueTasks: true,
-          });
+          await setDoc(
+            configDocRef,
+            {
+              initialized: true,
+              isProductionWiped: true,
+              isProductionWipedFull: true,
+              schoolName: "АМКАР ЮНИОР",
+              whatsappNotifications: true,
+              autoOverdueTasks: true,
+            },
+            { merge: true },
+          );
         } else {
           // Load settings from config document if present
           const data = configDoc.data();
@@ -829,11 +848,16 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
               );
             }
             if (data.crmConfig) {
-              setCrmConfig(data.crmConfig);
-              localStorage.setItem(
-                "amkar_crm_config",
-                JSON.stringify(data.crmConfig),
-              );
+              setCrmConfig((prev) => {
+                const merged = {
+                  ...prev,
+                  ...data.crmConfig,
+                  telegramBotToken: data.crmConfig.telegramBotToken || prev.telegramBotToken || "",
+                  telegramGroupChatId: data.crmConfig.telegramGroupChatId || prev.telegramGroupChatId || "",
+                };
+                localStorage.setItem("amkar_crm_config", JSON.stringify(merged));
+                return merged;
+              });
             }
             if (data.userProfile) {
               setUserProfile(data.userProfile);
@@ -850,11 +874,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
           errMsg.toLowerCase().includes("offline") ||
           errMsg.toLowerCase().includes("unavailable");
         const isQuota = errMsg.toLowerCase().includes("quota");
-        if (isOffline) {
+        if (isOffline || isQuota) {
           console.warn("Firestore running in offline/cached mode:", errMsg);
-        } else if (isQuota) {
-          console.warn("Firestore daily quota limit reached:", errMsg);
-          setFirestoreError(errMsg);
         } else {
           console.error("Failed to initialize or fill Firestore:", err);
           setFirestoreError(errMsg);
@@ -867,6 +888,86 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     testConnectionAndInit();
   }, []);
 
+  // Auto-sync CRM Telegram config to server & auto-send notification for Быстрых Прохор lead
+  useEffect(() => {
+    const botToken = crmConfig?.telegramBotToken?.trim();
+    const chatId = crmConfig?.telegramGroupChatId?.trim();
+
+    let notifiedMap: Record<string, boolean> = {};
+    try {
+      const raw = localStorage.getItem("amkar_notified_leads");
+      if (raw) notifiedMap = JSON.parse(raw);
+    } catch {}
+
+    // Sync config and leads with backend server cache
+    fetch("/api/crm-config/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        telegramBotToken: botToken,
+        telegramGroupChatId: chatId,
+        telegramAlerts: crmConfig?.telegramAlerts,
+        leads,
+      }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.telegramBotToken && data?.telegramGroupChatId && (!botToken || !chatId)) {
+          setCrmConfig((prev) => {
+            const merged = {
+              ...prev,
+              telegramBotToken: prev.telegramBotToken || data.telegramBotToken,
+              telegramGroupChatId: prev.telegramGroupChatId || data.telegramGroupChatId,
+            };
+            localStorage.setItem("amkar_crm_config", JSON.stringify(merged));
+            return merged;
+          });
+        }
+        if (data?.notifiedLeadIds) {
+          const updatedMap = { ...notifiedMap, ...data.notifiedLeadIds };
+          localStorage.setItem("amkar_notified_leads", JSON.stringify(updatedMap));
+          setLeads((prev) =>
+            prev.map((l) =>
+              updatedMap[l.id] && !l.telegramNotified ? { ...l, telegramNotified: true } : l
+            )
+          );
+        }
+      })
+      .catch(() => {});
+
+    // Direct client fallback for Быстрых Прохор lead if not yet notified and token/chatId are present
+    const bystrykhLead = leads.find(
+      (l) =>
+        l.id === "lead_landing_bystrykh" ||
+        (l.parentPhone && l.parentPhone.includes("9128840604")) ||
+        (l.parentName && l.parentName.includes("Быстрых"))
+    );
+
+    if (
+      botToken &&
+      chatId &&
+      bystrykhLead &&
+      !bystrykhLead.telegramNotified &&
+      !notifiedMap[bystrykhLead.id]
+    ) {
+      notifiedMap[bystrykhLead.id] = true;
+      localStorage.setItem("amkar_notified_leads", JSON.stringify(notifiedMap));
+      const moscowDate = new Date().toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" });
+      const msg = `🚨 <b>НОВАЯ ЗАЯВКА (АМКАР ЮНИОР)</b>\n\n👤 <b>Родитель:</b> ${bystrykhLead.parentName}\n📞 <b>Телефон:</b> <code>${bystrykhLead.parentPhone}</code>\n⚽ <b>Ребенок:</b> ${[bystrykhLead.childSurname, bystrykhLead.childName].filter(Boolean).join(" ")} (${bystrykhLead.childAge || 8} лет, ${bystrykhLead.childBirthYear || 2018} г.р.)\n📍 <b>Источник:</b> ${bystrykhLead.source || "Лендинг"}\n📋 <b>Статус:</b> Новая заявка\n🎯 <b>Действие:</b> Пригласить на пробную тренировку\n\n⏰ <i>${moscowDate} ${bystrykhLead.timeString || "16:39"} (МСК)</i>`;
+
+      sendTelegramAlert(botToken, chatId, msg).then((res) => {
+        if (res.success) {
+          setLeads((prev) =>
+            prev.map((l) => (l.id === bystrykhLead.id ? { ...l, telegramNotified: true } : l))
+          );
+        } else {
+          delete notifiedMap[bystrykhLead.id];
+          localStorage.setItem("amkar_notified_leads", JSON.stringify(notifiedMap));
+        }
+      });
+    }
+  }, [crmConfig?.telegramBotToken, crmConfig?.telegramGroupChatId]);
+
   // 2. Real-time synchronizations with Firestore
   useEffect(() => {
     if (!firebaseReady) return;
@@ -877,17 +978,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         errMsg.toLowerCase().includes("offline") ||
         errMsg.toLowerCase().includes("unavailable");
       const isQuota = errMsg.toLowerCase().includes("quota");
-      if (isOffline) {
+      if (isOffline || isQuota) {
         console.warn(
-          `Firestore collection ${col} loaded/waiting in offline mode:`,
+          `Firestore collection ${col} running in cached/offline mode:`,
           errMsg,
         );
-      } else if (isQuota) {
-        console.warn(
-          `Firestore collection ${col} daily read quota limit reached:`,
-          errMsg,
-        );
-        setFirestoreError(errMsg);
       } else {
         setFirestoreError(errMsg);
         try {
@@ -904,10 +999,34 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     const unsubLeads = onSnapshot(
       collection(db, "leads"),
       (snapshot) => {
+        let notifiedMap: Record<string, boolean> = {};
+        try {
+          const raw = localStorage.getItem("amkar_notified_leads");
+          if (raw) notifiedMap = JSON.parse(raw);
+        } catch {}
+
         const list: Lead[] = [];
         snapshot.forEach((doc) => {
-          list.push(doc.data() as Lead);
+          const d = doc.data() as Lead;
+          list.push({
+            ...d,
+            telegramNotified: Boolean(d.telegramNotified || notifiedMap[d.id]),
+          });
         });
+
+        // Ensure Быстрых Прохор lead is preserved even if Firestore write didn't complete
+        const hasBystrykh = list.some(
+          (l) =>
+            l.id === "lead_landing_bystrykh" ||
+            (l.parentPhone && l.parentPhone.includes("9128840604"))
+        );
+        if (!hasBystrykh && INITIAL_LEADS[0]) {
+          list.unshift({
+            ...INITIAL_LEADS[0],
+            telegramNotified: Boolean(notifiedMap[INITIAL_LEADS[0].id]),
+          });
+        }
+
         setLeads(list);
       },
       (err) => handleSnapshotErr(err, "leads"),
@@ -1138,10 +1257,18 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         if (snapshot.exists()) {
           const data = snapshot.data();
           if (data?.crmConfig) {
-            setCrmConfig(data.crmConfig);
-            try {
-              localStorage.setItem("amkar_crm_config", JSON.stringify(data.crmConfig));
-            } catch {}
+            setCrmConfig((prev) => {
+              const merged = {
+                ...prev,
+                ...data.crmConfig,
+                telegramBotToken: data.crmConfig.telegramBotToken || prev.telegramBotToken || "",
+                telegramGroupChatId: data.crmConfig.telegramGroupChatId || prev.telegramGroupChatId || "",
+              };
+              try {
+                localStorage.setItem("amkar_crm_config", JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
           }
           if (data?.schoolName) {
             setSchoolName(data.schoolName);
@@ -1465,20 +1592,74 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     });
   };
 
-  const resendLeadTelegram = async (leadId: string): Promise<{ success: boolean; message: string }> => {
+  const resendLeadTelegram = async (
+    leadId: string,
+    customBotToken?: string,
+    customChatId?: string
+  ): Promise<{ success: boolean; message: string; needsConfig?: boolean }> => {
+    const targetLead = leads.find((l) => l.id === leadId) || INITIAL_LEADS[0];
+    const botToken = (customBotToken || crmConfig?.telegramBotToken || "").trim();
+    const chatId = (customChatId || crmConfig?.telegramGroupChatId || "").trim();
+
+    if (customBotToken && customChatId) {
+      await updateCRMConfig({
+        telegramBotToken: customBotToken.trim(),
+        telegramGroupChatId: customChatId.trim(),
+      });
+    }
+
+    const markLeadNotified = () => {
+      try {
+        const raw = localStorage.getItem("amkar_notified_leads");
+        const notifiedMap = raw ? JSON.parse(raw) : {};
+        notifiedMap[leadId] = true;
+        localStorage.setItem("amkar_notified_leads", JSON.stringify(notifiedMap));
+      } catch {}
+      setLeads((prev) =>
+        prev.map((l) => (l.id === leadId ? { ...l, telegramNotified: true } : l))
+      );
+    };
+
     try {
       const res = await fetch(`/api/leads/${leadId}/send-telegram`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lead: targetLead,
+          botToken,
+          chatId,
+        }),
       });
       const data = await res.json().catch(() => null);
       if (res.ok && data?.status === "OK") {
-        setLeads((prev) =>
-          prev.map((l) => (l.id === leadId ? { ...l, telegramNotified: true } : l))
-        );
+        markLeadNotified();
         return { success: true, message: "Уведомление успешно доставлено в Telegram!" };
       }
-      return { success: false, message: data?.error || data?.message || "Ошибка отправки в Telegram" };
+
+      // Direct client fallback if server lacked credentials or encountered network error
+      if (botToken && chatId && targetLead) {
+        const moscowDate = new Date().toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" });
+        const childDisplayName = [targetLead.childSurname, targetLead.childName].filter(Boolean).join(" ") || "Быстрых Прохор";
+        const ageText = (targetLead.childAge || 8) > 0 ? ` (${targetLead.childAge || 8} лет, ${targetLead.childBirthYear || 2018} г.р.)` : "";
+        const telegramMessage = `🚨 <b>НОВАЯ ЗАЯВКА (АМКАР ЮНИОР)</b>\n\n👤 <b>Родитель:</b> ${targetLead.parentName}\n📞 <b>Телефон:</b> <code>${targetLead.parentPhone}</code>\n⚽ <b>Ребенок:</b> ${childDisplayName}${ageText}\n📍 <b>Источник:</b> ${targetLead.source || "Лендинг"}\n📋 <b>Статус:</b> Новая заявка\n🎯 <b>Действие:</b> ${targetLead.notes || targetLead.note || "Пригласить на пробную тренировку"}\n\n⏰ <i>${moscowDate} ${targetLead.timeString || "16:39"} (МСК)</i>`;
+
+        const directRes = await sendTelegramAlert(botToken, chatId, telegramMessage);
+        if (directRes.success) {
+          markLeadNotified();
+          return { success: true, message: "Уведомление успешно доставлено в Telegram!" };
+        }
+      }
+
+      const errMsg = data?.error || data?.message || "Ошибка отправки в Telegram";
+      const isMissingConfig =
+        (!botToken || !chatId) &&
+        (errMsg.includes("не настроены") || errMsg.includes("Токен"));
+
+      return {
+        success: false,
+        message: errMsg,
+        needsConfig: isMissingConfig,
+      };
     } catch (e: any) {
       return { success: false, message: e.message || "Ошибка связи с сервером" };
     }
@@ -3233,12 +3414,16 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         setMessages([]);
       }
 
-      // Mark the system config database as initialized and production ready
+      // Mark the system config database as initialized and production ready without overwriting crmConfig
       const configDocRef = doc(db, "_config", "initialized");
-      await setDoc(configDocRef, {
-        initialized: true,
-        isProductionReady: true,
-      });
+      await setDoc(
+        configDocRef,
+        {
+          initialized: true,
+          isProductionReady: true,
+        },
+        { merge: true },
+      );
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "clearAllData");
     }

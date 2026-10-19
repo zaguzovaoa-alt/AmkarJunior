@@ -101,12 +101,27 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState<boolean>(false);
   const [sendingTelegramLeadId, setSendingTelegramLeadId] = useState<string | null>(null);
   const [telegramToast, setTelegramToast] = useState<{ text: string; error?: boolean } | null>(null);
+  const [quickTgModalLeadId, setQuickTgModalLeadId] = useState<string | null>(null);
+  const [quickBotToken, setQuickBotToken] = useState<string>(crmConfig?.telegramBotToken || "");
+  const [quickChatId, setQuickChatId] = useState<string>(crmConfig?.telegramGroupChatId || "");
 
-  const handleSendLeadTelegram = async (leadId: string) => {
+  React.useEffect(() => {
+    if (crmConfig?.telegramBotToken) setQuickBotToken(crmConfig.telegramBotToken);
+    if (crmConfig?.telegramGroupChatId) setQuickChatId(crmConfig.telegramGroupChatId);
+  }, [crmConfig?.telegramBotToken, crmConfig?.telegramGroupChatId]);
+
+  const handleSendLeadTelegram = async (leadId: string, customToken?: string, customChat?: string) => {
     setSendingTelegramLeadId(leadId);
     try {
-      const res = await resendLeadTelegram(leadId);
-      setTelegramToast({ text: res.message, error: !res.success });
+      const res = await resendLeadTelegram(leadId, customToken, customChat);
+      if (!res.success && res.needsConfig) {
+        setQuickTgModalLeadId(leadId);
+      } else {
+        setTelegramToast({ text: res.message, error: !res.success });
+        if (res.success) {
+          setQuickTgModalLeadId(null);
+        }
+      }
     } catch (e: any) {
       setTelegramToast({ text: e.message || "Ошибка отправки в Telegram", error: true });
     } finally {
@@ -4918,6 +4933,80 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
           setPaymentModalClient(null);
         }}
       />
+
+      {quickTgModalLeadId && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 border border-slate-200">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-sky-100 text-sky-600 flex items-center justify-center">
+                  <Send className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">
+                    Подключение Telegram-чата
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Введите данные один раз — они сохранятся на сервере и в CRM
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setQuickTgModalLeadId(null)}
+                className="text-slate-400 hover:text-slate-600 text-lg font-bold px-2"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 mb-5">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Токен Telegram-бота (от @BotFather)
+                </label>
+                <input
+                  type="text"
+                  value={quickBotToken}
+                  onChange={(e) => setQuickBotToken(e.target.value)}
+                  placeholder="Например: 7123456789:AAH..."
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  ID Группы / Чата (например -100... или @channel)
+                </label>
+                <input
+                  type="text"
+                  value={quickChatId}
+                  onChange={(e) => setQuickChatId(e.target.value)}
+                  placeholder="Например: -1001234567890"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={() => setQuickTgModalLeadId(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
+              >
+                Отмена
+              </button>
+              <button
+                disabled={!quickBotToken.trim() || !quickChatId.trim() || sendingTelegramLeadId === quickTgModalLeadId}
+                onClick={() => handleSendLeadTelegram(quickTgModalLeadId, quickBotToken, quickChatId)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 disabled:opacity-50 transition flex items-center gap-1.5 shadow-sm"
+              >
+                <Send className="w-3.5 h-3.5" />
+                {sendingTelegramLeadId === quickTgModalLeadId
+                  ? "Отправка..."
+                  : "Сохранить и отправить заявку"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {telegramToast && (
         <div

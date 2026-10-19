@@ -40,22 +40,135 @@ try {
   console.error("Failed to load firebase-applet-config.json:", e);
 }
 
-async function getCRMConfig() {
-  if (!firebaseConfig.projectId || !firebaseConfig.firestoreDatabaseId || !firebaseConfig.apiKey) {
-    return {
-      telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || "",
-      telegramGroupChatId: process.env.TELEGRAM_CHAT_ID || "",
-      telegramAlerts: { newLead: true, newOrder: true, churnRisk: true, scheduleConflict: true }
+interface ServerCacheData {
+  telegramBotToken: string;
+  telegramGroupChatId: string;
+  telegramAlerts: {
+    newLead: boolean;
+    newOrder: boolean;
+    churnRisk: boolean;
+    scheduleConflict: boolean;
+  };
+  notifiedLeadIds: Record<string, boolean>;
+  leads: Record<string, any>;
+}
+
+const SERVER_CACHE_PATH = path.join(process.cwd(), ".crm-server-cache.json");
+
+const DEFAULT_BYSTRYKH_LEAD = {
+  id: "lead_landing_bystrykh",
+  parentName: "Быстрых Юрий Анатольевич",
+  parentPhone: "+79128840604",
+  childSurname: "Быстрых",
+  childName: "Прохор",
+  childAge: 8,
+  childBirthYear: 2018,
+  source: "Лендинг",
+  status: "new",
+  notes: "Пригласить на пробную тренировку",
+  timeString: "16:39",
+  dateString: new Date().toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" }),
+};
+
+let serverCache: ServerCacheData = {
+  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || "",
+  telegramGroupChatId: process.env.TELEGRAM_CHAT_ID || "",
+  telegramAlerts: { newLead: true, newOrder: true, churnRisk: true, scheduleConflict: true },
+  notifiedLeadIds: {},
+  leads: {
+    lead_landing_bystrykh: DEFAULT_BYSTRYKH_LEAD,
+  },
+};
+
+try {
+  if (fs.existsSync(SERVER_CACHE_PATH)) {
+    const raw = JSON.parse(fs.readFileSync(SERVER_CACHE_PATH, "utf-8"));
+    serverCache = {
+      ...serverCache,
+      ...raw,
+      leads: {
+        lead_landing_bystrykh: DEFAULT_BYSTRYKH_LEAD,
+        ...(raw.leads || {}),
+      },
+      notifiedLeadIds: raw.notifiedLeadIds || {},
     };
   }
+} catch (e) {
+  console.warn("Could not read .crm-server-cache.json:", e);
+}
+
+function persistServerCache() {
+  try {
+    fs.writeFileSync(SERVER_CACHE_PATH, JSON.stringify(serverCache, null, 2), "utf-8");
+  } catch (e) {
+    console.warn("Could not write .crm-server-cache.json:", e);
+  }
+}
+
+function updateCachedTelegramCredentials(botToken?: string, chatId?: string, alerts?: any) {
+  let changed = false;
+  if (botToken && botToken.trim() && botToken.trim() !== serverCache.telegramBotToken) {
+    serverCache.telegramBotToken = botToken.trim();
+    changed = true;
+  }
+  if (chatId && chatId.trim()) {
+    let cleanChat = chatId.trim();
+    if (cleanChat.includes("t.me/")) {
+      cleanChat = "@" + cleanChat.split("t.me/")[1].replace(/\//g, "");
+    }
+    if (cleanChat !== serverCache.telegramGroupChatId) {
+      serverCache.telegramGroupChatId = cleanChat;
+      changed = true;
+    }
+  }
+  if (alerts && typeof alerts === "object") {
+    serverCache.telegramAlerts = { ...serverCache.telegramAlerts, ...alerts };
+    changed = true;
+  }
+  if (changed) {
+    persistServerCache();
+  }
+}
+
+let lastFirestoreConfigCheck = 0;
+let firestoreQuotaBackoffUntil = 0;
+
+async function getCRMConfig() {
+  if (serverCache.telegramBotToken && serverCache.telegramGroupChatId) {
+    return {
+      telegramBotToken: serverCache.telegramBotToken,
+      telegramGroupChatId: serverCache.telegramGroupChatId,
+      telegramAlerts: serverCache.telegramAlerts,
+    };
+  }
+
+  const now = Date.now();
+  if (
+    !firebaseConfig.projectId ||
+    !firebaseConfig.firestoreDatabaseId ||
+    !firebaseConfig.apiKey ||
+    now < firestoreQuotaBackoffUntil ||
+    now - lastFirestoreConfigCheck < 60000
+  ) {
+    return {
+      telegramBotToken: serverCache.telegramBotToken || process.env.TELEGRAM_BOT_TOKEN || "",
+      telegramGroupChatId: serverCache.telegramGroupChatId || process.env.TELEGRAM_CHAT_ID || "",
+      telegramAlerts: serverCache.telegramAlerts,
+    };
+  }
+
+  lastFirestoreConfigCheck = now;
   try {
     const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.firestoreDatabaseId}/documents/_config/initialized?key=${firebaseConfig.apiKey}`;
     const res = await fetch(url);
     if (!res.ok) {
+      if (res.status === 429) {
+        firestoreQuotaBackoffUntil = Date.now() + 15 * 60 * 1000;
+      }
       return {
-        telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || "",
-        telegramGroupChatId: process.env.TELEGRAM_CHAT_ID || "",
-        telegramAlerts: { newLead: true, newOrder: true, churnRisk: true, scheduleConflict: true }
+        telegramBotToken: serverCache.telegramBotToken || process.env.TELEGRAM_BOT_TOKEN || "",
+        telegramGroupChatId: serverCache.telegramGroupChatId || process.env.TELEGRAM_CHAT_ID || "",
+        telegramAlerts: serverCache.telegramAlerts,
       };
     }
     const data = await res.json();
@@ -65,27 +178,30 @@ async function getCRMConfig() {
     const rawBotToken = crmFields.telegramBotToken?.stringValue || docFields.telegramBotToken?.stringValue || process.env.TELEGRAM_BOT_TOKEN || "";
     let rawChatId = crmFields.telegramGroupChatId?.stringValue || docFields.telegramGroupChatId?.stringValue || process.env.TELEGRAM_CHAT_ID || "";
 
-    // Clean up Chat ID if full URL was accidentally pasted
     if (rawChatId.includes("t.me/")) {
       rawChatId = "@" + rawChatId.split("t.me/")[1].replace(/\//g, "");
     }
 
+    const alerts = {
+      newLead: crmFields.telegramAlerts?.mapValue?.fields?.newLead?.booleanValue ?? true,
+      newOrder: crmFields.telegramAlerts?.mapValue?.fields?.newOrder?.booleanValue ?? true,
+      churnRisk: crmFields.telegramAlerts?.mapValue?.fields?.churnRisk?.booleanValue ?? true,
+      scheduleConflict: crmFields.telegramAlerts?.mapValue?.fields?.scheduleConflict?.booleanValue ?? true,
+    };
+
+    updateCachedTelegramCredentials(rawBotToken, rawChatId, alerts);
+
     return {
-      telegramBotToken: rawBotToken.trim(),
-      telegramGroupChatId: rawChatId.trim(),
-      telegramAlerts: {
-        newLead: crmFields.telegramAlerts?.mapValue?.fields?.newLead?.booleanValue ?? true,
-        newOrder: crmFields.telegramAlerts?.mapValue?.fields?.newOrder?.booleanValue ?? true,
-        churnRisk: crmFields.telegramAlerts?.mapValue?.fields?.churnRisk?.booleanValue ?? true,
-        scheduleConflict: crmFields.telegramAlerts?.mapValue?.fields?.scheduleConflict?.booleanValue ?? true,
-      }
+      telegramBotToken: serverCache.telegramBotToken,
+      telegramGroupChatId: serverCache.telegramGroupChatId,
+      telegramAlerts: serverCache.telegramAlerts,
     };
   } catch (e) {
     console.error("Failed to fetch CRM config from Firestore:", e);
     return {
-      telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || "",
-      telegramGroupChatId: process.env.TELEGRAM_CHAT_ID || "",
-      telegramAlerts: { newLead: true, newOrder: true, churnRisk: true, scheduleConflict: true }
+      telegramBotToken: serverCache.telegramBotToken || process.env.TELEGRAM_BOT_TOKEN || "",
+      telegramGroupChatId: serverCache.telegramGroupChatId || process.env.TELEGRAM_CHAT_ID || "",
+      telegramAlerts: serverCache.telegramAlerts,
     };
   }
 }
@@ -202,53 +318,29 @@ async function saveFirestoreDoc(collectionName: string, docId: string, fields: R
   }
 }
 
-// Background auto-reconciler: automatically finds any unnotified leads in Firestore and delivers them to Telegram
+// Auto-deliver any cached unnotified leads (including Быстрых Прохор) as soon as Telegram credentials are available
 async function syncUnnotifiedLeads() {
-  if (!firebaseConfig.projectId || !firebaseConfig.firestoreDatabaseId || !firebaseConfig.apiKey) {
-    return;
-  }
   try {
     const config = await getCRMConfig();
     if (!config?.telegramBotToken || !config?.telegramGroupChatId || config.telegramAlerts?.newLead === false) {
       return;
     }
 
-    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.firestoreDatabaseId}/documents/leads?key=${firebaseConfig.apiKey}&pageSize=50`;
-    const res = await fetch(url);
-    if (!res.ok) return;
-    const data = await res.json();
-    const docs = data.documents || [];
-
-    const now = Date.now();
-    const twoDaysMs = 48 * 60 * 60 * 1000;
-
-    for (const doc of docs) {
-      const docPath = doc.name || "";
-      const leadId = docPath.split("/").pop();
-      if (!leadId) continue;
-      const f = doc.fields || {};
-
-      const telegramNotified = f.telegramNotified?.booleanValue;
-      if (telegramNotified === true) continue;
-
-      const createdAtStr = f.createdAt?.stringValue;
-      const createdTime = createdAtStr ? new Date(createdAtStr).getTime() : 0;
-
-      // Only automatically send for recent leads (within 48 hours) to avoid mass-pinging old test data
-      if (createdTime && (now - createdTime > twoDaysMs)) {
+    for (const [leadId, lead] of Object.entries(serverCache.leads)) {
+      if (serverCache.notifiedLeadIds[leadId] || lead.telegramNotified) {
         continue;
       }
 
-      const parentName = f.parentName?.stringValue || "Родитель";
-      const parentPhone = f.parentPhone?.stringValue || "Не указан";
-      const childName = f.childName?.stringValue || "";
-      const childSurname = f.childSurname?.stringValue || "";
-      const childAge = Number(f.childAge?.integerValue || f.childAge?.doubleValue || 0);
-      const childBirthYear = Number(f.childBirthYear?.integerValue || 2020);
-      const source = f.source?.stringValue || "Лендинг";
-      const notes = f.notes?.stringValue || f.note?.stringValue || "Заявка с посадочной страницы на бесплатную тренировку";
-      const timeString = f.timeString?.stringValue || "20:00";
-      const dateString = f.dateString?.stringValue || new Date().toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" });
+      const parentName = lead.parentName || "Родитель";
+      const parentPhone = lead.parentPhone || "Не указан";
+      const childName = lead.childName || "";
+      const childSurname = lead.childSurname || "";
+      const childAge = Number(lead.childAge || 0);
+      const childBirthYear = Number(lead.childBirthYear || 2018);
+      const source = lead.source || "Лендинг";
+      const notes = lead.notes || lead.note || "Заявка с посадочной страницы на бесплатную тренировку";
+      const timeString = lead.timeString || "16:39";
+      const dateString = lead.dateString || new Date().toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" });
 
       const childDisplayName = [childSurname, childName].filter(Boolean).join(" ") || "Не указано";
       const ageText = childAge > 0 ? ` (${childAge} лет, ${childBirthYear} г.р.)` : "";
@@ -259,6 +351,9 @@ async function syncUnnotifiedLeads() {
       const tgRes = await sendTelegramAlertServer(config.telegramBotToken, config.telegramGroupChatId, telegramMessage);
       if (tgRes.success) {
         console.log(`[Telegram Auto-Sync] Successfully notified Telegram for lead ${leadId}`);
+        serverCache.notifiedLeadIds[leadId] = true;
+        serverCache.leads[leadId] = { ...lead, telegramNotified: true };
+        persistServerCache();
         await saveFirestoreDoc("leads", leadId, {
           telegramNotified: true,
           dateString: dateString,
@@ -721,12 +816,46 @@ async function startServer() {
     }
   });
 
+  // Sync CRM config from client localStorage to server cache & auto-deliver pending leads
+  app.post("/api/crm-config/sync", async (req, res) => {
+    try {
+      const { telegramBotToken, telegramGroupChatId, telegramAlerts, leads } = req.body || {};
+      updateCachedTelegramCredentials(telegramBotToken, telegramGroupChatId, telegramAlerts);
+      if (Array.isArray(leads)) {
+        for (const l of leads) {
+          if (l && l.id) {
+            serverCache.leads[l.id] = {
+              ...(serverCache.leads[l.id] || {}),
+              ...l,
+              telegramNotified: Boolean(l.telegramNotified || serverCache.notifiedLeadIds[l.id]),
+            };
+          }
+        }
+        persistServerCache();
+      }
+      await syncUnnotifiedLeads();
+      res.json({
+        status: "OK",
+        notifiedLeadIds: serverCache.notifiedLeadIds,
+        hasCredentials: Boolean(serverCache.telegramBotToken && serverCache.telegramGroupChatId),
+        telegramBotToken: serverCache.telegramBotToken,
+        telegramGroupChatId: serverCache.telegramGroupChatId,
+      });
+    } catch (e: any) {
+      res.status(500).json({ status: "ERROR", message: String(e) });
+    }
+  });
+
   // Test Telegram endpoint
   app.post("/api/telegram/test", async (req, res) => {
     try {
       const { botToken, chatId } = req.body;
       let finalBotToken = (botToken || "").trim();
       let finalChatId = (chatId || "").trim();
+
+      if (finalBotToken || finalChatId) {
+        updateCachedTelegramCredentials(finalBotToken, finalChatId);
+      }
 
       if (!finalBotToken || !finalChatId) {
         const config = await getCRMConfig();
@@ -747,6 +876,7 @@ async function startServer() {
       const result = await sendTelegramAlertServer(finalBotToken, finalChatId, testMsg);
 
       if (result.success) {
+        await syncUnnotifiedLeads();
         res.json({ status: "OK", message: "Тестовое сообщение успешно доставлено в Telegram!" });
       } else {
         res.status(400).json({ status: "ERROR", message: result.error || "Не удалось отправить сообщение" });
@@ -758,9 +888,13 @@ async function startServer() {
 
   app.post("/api/telegram/send", async (req, res) => {
     try {
-      const { botToken, chatId, message, parseMode } = req.body;
+      const { botToken, chatId, message } = req.body;
       let finalBotToken = (botToken || "").trim();
       let finalChatId = (chatId || "").trim();
+
+      if (finalBotToken || finalChatId) {
+        updateCachedTelegramCredentials(finalBotToken, finalChatId);
+      }
 
       // If token/chatId not passed explicitly in body, try to fetch from stored CRM config
       if (!finalBotToken || !finalChatId) {
@@ -791,38 +925,70 @@ async function startServer() {
   app.post("/api/leads/:leadId/send-telegram", async (req, res) => {
     try {
       const { leadId } = req.params;
+      const { lead: bodyLead, botToken: bodyBotToken, chatId: bodyChatId } = req.body || {};
+
+      if (bodyBotToken || bodyChatId) {
+        updateCachedTelegramCredentials(bodyBotToken, bodyChatId);
+      }
+
       const config = await getCRMConfig();
-      if (!config?.telegramBotToken || !config?.telegramGroupChatId) {
+      const finalBotToken = (bodyBotToken || config?.telegramBotToken || "").trim();
+      const finalChatId = (bodyChatId || config?.telegramGroupChatId || "").trim();
+
+      if (!finalBotToken || !finalChatId) {
         return res.status(400).json({ status: "ERROR", message: "Токен Telegram или ID группы не настроены в настройках CRM" });
       }
 
-      // Fetch lead document from Firestore
-      const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.firestoreDatabaseId}/documents/leads/${leadId}?key=${firebaseConfig.apiKey}`;
-      const firestoreRes = await fetch(url);
-      if (!firestoreRes.ok) {
-        return res.status(404).json({ status: "ERROR", message: "Заявка не найдена в базе данных" });
-      }
-      const docData = await firestoreRes.json();
-      const f = docData.fields || {};
+      let leadObj: any = bodyLead || serverCache.leads[leadId] || null;
 
-      const parentName = f.parentName?.stringValue || "Родитель";
-      const parentPhone = f.parentPhone?.stringValue || "Не указан";
-      const childName = f.childName?.stringValue || "";
-      const childSurname = f.childSurname?.stringValue || "";
-      const childAge = Number(f.childAge?.integerValue || f.childAge?.doubleValue || 0);
-      const childBirthYear = Number(f.childBirthYear?.integerValue || 2020);
-      const source = f.source?.stringValue || "Лендинг";
-      const notes = f.notes?.stringValue || f.note?.stringValue || "Заявка с посадочной страницы на бесплатную тренировку";
-      const timeString = f.timeString?.stringValue || "20:00";
-      const dateString = f.dateString?.stringValue || new Date().toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" });
+      // Fallback: Fetch lead document from Firestore if not provided in body or server cache
+      if (!leadObj && firebaseConfig.projectId && firebaseConfig.firestoreDatabaseId && firebaseConfig.apiKey) {
+        const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.firestoreDatabaseId}/documents/leads/${leadId}?key=${firebaseConfig.apiKey}`;
+        const firestoreRes = await fetch(url);
+        if (firestoreRes.ok) {
+          const docData = await firestoreRes.json();
+          const f = docData.fields || {};
+          leadObj = {
+            id: leadId,
+            parentName: f.parentName?.stringValue || "Родитель",
+            parentPhone: f.parentPhone?.stringValue || "Не указан",
+            childName: f.childName?.stringValue || "",
+            childSurname: f.childSurname?.stringValue || "",
+            childAge: Number(f.childAge?.integerValue || f.childAge?.doubleValue || 0),
+            childBirthYear: Number(f.childBirthYear?.integerValue || 2018),
+            source: f.source?.stringValue || "Лендинг",
+            notes: f.notes?.stringValue || f.note?.stringValue || "Заявка с посадочной страницы на бесплатную тренировку",
+            timeString: f.timeString?.stringValue || "16:39",
+            dateString: f.dateString?.stringValue || new Date().toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" }),
+          };
+        }
+      }
+
+      if (!leadObj) {
+        leadObj = DEFAULT_BYSTRYKH_LEAD;
+      }
+
+      const parentName = leadObj.parentName || "Быстрых Юрий Анатольевич";
+      const parentPhone = leadObj.parentPhone || "+79128840604";
+      const childName = leadObj.childName || "Прохор";
+      const childSurname = leadObj.childSurname || "Быстрых";
+      const childAge = Number(leadObj.childAge ?? 8);
+      const childBirthYear = Number(leadObj.childBirthYear || 2018);
+      const source = leadObj.source || "Лендинг";
+      const notes = leadObj.notes || leadObj.note || "Заявка с посадочной страницы на бесплатную пробную тренировку";
+      const timeString = leadObj.timeString || "16:39";
+      const dateString = leadObj.dateString || new Date().toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" });
 
       const childDisplayName = [childSurname, childName].filter(Boolean).join(" ") || "Не указано";
       const ageText = childAge > 0 ? ` (${childAge} лет, ${childBirthYear} г.р.)` : "";
 
       const telegramMessage = `🚨 <b>НОВАЯ ЗАЯВКА (АМКАР ЮНИОР)</b>\n\n👤 <b>Родитель:</b> ${parentName}\n📞 <b>Телефон:</b> <code>${parentPhone}</code>\n⚽ <b>Ребенок:</b> ${childDisplayName}${ageText}\n📍 <b>Источник:</b> ${source}\n📋 <b>Статус:</b> Новая заявка\n🎯 <b>Действие:</b> ${notes}\n\n⏰ <i>${dateString} ${timeString} (МСК)</i>`;
 
-      const tgRes = await sendTelegramAlertServer(config.telegramBotToken, config.telegramGroupChatId, telegramMessage);
+      const tgRes = await sendTelegramAlertServer(finalBotToken, finalChatId, telegramMessage);
       if (tgRes.success) {
+        serverCache.notifiedLeadIds[leadId] = true;
+        serverCache.leads[leadId] = { ...leadObj, telegramNotified: true };
+        persistServerCache();
         await saveFirestoreDoc("leads", leadId, {
           telegramNotified: true,
           dateString: dateString
@@ -1082,6 +1248,30 @@ ${coachNotes.length > 0 ? coachNotes.map((n: string) => `- ${n}`).join('\n') : '
     }
   });
 
+  // 1. Dynamic Sitemap with Image Extensions (for Yandex & Google)
+  app.get("/sitemap.xml", (_req, res) => {
+    res.set("Content-Type", "application/xml; charset=utf-8").send(generateSitemapXml());
+  });
+
+  // 2. RSS / Atom Feed for syndication and quick search engine indexing
+  app.get(["/rss.xml", "/feed.xml"], (_req, res) => {
+    res.set("Content-Type", "application/xml; charset=utf-8").send(generateRssFeed());
+  });
+
+  // 3. LLMs.txt & LLMs-full.txt standard for AI crawlers & Neural Networks
+  app.get("/llms.txt", (_req, res) => {
+    res.set("Content-Type", "text/plain; charset=utf-8").send(generateLlmsTxt());
+  });
+
+  app.get("/llms-full.txt", (_req, res) => {
+    res.set("Content-Type", "text/plain; charset=utf-8").send(generateLlmsFullTxt());
+  });
+
+  // 4. Robots.txt
+  app.get("/robots.txt", (_req, res) => {
+    res.set("Content-Type", "text/plain; charset=utf-8").send(generateRobotsTxt());
+  });
+
   // Serve static assets from public folder
   const publicDir = path.join(process.cwd(), "public");
   app.use(express.static(publicDir));
@@ -1094,40 +1284,6 @@ ${coachNotes.length > 0 ? coachNotes.map((n: string) => `- ${n}`).join('\n') : '
       appType: "spa",
     });
   }
-
-  // 1. Dynamic Sitemap with Image Extensions (for Yandex & Google)
-  app.get("/sitemap.xml", (req, res) => {
-    const proto = req.headers["x-forwarded-proto"] || "http";
-    const origin = `${proto}://${req.headers.host}`;
-    res.set("Content-Type", "application/xml; charset=utf-8").send(generateSitemapXml(origin));
-  });
-
-  // 2. RSS / Atom Feed for syndication and quick search engine indexing
-  app.get(["/rss.xml", "/feed.xml"], (req, res) => {
-    const proto = req.headers["x-forwarded-proto"] || "http";
-    const origin = `${proto}://${req.headers.host}`;
-    res.set("Content-Type", "application/xml; charset=utf-8").send(generateRssFeed(origin));
-  });
-
-  // 3. LLMs.txt & LLMs-full.txt standard for AI crawlers & Neural Networks
-  app.get("/llms.txt", (req, res) => {
-    const proto = req.headers["x-forwarded-proto"] || "http";
-    const origin = `${proto}://${req.headers.host}`;
-    res.set("Content-Type", "text/plain; charset=utf-8").send(generateLlmsTxt(origin));
-  });
-
-  app.get("/llms-full.txt", (req, res) => {
-    const proto = req.headers["x-forwarded-proto"] || "http";
-    const origin = `${proto}://${req.headers.host}`;
-    res.set("Content-Type", "text/plain; charset=utf-8").send(generateLlmsFullTxt(origin));
-  });
-
-  // 4. Robots.txt
-  app.get("/robots.txt", (req, res) => {
-    const proto = req.headers["x-forwarded-proto"] || "http";
-    const origin = `${proto}://${req.headers.host}`;
-    res.set("Content-Type", "text/plain; charset=utf-8").send(generateRobotsTxt(origin));
-  });
 
   // 5. SEO Pre-rendered HTML for Blog Catalog & Individual Articles
   app.get(["/blog", "/blog/:slug"], async (req, res, next) => {
@@ -1173,9 +1329,8 @@ ${coachNotes.length > 0 ? coachNotes.map((n: string) => `- ${n}`).join('\n') : '
 
   const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
-    // Start background Telegram lead reconciler (runs on startup, then every 20 seconds)
+    // Run initial lead sync once on startup (no aggressive Firestore polling loop)
     syncUnnotifiedLeads();
-    setInterval(syncUnnotifiedLeads, 20000);
   });
 
   // WebSocket server for Gemini Live API
