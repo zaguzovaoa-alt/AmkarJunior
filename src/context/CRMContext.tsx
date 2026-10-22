@@ -336,23 +336,7 @@ const INITIAL_FINANCES: FinanceRecord[] = [];
 
 const INITIAL_MESSAGES: ChatMessage[] = [];
 
-const INITIAL_LEADS: Lead[] = [
-  {
-    id: "lead_landing_bystrykh",
-    childSurname: "Быстрых",
-    childName: "Прохор",
-    childAge: 8,
-    childBirthYear: 2018,
-    parentName: "Быстрых Юрий Анатольевич",
-    parentPhone: "+79128840604",
-    parentEmail: "",
-    source: "Лендинг",
-    status: "new",
-    createdAt: new Date().toISOString(),
-    timeString: "16:39",
-    note: "Заявка с посадочной страницы на бесплатную пробную тренировку",
-  }
-];
+const INITIAL_LEADS: Lead[] = [];
 
 const INITIAL_CANCELLED_SESSIONS: CancelledSession[] = [
   {
@@ -888,7 +872,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     testConnectionAndInit();
   }, []);
 
-  // Auto-sync CRM Telegram config to server & auto-send notification for Быстрых Прохор lead
+  // Sync CRM Telegram config with backend server cache
   useEffect(() => {
     const botToken = crmConfig?.telegramBotToken?.trim();
     const chatId = crmConfig?.telegramGroupChatId?.trim();
@@ -899,7 +883,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       if (raw) notifiedMap = JSON.parse(raw);
     } catch {}
 
-    // Sync config and leads with backend server cache
     fetch("/api/crm-config/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -907,7 +890,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         telegramBotToken: botToken,
         telegramGroupChatId: chatId,
         telegramAlerts: crmConfig?.telegramAlerts,
-        leads,
       }),
     })
       .then((r) => r.json())
@@ -934,38 +916,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         }
       })
       .catch(() => {});
-
-    // Direct client fallback for Быстрых Прохор lead if not yet notified and token/chatId are present
-    const bystrykhLead = leads.find(
-      (l) =>
-        l.id === "lead_landing_bystrykh" ||
-        (l.parentPhone && l.parentPhone.includes("9128840604")) ||
-        (l.parentName && l.parentName.includes("Быстрых"))
-    );
-
-    if (
-      botToken &&
-      chatId &&
-      bystrykhLead &&
-      !bystrykhLead.telegramNotified &&
-      !notifiedMap[bystrykhLead.id]
-    ) {
-      notifiedMap[bystrykhLead.id] = true;
-      localStorage.setItem("amkar_notified_leads", JSON.stringify(notifiedMap));
-      const moscowDate = new Date().toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" });
-      const msg = `🚨 <b>НОВАЯ ЗАЯВКА (АМКАР ЮНИОР)</b>\n\n👤 <b>Родитель:</b> ${bystrykhLead.parentName}\n📞 <b>Телефон:</b> <code>${bystrykhLead.parentPhone}</code>\n⚽ <b>Ребенок:</b> ${[bystrykhLead.childSurname, bystrykhLead.childName].filter(Boolean).join(" ")} (${bystrykhLead.childAge || 8} лет, ${bystrykhLead.childBirthYear || 2018} г.р.)\n📍 <b>Источник:</b> ${bystrykhLead.source || "Лендинг"}\n📋 <b>Статус:</b> Новая заявка\n🎯 <b>Действие:</b> Пригласить на пробную тренировку\n\n⏰ <i>${moscowDate} ${bystrykhLead.timeString || "16:39"} (МСК)</i>`;
-
-      sendTelegramAlert(botToken, chatId, msg).then((res) => {
-        if (res.success) {
-          setLeads((prev) =>
-            prev.map((l) => (l.id === bystrykhLead.id ? { ...l, telegramNotified: true } : l))
-          );
-        } else {
-          delete notifiedMap[bystrykhLead.id];
-          localStorage.setItem("amkar_notified_leads", JSON.stringify(notifiedMap));
-        }
-      });
-    }
   }, [crmConfig?.telegramBotToken, crmConfig?.telegramGroupChatId]);
 
   // 2. Real-time synchronizations with Firestore
@@ -1013,19 +963,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
             telegramNotified: Boolean(d.telegramNotified || notifiedMap[d.id]),
           });
         });
-
-        // Ensure Быстрых Прохор lead is preserved even if Firestore write didn't complete
-        const hasBystrykh = list.some(
-          (l) =>
-            l.id === "lead_landing_bystrykh" ||
-            (l.parentPhone && l.parentPhone.includes("9128840604"))
-        );
-        if (!hasBystrykh && INITIAL_LEADS[0]) {
-          list.unshift({
-            ...INITIAL_LEADS[0],
-            telegramNotified: Boolean(notifiedMap[INITIAL_LEADS[0].id]),
-          });
-        }
 
         setLeads(list);
       },
@@ -1597,7 +1534,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     customBotToken?: string,
     customChatId?: string
   ): Promise<{ success: boolean; message: string; needsConfig?: boolean }> => {
-    const targetLead = leads.find((l) => l.id === leadId) || INITIAL_LEADS[0];
+    const targetLead = leads.find((l) => l.id === leadId);
     const botToken = (customBotToken || crmConfig?.telegramBotToken || "").trim();
     const chatId = (customChatId || crmConfig?.telegramGroupChatId || "").trim();
 
@@ -1639,9 +1576,9 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       // Direct client fallback if server lacked credentials or encountered network error
       if (botToken && chatId && targetLead) {
         const moscowDate = new Date().toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" });
-        const childDisplayName = [targetLead.childSurname, targetLead.childName].filter(Boolean).join(" ") || "Быстрых Прохор";
-        const ageText = (targetLead.childAge || 8) > 0 ? ` (${targetLead.childAge || 8} лет, ${targetLead.childBirthYear || 2018} г.р.)` : "";
-        const telegramMessage = `🚨 <b>НОВАЯ ЗАЯВКА (АМКАР ЮНИОР)</b>\n\n👤 <b>Родитель:</b> ${targetLead.parentName}\n📞 <b>Телефон:</b> <code>${targetLead.parentPhone}</code>\n⚽ <b>Ребенок:</b> ${childDisplayName}${ageText}\n📍 <b>Источник:</b> ${targetLead.source || "Лендинг"}\n📋 <b>Статус:</b> Новая заявка\n🎯 <b>Действие:</b> ${targetLead.notes || targetLead.note || "Пригласить на пробную тренировку"}\n\n⏰ <i>${moscowDate} ${targetLead.timeString || "16:39"} (МСК)</i>`;
+        const childDisplayName = [targetLead.childSurname, targetLead.childName].filter(Boolean).join(" ") || "Не указано";
+        const ageText = (targetLead.childAge || 0) > 0 ? ` (${targetLead.childAge} лет, ${targetLead.childBirthYear || 2018} г.р.)` : "";
+        const telegramMessage = `🚨 <b>НОВАЯ ЗАЯВКА (АМКАР ЮНИОР)</b>\n\n👤 <b>Родитель:</b> ${targetLead.parentName}\n📞 <b>Телефон:</b> <code>${targetLead.parentPhone}</code>\n⚽ <b>Ребенок:</b> ${childDisplayName}${ageText}\n📍 <b>Источник:</b> ${targetLead.source || "Лендинг"}\n📋 <b>Статус:</b> Новая заявка\n🎯 <b>Действие:</b> ${targetLead.notes || targetLead.note || "Пригласить на пробную тренировку"}\n\n⏰ <i>${moscowDate} ${targetLead.timeString || "12:00"} (МСК)</i>`;
 
         const directRes = await sendTelegramAlert(botToken, chatId, telegramMessage);
         if (directRes.success) {

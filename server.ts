@@ -55,42 +55,26 @@ interface ServerCacheData {
 
 const SERVER_CACHE_PATH = path.join(process.cwd(), ".crm-server-cache.json");
 
-const DEFAULT_BYSTRYKH_LEAD = {
-  id: "lead_landing_bystrykh",
-  parentName: "Быстрых Юрий Анатольевич",
-  parentPhone: "+79128840604",
-  childSurname: "Быстрых",
-  childName: "Прохор",
-  childAge: 8,
-  childBirthYear: 2018,
-  source: "Лендинг",
-  status: "new",
-  notes: "Пригласить на пробную тренировку",
-  timeString: "16:39",
-  dateString: new Date().toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" }),
-};
-
 let serverCache: ServerCacheData = {
-  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || "",
-  telegramGroupChatId: process.env.TELEGRAM_CHAT_ID || "",
+  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || "8838680177:AAFfEXlVWBJFunQjjxLttwWpMQpQ7k3W1TY",
+  telegramGroupChatId: process.env.TELEGRAM_CHAT_ID || "-1003942004373",
   telegramAlerts: { newLead: true, newOrder: true, churnRisk: true, scheduleConflict: true },
-  notifiedLeadIds: {},
-  leads: {
-    lead_landing_bystrykh: DEFAULT_BYSTRYKH_LEAD,
-  },
+  notifiedLeadIds: { lead_landing_bystrykh: true },
+  leads: {},
 };
 
 try {
   if (fs.existsSync(SERVER_CACHE_PATH)) {
     const raw = JSON.parse(fs.readFileSync(SERVER_CACHE_PATH, "utf-8"));
+    const cleanedLeads = { ...(raw.leads || {}) };
+    delete cleanedLeads.lead_landing_bystrykh;
     serverCache = {
       ...serverCache,
       ...raw,
-      leads: {
-        lead_landing_bystrykh: DEFAULT_BYSTRYKH_LEAD,
-        ...(raw.leads || {}),
-      },
-      notifiedLeadIds: raw.notifiedLeadIds || {},
+      telegramBotToken: raw.telegramBotToken || serverCache.telegramBotToken,
+      telegramGroupChatId: raw.telegramGroupChatId || serverCache.telegramGroupChatId,
+      leads: cleanedLeads,
+      notifiedLeadIds: { ...(raw.notifiedLeadIds || {}), lead_landing_bystrykh: true },
     };
   }
 } catch (e) {
@@ -315,55 +299,6 @@ async function saveFirestoreDoc(collectionName: string, docId: string, fields: R
     }
   } catch (e) {
     console.error(`Error saving Firestore doc ${collectionName}/${docId}:`, e);
-  }
-}
-
-// Auto-deliver any cached unnotified leads (including Быстрых Прохор) as soon as Telegram credentials are available
-async function syncUnnotifiedLeads() {
-  try {
-    const config = await getCRMConfig();
-    if (!config?.telegramBotToken || !config?.telegramGroupChatId || config.telegramAlerts?.newLead === false) {
-      return;
-    }
-
-    for (const [leadId, lead] of Object.entries(serverCache.leads)) {
-      if (serverCache.notifiedLeadIds[leadId] || lead.telegramNotified) {
-        continue;
-      }
-
-      const parentName = lead.parentName || "Родитель";
-      const parentPhone = lead.parentPhone || "Не указан";
-      const childName = lead.childName || "";
-      const childSurname = lead.childSurname || "";
-      const childAge = Number(lead.childAge || 0);
-      const childBirthYear = Number(lead.childBirthYear || 2018);
-      const source = lead.source || "Лендинг";
-      const notes = lead.notes || lead.note || "Заявка с посадочной страницы на бесплатную тренировку";
-      const timeString = lead.timeString || "16:39";
-      const dateString = lead.dateString || new Date().toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" });
-
-      const childDisplayName = [childSurname, childName].filter(Boolean).join(" ") || "Не указано";
-      const ageText = childAge > 0 ? ` (${childAge} лет, ${childBirthYear} г.р.)` : "";
-
-      const telegramMessage = `🚨 <b>НОВАЯ ЗАЯВКА (АМКАР ЮНИОР)</b>\n\n👤 <b>Родитель:</b> ${parentName}\n📞 <b>Телефон:</b> <code>${parentPhone}</code>\n⚽ <b>Ребенок:</b> ${childDisplayName}${ageText}\n📍 <b>Источник:</b> ${source}\n📋 <b>Статус:</b> Новая заявка\n🎯 <b>Действие:</b> ${notes}\n\n⏰ <i>${dateString} ${timeString} (МСК)</i>`;
-
-      console.log(`[Telegram Auto-Sync] Sending alert for lead ${leadId} (${parentName})...`);
-      const tgRes = await sendTelegramAlertServer(config.telegramBotToken, config.telegramGroupChatId, telegramMessage);
-      if (tgRes.success) {
-        console.log(`[Telegram Auto-Sync] Successfully notified Telegram for lead ${leadId}`);
-        serverCache.notifiedLeadIds[leadId] = true;
-        serverCache.leads[leadId] = { ...lead, telegramNotified: true };
-        persistServerCache();
-        await saveFirestoreDoc("leads", leadId, {
-          telegramNotified: true,
-          dateString: dateString,
-        }, true);
-      } else {
-        console.warn(`[Telegram Auto-Sync] Failed to send Telegram for lead ${leadId}:`, tgRes.error);
-      }
-    }
-  } catch (e) {
-    console.error("[Telegram Auto-Sync] Error during sync:", e);
   }
 }
 
@@ -816,24 +751,11 @@ async function startServer() {
     }
   });
 
-  // Sync CRM config from client localStorage to server cache & auto-deliver pending leads
+  // Sync CRM config from client localStorage to server cache
   app.post("/api/crm-config/sync", async (req, res) => {
     try {
-      const { telegramBotToken, telegramGroupChatId, telegramAlerts, leads } = req.body || {};
+      const { telegramBotToken, telegramGroupChatId, telegramAlerts } = req.body || {};
       updateCachedTelegramCredentials(telegramBotToken, telegramGroupChatId, telegramAlerts);
-      if (Array.isArray(leads)) {
-        for (const l of leads) {
-          if (l && l.id) {
-            serverCache.leads[l.id] = {
-              ...(serverCache.leads[l.id] || {}),
-              ...l,
-              telegramNotified: Boolean(l.telegramNotified || serverCache.notifiedLeadIds[l.id]),
-            };
-          }
-        }
-        persistServerCache();
-      }
-      await syncUnnotifiedLeads();
       res.json({
         status: "OK",
         notifiedLeadIds: serverCache.notifiedLeadIds,
@@ -876,7 +798,6 @@ async function startServer() {
       const result = await sendTelegramAlertServer(finalBotToken, finalChatId, testMsg);
 
       if (result.success) {
-        await syncUnnotifiedLeads();
         res.json({ status: "OK", message: "Тестовое сообщение успешно доставлено в Telegram!" });
       } else {
         res.status(400).json({ status: "ERROR", message: result.error || "Не удалось отправить сообщение" });
@@ -965,18 +886,18 @@ async function startServer() {
       }
 
       if (!leadObj) {
-        leadObj = DEFAULT_BYSTRYKH_LEAD;
+        return res.status(404).json({ status: "ERROR", message: "Заявка не найдена" });
       }
 
-      const parentName = leadObj.parentName || "Быстрых Юрий Анатольевич";
-      const parentPhone = leadObj.parentPhone || "+79128840604";
-      const childName = leadObj.childName || "Прохор";
-      const childSurname = leadObj.childSurname || "Быстрых";
-      const childAge = Number(leadObj.childAge ?? 8);
+      const parentName = leadObj.parentName || "Родитель";
+      const parentPhone = leadObj.parentPhone || "Не указан";
+      const childName = leadObj.childName || "";
+      const childSurname = leadObj.childSurname || "";
+      const childAge = Number(leadObj.childAge ?? 0);
       const childBirthYear = Number(leadObj.childBirthYear || 2018);
       const source = leadObj.source || "Лендинг";
       const notes = leadObj.notes || leadObj.note || "Заявка с посадочной страницы на бесплатную пробную тренировку";
-      const timeString = leadObj.timeString || "16:39";
+      const timeString = leadObj.timeString || "12:00";
       const dateString = leadObj.dateString || new Date().toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" });
 
       const childDisplayName = [childSurname, childName].filter(Boolean).join(" ") || "Не указано";
@@ -1329,8 +1250,6 @@ ${coachNotes.length > 0 ? coachNotes.map((n: string) => `- ${n}`).join('\n') : '
 
   const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
-    // Run initial lead sync once on startup (no aggressive Firestore polling loop)
-    syncUnnotifiedLeads();
   });
 
   // WebSocket server for Gemini Live API

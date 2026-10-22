@@ -1,0 +1,14 @@
+{
+  "telegramBotToken": "8838680177:AAFfEXlVWBJFunQjjxLttwWpMQpQ7k3W1TY",
+  "telegramGroupChatId": "-1003942004373",
+  "telegramAlerts": {
+    "newLead": true,
+    "newOrder": true,
+    "churnRisk": true,
+    "scheduleConflict": true
+  },
+  "notifiedLeadIds": {
+    "lead_landing_bystrykh": true
+  },
+  "leads": {}
+}
