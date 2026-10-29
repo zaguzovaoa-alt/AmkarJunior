@@ -393,9 +393,15 @@ export interface ChatMessage {
   senderId?: string;
   text: string;
   timestamp: string; // HH:MM or ISO
+  createdAt?: string; // ISO string for date grouping & sorting
   fileUrl?: string;
   fileName?: string;
   fileType?: 'image' | 'document';
+  replyTo?: {
+    id: string;
+    senderName: string;
+    text: string;
+  };
   visibleTo?: ('manager' | 'trainer' | 'parent' | 'director' | 'admin')[];
   readBy?: string[]; // user IDs or roles who viewed the message
   readers?: ChatMessageReader[]; // detailed list of users who read the message
@@ -411,4 +417,5 @@ export interface AppNotification {
   dateString: string;
   isRead: boolean;
   type: 'event' | 'system' | 'message';
+  relatedTab?: string;
 }

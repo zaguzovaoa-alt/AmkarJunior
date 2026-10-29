@@ -50,6 +50,7 @@ import { ChildSettings } from "./ChildSettings";
 import { OfferAgreement } from "./OfferAgreement";
 import { useAuth } from "../context/AuthContext";
 import { Product } from "../types";
+import { compressImage } from "../utils/image";
 import { AIProgressReportCard } from "./AIProgressReportCard";
 import {
   PARENT_KB_ARTICLES,
@@ -213,6 +214,12 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
   const [chatVisibility, setChatVisibility] = useState<
     ("manager" | "trainer" | "parent" | "director" | "admin")[]
   >(["manager", "trainer", "director", "admin"]);
+  const [chatAttachment, setChatAttachment] = useState<{
+    name: string;
+    url?: string;
+    type: "image" | "document";
+  } | null>(null);
+  const [previewChatImage, setPreviewChatImage] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editMessageText, setEditMessageText] = useState("");
   const [uploadingDoc, setUploadingDoc] = useState<
@@ -231,6 +238,8 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
 
   const medicalInputRef = useRef<HTMLInputElement>(null);
   const insuranceInputRef = useRef<HTMLInputElement>(null);
+  const parentChatFileInputRef = useRef<HTMLInputElement>(null);
+  const parentChatEndRef = useRef<HTMLDivElement>(null);
 
   // Find ALL children associated with the currently logged-in parent
   const myChildren = clients.filter(
@@ -625,25 +634,82 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
   const currentUserId = appUser?.uid || `parent_${myClient.parentPhone || myClient.id}`;
   const currentParentName = (myClient.parentName || appUser?.fullName || "Родитель").trim();
 
+  const isMyParentMessage = (m: { senderId?: string; senderRole?: string; senderName?: string }) => {
+    if (m.senderId && m.senderId === currentUserId) return true;
+    if (
+      m.senderRole === "parent" &&
+      currentParentName &&
+      m.senderName?.toLowerCase().includes(currentParentName.toLowerCase())
+    ) {
+      return true;
+    }
+    return false;
+  };
+
+  const handleParentChatFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      if (file.type.startsWith("image/")) {
+        const compressed = await compressImage(file, 900, 0.72);
+        setChatAttachment({
+          name: file.name,
+          url: compressed,
+          type: "image",
+        });
+      } else {
+        setChatAttachment({
+          name: file.name,
+          type: "document",
+        });
+      }
+    } catch (err) {
+      console.error("Ошибка обработки файла:", err);
+    } finally {
+      e.target.value = "";
+    }
+  };
+
   const handleSendChat = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatInput.trim()) return;
+    if (!chatInput.trim() && !chatAttachment) return;
+    const messageText =
+      chatInput.trim() ||
+      (chatAttachment?.type === "image"
+        ? `📷 Фото: ${chatAttachment.name}`
+        : `📎 Файл: ${chatAttachment?.name}`);
     addChatMessage({
       senderRole: "parent",
       senderName: `${currentParentName} (Родитель: ${myClient.childName || "Ученик"})`,
       senderId: currentUserId,
-      text: chatInput,
+      text: messageText,
       visibleTo: chatVisibility,
+      ...(chatAttachment
+        ? {
+            fileName: chatAttachment.name,
+            fileType: chatAttachment.type,
+            ...(chatAttachment.url ? { fileUrl: chatAttachment.url } : {}),
+          }
+        : {}),
     });
     setChatInput("");
+    setChatAttachment(null);
   };
 
   const visibleMessages = messages.filter(
     (m) =>
       !m.visibleTo ||
       m.visibleTo.includes("parent") ||
-      m.senderRole === "parent",
+      isMyParentMessage(m),
   );
+
+  useEffect(() => {
+    if (activeTab === "parent_messages") {
+      setTimeout(() => {
+        parentChatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, 100);
+    }
+  }, [activeTab, visibleMessages.length]);
 
   // Automatically mark unread messages as read when viewing chat
   useEffect(() => {
@@ -651,10 +717,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
 
     const unreadIds = visibleMessages
       .filter((m) => {
-        const isMe =
-          (m.senderId && m.senderId === currentUserId) ||
-          m.senderRole === "parent";
-        if (isMe) return false;
+        if (isMyParentMessage(m)) return false;
 
         const readByList = m.readBy || [];
         const isRead =
@@ -2670,9 +2733,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
               {/* Chat log with custom scroll */}
               <div className="flex-1 p-4 overflow-y-auto bg-slate-50/50 space-y-4 text-xs font-sans">
                 {visibleMessages.map((msg, idx) => {
-                  const isMe =
-                    (msg.senderId && msg.senderId === currentUserId) ||
-                    msg.senderRole === "parent";
+                  const isMe = isMyParentMessage(msg);
 
                   // List of school staff who read this message
                   const schoolReaders = (msg.readers || []).filter(
@@ -2701,7 +2762,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
 
                   return (
                     <div
-                      key={idx}
+                      key={msg.id || idx}
                       className={`flex ${isMe ? "justify-end" : "justify-start"}`}
                     >
                       <div
@@ -2717,6 +2778,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                             {isMe && (
                               <div className="hidden group-hover:flex items-center space-x-1 mr-2 bg-black/10 rounded px-1">
                                 <button
+                                  type="button"
                                   onClick={() => {
                                     setEditingMessageId(msg.id);
                                     setEditMessageText(msg.text);
@@ -2754,6 +2816,29 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                           </div>
                         </div>
 
+                        {msg.fileUrl && msg.fileType === "image" && (
+                          <div className="mb-2 mt-1">
+                            <img
+                              src={msg.fileUrl}
+                              alt={msg.fileName || "Фото"}
+                              onClick={() => setPreviewChatImage(msg.fileUrl || null)}
+                              className="max-h-52 rounded-xl object-cover cursor-pointer border border-black/10 hover:opacity-95 transition"
+                            />
+                          </div>
+                        )}
+                        {msg.fileName && msg.fileType !== "image" && (
+                          <div
+                            className={`mb-2 px-2.5 py-1.5 rounded-lg flex items-center gap-2 text-[11px] font-medium ${
+                              isMe
+                                ? "bg-white/15 text-white"
+                                : "bg-emerald-50 text-emerald-800 border border-emerald-100"
+                            }`}
+                          >
+                            <FileText className="w-4 h-4 shrink-0" />
+                            <span className="truncate">{msg.fileName}</span>
+                          </div>
+                        )}
+
                         {editingMessageId === msg.id ? (
                           <div className="flex flex-col space-y-2 mt-2">
                             <input
@@ -2766,12 +2851,14 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                             />
                             <div className="flex justify-end space-x-2">
                               <button
+                                type="button"
                                 onClick={() => setEditingMessageId(null)}
                                 className="text-[10px] bg-white/20 px-2 py-1 rounded"
                               >
                                 Отмена
                               </button>
                               <button
+                                type="button"
                                 onClick={() => {
                                   updateChatMessage(msg.id, editMessageText);
                                   setEditingMessageId(null);
@@ -2815,48 +2902,65 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                     </div>
                   );
                 })}
+                <div ref={parentChatEndRef} />
               </div>
 
               {/* Chat write panel */}
               <div className="bg-white border-t border-gray-200">
+                {chatAttachment && (
+                  <div className="px-3.5 py-2 bg-emerald-50/80 border-b border-emerald-100 flex items-center justify-between gap-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      {chatAttachment.type === "image" && chatAttachment.url ? (
+                        <img
+                          src={chatAttachment.url}
+                          alt={chatAttachment.name}
+                          className="w-7 h-7 rounded object-cover"
+                        />
+                      ) : (
+                        <FileText className="w-4 h-4 text-emerald-600" />
+                      )}
+                      <span className="text-[11px] font-semibold text-slate-700 max-w-[220px] truncate">
+                        {chatAttachment.name}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setChatAttachment(null)}
+                      className="p-1 text-slate-400 hover:text-rose-600"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
                 <form
                   onSubmit={handleSendChat}
                   className="p-3 flex items-center space-x-2"
                 >
+                  <input
+                    ref={parentChatFileInputRef}
+                    type="file"
+                    accept="image/*,.pdf,.doc,.docx,.jpg,.jpeg,.png"
+                    className="hidden"
+                    onChange={handleParentChatFileSelect}
+                  />
                   <button
                     type="button"
-                    onClick={() => {
-                      const sampleFiles = [
-                        "заявление_болеем.pdf",
-                        "медицинский_чек.png",
-                        "тренировка.jpeg",
-                      ];
-                      const picked =
-                        sampleFiles[
-                          Math.floor(Math.random() * sampleFiles.length)
-                        ];
-                      addChatMessage({
-                        senderRole: "parent",
-                        senderName: `${myClient.parentName || "Родитель"} (Родитель: ${myClient.childName || "Ученик"})`,
-                        text: `[Прикреплен файл]: ${picked}`,
-                        visibleTo: ["trainer", "manager", "director"],
-                      });
-                    }}
-                    title="Прикреплен файл/фото"
-                    className="p-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl text-gray-500 hover:text-gray-700 transition cursor-pointer"
+                    onClick={() => parentChatFileInputRef.current?.click()}
+                    title="Прикрепить фото (справку, чек, фото с тренировки) или документ"
+                    className="p-2.5 bg-slate-100 hover:bg-emerald-50 rounded-xl text-gray-500 hover:text-emerald-600 transition cursor-pointer"
                   >
-                    <Upload className="w-4 h-4" />
+                    <Paperclip className="w-4 h-4" />
                   </button>
                   <input
                     type="text"
-                    placeholder="Напишите сообщение в школу..."
+                    placeholder="Напишите сообщение тренеру и менеджеру..."
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
                     className="flex-1 px-4 py-2.5 bg-slate-100 focus:bg-white border focus:border-emerald-500 rounded-xl text-xs text-gray-800 outline-none transition"
                   />
                   <button
                     type="submit"
-                    disabled={!chatInput.trim()}
+                    disabled={!chatInput.trim() && !chatAttachment}
                     className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 rounded-xl text-white font-semibold text-xs transition-all shadow-sm flex items-center space-x-1.5 cursor-pointer"
                   >
                     <span>Отправить</span>
@@ -2864,6 +2968,28 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                   </button>
                 </form>
               </div>
+
+              {previewChatImage && (
+                <div
+                  className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+                  onClick={() => setPreviewChatImage(null)}
+                >
+                  <div className="relative max-w-3xl max-h-[85vh]">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewChatImage(null)}
+                      className="absolute -top-3 -right-3 bg-white text-slate-900 rounded-full p-1.5 shadow-lg hover:bg-slate-100"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                    <img
+                      src={previewChatImage}
+                      alt="Просмотр фото"
+                      className="max-h-[82vh] max-w-full rounded-xl object-contain shadow-2xl"
+                    />
+                  </div>
+                </div>
+              )}
             </motion.div>
           )}
 

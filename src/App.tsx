@@ -17,7 +17,20 @@ import { DirectorUsers } from "./components/DirectorUsers";
 import { JoinPage } from "./components/JoinPage";
 import { AdminStore } from "./components/AdminStore";
 import { TasksModule } from "./components/TasksModule";
-import { Shield, RefreshCw, Menu, Settings, CreditCard, AlertTriangle, Radio } from "lucide-react";
+import {
+  Shield,
+  RefreshCw,
+  Menu,
+  Settings,
+  CreditCard,
+  AlertTriangle,
+  Radio,
+  Bell,
+  MessageSquare,
+  CheckCheck,
+  Trash2,
+  X,
+} from "lucide-react";
 import firebaseConfig from "../firebase-applet-config.json";
 
 import { PaymentModal } from "./components/PaymentModal";
@@ -31,12 +44,70 @@ function DashboardContainer() {
     setCurrentRole,
     firestoreError,
     dismissFirestoreError,
+    notifications,
+    markNotificationRead,
+    markAllNotificationsRead,
+    clearReadNotifications,
+    messages,
   } = useCRM();
   const [showInstructions, setShowInstructions] = useState(false);
+  const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
   const [paymentModalClientId, setPaymentModalClientId] = useState<
     string | null
   >(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const currentUserId = appUser?.uid || currentRole;
+  const currentUserName = (appUser?.fullName || "").trim().toLowerCase();
+
+  const roleNotifications = notifications.filter((n) => {
+    if (!n.targetRoles || n.targetRoles.length === 0) return true;
+    if (
+      currentRole === "admin" &&
+      (n.targetRoles.includes("admin") || n.targetRoles.includes("director"))
+    ) {
+      return true;
+    }
+    if (
+      currentRole === "director" &&
+      (n.targetRoles.includes("director") || n.targetRoles.includes("admin"))
+    ) {
+      return true;
+    }
+    return n.targetRoles.includes(currentRole as any);
+  });
+
+  const unreadNotificationsCount = roleNotifications.filter(
+    (n) => !n.isRead,
+  ).length;
+
+  const unreadChatCount = messages.filter((m) => {
+    const isVisible =
+      !m.visibleTo ||
+      m.visibleTo.includes(currentRole as any) ||
+      (currentRole === "admin" && m.visibleTo.includes("director")) ||
+      (currentRole === "director" && m.visibleTo.includes("admin"));
+    if (!isVisible) return false;
+    const isMe =
+      (m.senderId && m.senderId === currentUserId) ||
+      (currentUserName &&
+        m.senderName?.trim().toLowerCase() === currentUserName) ||
+      (m.senderRole === currentRole && !m.senderId);
+    if (isMe) return false;
+    const readByList = m.readBy || [];
+    const isRead =
+      readByList.includes(currentUserId) ||
+      readByList.includes(currentRole) ||
+      (m.readers &&
+        m.readers.some(
+          (r) =>
+            r.id === currentUserId ||
+            r.id === currentRole ||
+            (currentUserName &&
+              r.name?.trim().toLowerCase() === currentUserName),
+        ));
+    return !isRead;
+  }).length;
 
   // Helper renderer for active role-specific view layout
   const renderRoleComponent = () => {
@@ -161,9 +232,13 @@ function DashboardContainer() {
         )
           return <GroupsModule />;
         if (currentTab === "director_users") return <DirectorUsers />;
+        if (currentTab === "hq_import")
+          return <DirectorCRM setActiveTab={setCurrentTab} initialSection="import" />;
         return <DirectorCRM setActiveTab={setCurrentTab} />;
 
       case "manager":
+        if (currentTab === "hq_import")
+          return <DirectorCRM setActiveTab={setCurrentTab} initialSection="import" />;
         if (currentTab === "manager_leads" || currentTab === "hq_leads") {
           return (
             <ManagerCRM
@@ -618,8 +693,152 @@ service cloud.firestore {
             </span>
           </div>
 
-          <div className="flex items-center space-x-3 select-none">
+          <div className="flex items-center space-x-2.5 select-none relative">
             <InstallAppPrompt />
+
+            {/* Quick Chat Shortcut */}
+            <button
+              type="button"
+              onClick={() => {
+                if (currentRole === "parent") setCurrentTab("parent_messages");
+                else if (currentRole === "trainer") setCurrentTab("trainer_messages");
+                else setCurrentTab("hq_messages");
+              }}
+              className="relative p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer flex items-center gap-1.5 px-2.5"
+              title="Открыть внутренние сообщения и чат"
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />
+              <span className="hidden sm:inline text-[11px] font-semibold">Чат</span>
+              {unreadChatCount > 0 && (
+                <span className="px-1.5 py-0.2 bg-rose-600 text-white rounded-full text-[9px] font-extrabold">
+                  {unreadChatCount}
+                </span>
+              )}
+            </button>
+
+            {/* Global Notification Center Bell */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowNotificationsPanel((prev) => !prev)}
+                className="relative p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer flex items-center gap-1 px-2.5"
+                title="Центр уведомлений"
+              >
+                <Bell className="w-3.5 h-3.5 text-amber-600" />
+                {unreadNotificationsCount > 0 && (
+                  <span className="px-1.5 py-0.2 bg-red-600 text-white rounded-full text-[9px] font-extrabold animate-pulse">
+                    {unreadNotificationsCount}
+                  </span>
+                )}
+              </button>
+
+              {showNotificationsPanel && (
+                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden text-left">
+                  <div className="p-3 bg-slate-900 text-white flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Bell className="w-4 h-4 text-amber-400" />
+                      <span className="font-bold text-xs">Центр уведомлений</span>
+                      {unreadNotificationsCount > 0 && (
+                        <span className="px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30 text-[10px] font-bold">
+                          Новых: {unreadNotificationsCount}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {unreadNotificationsCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => markAllNotificationsRead()}
+                          className="p-1 text-[10px] text-sky-300 hover:text-white flex items-center gap-1 cursor-pointer"
+                          title="Отметить все прочитанными"
+                        >
+                          <CheckCheck className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {roleNotifications.some((n) => n.isRead) && (
+                        <button
+                          type="button"
+                          onClick={() => clearReadNotifications()}
+                          className="p-1 text-[10px] text-slate-400 hover:text-rose-300 cursor-pointer"
+                          title="Очистить прочитанные"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setShowNotificationsPanel(false)}
+                        className="p-1 text-slate-400 hover:text-white cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                    {roleNotifications.length === 0 ? (
+                      <div className="p-6 text-center text-slate-400 text-xs">
+                        Уведомлений пока нет
+                      </div>
+                    ) : (
+                      roleNotifications.slice(0, 25).map((notif) => {
+                        const dateStr = notif.createdAt
+                          ? new Date(notif.createdAt).toLocaleString("ru-RU", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                          : "";
+                        return (
+                          <div
+                            key={notif.id}
+                            onClick={() => {
+                              if (!notif.isRead) markNotificationRead(notif.id);
+                              if (notif.type === "message") {
+                                if (currentRole === "parent") setCurrentTab("parent_messages");
+                                else if (currentRole === "trainer") setCurrentTab("trainer_messages");
+                                else setCurrentTab("hq_messages");
+                              } else if (notif.type === "lead") {
+                                if (currentRole === "manager") setCurrentTab("manager_leads");
+                                else setCurrentTab("hq_leads");
+                              } else if (notif.type === "event") {
+                                setCurrentTab(notif.relatedTab || "hq_calendar_sync");
+                              } else if (notif.relatedTab) {
+                                setCurrentTab(notif.relatedTab);
+                              }
+                              setShowNotificationsPanel(false);
+                            }}
+                            className={`p-3 hover:bg-slate-50 transition cursor-pointer flex items-start gap-2.5 ${
+                              !notif.isRead ? "bg-indigo-50/40" : "opacity-75"
+                            }`}
+                          >
+                            <div
+                              className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
+                                !notif.isRead ? "bg-indigo-600" : "bg-slate-300"
+                              }`}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-bold text-[11px] text-slate-800 truncate">
+                                  {notif.title}
+                                </span>
+                                <span className="text-[9px] text-slate-400 font-mono shrink-0">
+                                  {dateStr}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-600 line-clamp-2 mt-0.5 leading-snug">
+                                {notif.message}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Quick action: Open secure payment portal for default sandbox */}
             {currentRole === "parent" && (

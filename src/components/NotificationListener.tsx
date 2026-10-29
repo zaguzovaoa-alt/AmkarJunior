@@ -421,6 +421,8 @@ export const NotificationListener: React.FC = () => {
         <AnimatePresence>
           {toastsToRender.map((notif) => {
             const isNewLead = notif.title.toLowerCase().includes("заявк");
+            const isMessage = notif.type === "message";
+            const isEvent = notif.type === "event";
             return (
               <motion.div
                 key={notif.id}
@@ -430,9 +432,11 @@ export const NotificationListener: React.FC = () => {
                 className={`w-full sm:w-96 p-4 rounded-2xl shadow-2xl pointer-events-auto relative border ${
                   isNewLead
                     ? "bg-slate-900 border-red-500/50 text-white shadow-red-950/40"
-                    : notif.type === "event"
-                      ? "bg-fuchsia-950 border-fuchsia-700/50 text-white"
-                      : "bg-slate-900 border-slate-700 text-white"
+                    : isMessage
+                      ? "bg-slate-900 border-indigo-500/50 text-white shadow-indigo-950/40"
+                      : isEvent
+                        ? "bg-fuchsia-950 border-fuchsia-700/50 text-white"
+                        : "bg-slate-900 border-slate-700 text-white"
                 }`}
               >
                 <button
@@ -450,7 +454,9 @@ export const NotificationListener: React.FC = () => {
                     className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                       isNewLead
                         ? "bg-red-600 text-white shadow-lg shadow-red-600/40 animate-pulse"
-                        : "bg-slate-800 text-slate-300"
+                        : isMessage
+                          ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/40"
+                          : "bg-slate-800 text-slate-300"
                     }`}
                   >
                     <BellRing className="w-5 h-5" />
@@ -465,18 +471,48 @@ export const NotificationListener: React.FC = () => {
                       {notif.body}
                     </p>
 
-                    {isNewLead && (
+                    {(isNewLead || isMessage || isEvent) && (
                       <div className="pt-2 flex items-center gap-2">
                         <button
                           onClick={() => {
                             setActiveToasts((prev) => prev.filter((id) => id !== notif.id));
                             markNotificationRead(notif.id);
-                            const targetTab = currentRole === "manager" ? "manager_leads" : "hq_leads";
-                            setCurrentTab(targetTab);
+                            if (isNewLead) {
+                              const targetTab = currentRole === "manager" ? "manager_leads" : "hq_leads";
+                              setCurrentTab(targetTab);
+                            } else if (isMessage) {
+                              const targetTab =
+                                currentRole === "parent"
+                                  ? "parent_messages"
+                                  : currentRole === "trainer"
+                                    ? "trainer_messages"
+                                    : "hq_messages";
+                              setCurrentTab(targetTab);
+                            } else if (isEvent) {
+                              const targetTab =
+                                currentRole === "parent"
+                                  ? "parent_schedule"
+                                  : currentRole === "trainer"
+                                    ? "trainer_schedule"
+                                    : "hq_calendar_sync";
+                              setCurrentTab(targetTab);
+                            }
                           }}
-                          className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white font-bold text-[11px] rounded-lg transition flex items-center gap-1 shadow-md shadow-red-600/30 cursor-pointer"
+                          className={`px-3 py-1.5 text-white font-bold text-[11px] rounded-lg transition flex items-center gap-1 shadow-md cursor-pointer ${
+                            isNewLead
+                              ? "bg-red-600 hover:bg-red-500 shadow-red-600/30"
+                              : isMessage
+                                ? "bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/30"
+                                : "bg-fuchsia-600 hover:bg-fuchsia-500 shadow-fuchsia-600/30"
+                          }`}
                         >
-                          <span>Открыть заявки</span>
+                          <span>
+                            {isNewLead
+                              ? "Открыть заявки"
+                              : isMessage
+                                ? "Открыть чат"
+                                : "Открыть расписание"}
+                          </span>
                           <ArrowRight className="w-3.5 h-3.5" />
                         </button>
                       </div>

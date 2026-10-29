@@ -545,8 +545,8 @@ async function processIncomingLead(payload: any) {
   (newLead as any).telegramNotified = tgResult.success === true;
   await saveFirestoreDoc("leads", leadId, newLead);
 
-  // 3. Create Manager Task in Firestore
-  const managerTaskId = `t_${Date.now()}_m`;
+  // 3. Create Manager Task in Firestore (deterministic ID prevents duplicates with client fallback)
+  const managerTaskId = `t_${leadId}_m`;
   const childFullTitle = [childSurnameFinal, childNameFinal].filter(Boolean).join(" ");
   const managerTask = {
     id: managerTaskId,
@@ -560,7 +560,7 @@ async function processIncomingLead(payload: any) {
   await saveFirestoreDoc("tasks", managerTaskId, managerTask);
 
   // 4. Create Director Task in Firestore
-  const directorTaskId = `t_${Date.now()}_d`;
+  const directorTaskId = `t_${leadId}_d`;
   const directorTask = {
     id: directorTaskId,
     title: `Контроль: Новая заявка [ ${sourceFinal} ]`,
@@ -568,11 +568,12 @@ async function processIncomingLead(payload: any) {
     status: "new",
     dueDate: dateString,
     description: `Новый потенциальный клиент: ${childFullTitle}${ageText}. Источник: ${sourceFinal}. Телефон: ${parentPhoneFinal}. Задача: ${actionFinal}`,
+    relatedLeadId: leadId,
   };
   await saveFirestoreDoc("tasks", directorTaskId, directorTask);
 
   // 5. Create System Notification in Firestore (triggers in-app sync on active clients)
-  const notifId = `notif_${Date.now()}`;
+  const notifId = `notif_${leadId}`;
   const notification = {
     id: notifId,
     title: `⚡ Новая заявка: ${childFullTitle}`,

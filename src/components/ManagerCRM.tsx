@@ -918,11 +918,46 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
       return nameA.localeCompare(nameB, "ru");
     });
 
-  const totalPages = Math.ceil(filteredClients.length / itemsPerPage) || 1;
+  const totalPages = Math.max(1, Math.ceil(filteredClients.length / itemsPerPage));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterStatus, filterGroup, filterAbonement, filterBranch, itemsPerPage]);
+
   const paginatedClients = filteredClients.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage,
+    (safeCurrentPage - 1) * itemsPerPage,
+    safeCurrentPage * itemsPerPage,
   );
+
+  const visiblePageItems = React.useMemo(() => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    if (safeCurrentPage <= 4) {
+      return [1, 2, 3, 4, 5, "ellipsis-end" as const, totalPages];
+    }
+    if (safeCurrentPage >= totalPages - 3) {
+      return [
+        1,
+        "ellipsis-start" as const,
+        totalPages - 4,
+        totalPages - 3,
+        totalPages - 2,
+        totalPages - 1,
+        totalPages,
+      ];
+    }
+    return [
+      1,
+      "ellipsis-start" as const,
+      safeCurrentPage - 1,
+      safeCurrentPage,
+      safeCurrentPage + 1,
+      "ellipsis-end" as const,
+      totalPages,
+    ];
+  }, [safeCurrentPage, totalPages]);
 
   const expiringAbonements = clients.filter(
     (c) =>
@@ -2124,61 +2159,97 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                     </table>
                   </div>
 
-                  {/* Pagination stub matching image bottom */}
-                  <div className="flex items-center justify-between pt-2">
-                    <span className="text-[11px] text-gray-400 font-medium">
+                  {/* Pagination bar */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 mt-2 border-t border-gray-100">
+                    <span className="text-[11px] text-slate-500 font-medium whitespace-nowrap">
                       Показано{" "}
-                      {filteredClients.length === 0
-                        ? 0
-                        : (currentPage - 1) * itemsPerPage + 1}
-                      -
-                      {Math.min(
-                        currentPage * itemsPerPage,
-                        filteredClients.length,
-                      )}{" "}
-                      из {filteredClients.length} клиентов
+                      <span className="font-bold text-slate-800">
+                        {filteredClients.length === 0
+                          ? 0
+                          : (safeCurrentPage - 1) * itemsPerPage + 1}
+                        –
+                        {Math.min(
+                          safeCurrentPage * itemsPerPage,
+                          filteredClients.length,
+                        )}
+                      </span>{" "}
+                      из{" "}
+                      <span className="font-bold text-slate-800">
+                        {filteredClients.length}
+                      </span>{" "}
+                      клиентов
                     </span>
-                    <div className="flex items-center space-x-1">
-                      <button
-                        disabled={currentPage === 1}
-                        onClick={() =>
-                          setCurrentPage((p) => Math.max(1, p - 1))
-                        }
-                        className="w-7 h-7 flex items-center justify-center hover:bg-gray-50 rounded text-[11px] font-medium text-gray-600 transition disabled:opacity-30"
-                      >
-                        <svg
-                          width="12"
-                          height="12"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <polyline points="15 18 9 12 15 6"></polyline>
-                        </svg>
-                      </button>
-                      {[...Array(totalPages)].map((_, i) => (
+
+                    <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2">
+                      <div className="inline-flex items-center gap-1 bg-slate-50/90 p-1 rounded-xl border border-slate-200/70">
                         <button
-                          key={i}
-                          onClick={() => setCurrentPage(i + 1)}
-                          className={`w-7 h-7 flex items-center justify-center rounded text-[11px] font-bold shadow-sm transition ${currentPage === i + 1 ? "bg-black text-white" : "text-gray-600 hover:bg-gray-50"}`}
+                          disabled={safeCurrentPage === 1}
+                          onClick={() =>
+                            setCurrentPage(Math.max(1, safeCurrentPage - 1))
+                          }
+                          title="Предыдущая страница"
+                          className="w-7 h-7 flex items-center justify-center rounded-lg text-[11px] font-medium text-slate-600 hover:bg-white hover:text-slate-900 hover:shadow-xs transition-all disabled:opacity-30 disabled:pointer-events-none"
                         >
-                          {i + 1}
+                          <ChevronRight className="w-3.5 h-3.5 rotate-180" />
                         </button>
-                      ))}
-                      <button
-                        disabled={currentPage === totalPages}
-                        onClick={() =>
-                          setCurrentPage((p) => Math.min(totalPages, p + 1))
-                        }
-                        className="w-7 h-7 flex items-center justify-center hover:bg-gray-50 rounded text-[11px] font-medium text-gray-600 transition disabled:opacity-30"
-                      >
-                        <ChevronRight className="w-3 h-3" />
-                      </button>
-                      <div className="ml-4 flex items-center space-x-1 border-l border-gray-100 pl-4 py-1">
-                        <span className="text-[11px] text-gray-400 font-medium hidden sm:inline-block">
+
+                        {visiblePageItems.map((item) => {
+                          if (
+                            item === "ellipsis-start" ||
+                            item === "ellipsis-end"
+                          ) {
+                            const targetPage =
+                              item === "ellipsis-start"
+                                ? Math.max(1, safeCurrentPage - 5)
+                                : Math.min(totalPages, safeCurrentPage + 5);
+                            return (
+                              <button
+                                key={item}
+                                onClick={() => setCurrentPage(targetPage)}
+                                title={
+                                  item === "ellipsis-start"
+                                    ? "На 5 страниц назад"
+                                    : "На 5 страниц вперёд"
+                                }
+                                className="min-w-[28px] h-7 px-1 flex items-center justify-center rounded-lg text-[11px] font-bold text-slate-400 hover:text-slate-800 hover:bg-white transition-all tracking-widest"
+                              >
+                                •••
+                              </button>
+                            );
+                          }
+
+                          const isActive = safeCurrentPage === item;
+                          return (
+                            <button
+                              key={item}
+                              onClick={() => setCurrentPage(item)}
+                              className={`min-w-[28px] h-7 px-2 flex items-center justify-center rounded-lg text-[11px] font-bold transition-all ${
+                                isActive
+                                  ? "bg-slate-900 text-white shadow-sm"
+                                  : "text-slate-600 hover:bg-white hover:text-slate-900 hover:shadow-xs"
+                              }`}
+                            >
+                              {item}
+                            </button>
+                          );
+                        })}
+
+                        <button
+                          disabled={safeCurrentPage === totalPages}
+                          onClick={() =>
+                            setCurrentPage(
+                              Math.min(totalPages, safeCurrentPage + 1),
+                            )
+                          }
+                          title="Следующая страница"
+                          className="w-7 h-7 flex items-center justify-center rounded-lg text-[11px] font-medium text-slate-600 hover:bg-white hover:text-slate-900 hover:shadow-xs transition-all disabled:opacity-30 disabled:pointer-events-none"
+                        >
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center space-x-1.5 sm:border-l sm:border-gray-100 sm:pl-3">
+                        <span className="text-[11px] text-slate-400 font-medium hidden xl:inline-block whitespace-nowrap">
                           На странице:
                         </span>
                         <select
@@ -2187,17 +2258,18 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                             setItemsPerPage(Number(e.target.value));
                             setCurrentPage(1);
                           }}
-                          className="text-[11px] font-bold text-gray-700 bg-transparent border border-gray-100 rounded px-2 appearance-none outline-none cursor-pointer pr-4 hover:border-gray-200 transition"
+                          className="h-8 text-[11px] font-bold text-slate-700 bg-slate-50/90 hover:bg-white border border-slate-200/70 rounded-xl pl-2.5 pr-6 appearance-none outline-none cursor-pointer transition-all"
                           style={{
                             backgroundImage:
                               "url(\"data:image/svg+xml,%3Csvg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")",
                             backgroundRepeat: "no-repeat",
-                            backgroundPosition: "right 4px center",
+                            backgroundPosition: "right 7px center",
                           }}
                         >
                           <option value="10">10</option>
                           <option value="20">20</option>
                           <option value="50">50</option>
+                          <option value="100">100</option>
                         </select>
                       </div>
                     </div>

@@ -3,6 +3,7 @@ import { HeaderDescription } from "./HeaderDescription";
 import { useCRM } from "../context/CRMContext";
 import { TrainingGroup } from "../types";
 import { parseScheduleString, RU_WEEKDAYS_MAP } from "../utils/scheduleParser";
+import { isGroupMatch, isDateMatch } from "../utils/sessionMatching";
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -57,10 +58,11 @@ const RU_MONTHS = [
 ];
 
 const LOCATIONS = [
-  "Манеж Спартак",
-  "Импульс Арена",
-  "Центральное поле",
-  "Спортзал Школы №10",
+  "Баумана 5",
+  "Школа 93",
+  "Героев Хасана 7а",
+  "Энергия",
+  "Школа 135",
 ];
 
 export const ScheduleCalendar: React.FC<{
@@ -70,7 +72,8 @@ export const ScheduleCalendar: React.FC<{
   const {
     groups,
     coaches,
-    tasks,
+    counterparties,
+    cancelledSessions,
     updateGroup,
     calendarSyncEnabled,
     toggleCalendarSync,
@@ -111,58 +114,19 @@ export const ScheduleCalendar: React.FC<{
     const cached = localStorage.getItem("amkar_custom_events");
     if (cached) {
       try {
-        return Array.isArray(JSON.parse(cached)) ? JSON.parse(cached) : [];
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          // Strip legacy hardcoded demo events (ce_1, ce_2, ce_3) if previously cached in browser
+          return parsed.filter(
+            (ev: CustomEvent) =>
+              ev && !["ce_1", "ce_2", "ce_3"].includes(ev.id),
+          );
+        }
       } catch (e) {
-        // Fallback to defaults
+        // Ignore parse error
       }
     }
-    const today = new Date();
-    const d1 = new Date(today);
-    d1.setDate(today.getDate() + 1);
-    const d2 = new Date(today);
-    d2.setDate(today.getDate() + 3);
-    const d3 = new Date(today);
-    d3.setDate(today.getDate() + 4);
-
-    return [
-      {
-        id: "ce_1",
-        title: "Товарищеский хоккей/футбик с ФК Импульс",
-        date: d1.toLocaleDateString("en-CA"),
-        time: "18:00",
-        groupId: groups[0]?.id || "none",
-        groupName: groups[0]?.name || "Без группы",
-        coachId: coaches[0]?.id || "c_1",
-        coachName: coaches[0]?.name || "Константин Бесков",
-        location: "Импульс Арена",
-        type: "match",
-      },
-      {
-        id: "ce_2",
-        title: "Мастер-класс: Финты и дриблинг 1-на-1",
-        date: d2.toLocaleDateString("en-CA"),
-        time: "19:30",
-        groupId: groups.length > 1 ? groups[1]?.id : groups[0]?.id || "none",
-        groupName:
-          groups.length > 1 ? groups[1]?.name : groups[0]?.name || "Без группы",
-        coachId: coaches[1]?.id || "c_2",
-        coachName: coaches[1]?.name || "Олег Романцев",
-        location: "Манеж Спартак",
-        type: "masterclass",
-      },
-      {
-        id: "ce_3",
-        title: "Родительское собрание: Планы на летние сборы",
-        date: d3.toLocaleDateString("en-CA"),
-        time: "19:00",
-        groupId: "all",
-        groupName: "Все группы",
-        coachId: coaches[0]?.id || "c_1",
-        coachName: coaches[0]?.name || "Константин Бесков",
-        location: "Конференц-зал Манежа",
-        type: "meeting",
-      },
-    ];
+    return [];
   });
 
   // Keep localStorage updated
@@ -176,7 +140,7 @@ export const ScheduleCalendar: React.FC<{
   const [newEventDate, setNewEventDate] = useState("");
   const [newEventGroupId, setNewEventGroupId] = useState("all");
   const [newEventCoachId, setNewEventCoachId] = useState("");
-  const [newEventLocation, setNewEventLocation] = useState("Манеж Спартак");
+  const [newEventLocation, setNewEventLocation] = useState("Баумана 5");
   const [newEventType, setNewEventType] = useState<
     "regular" | "match" | "masterclass" | "meeting" | "competition"
   >("regular");
@@ -209,6 +173,12 @@ export const ScheduleCalendar: React.FC<{
     const seenCount = new Map<string, number>();
 
     groups.forEach((g) => {
+      const venueObj = g.venueId
+        ? counterparties.find((cp) => cp.id === g.venueId)
+        : undefined;
+      const fallbackLocation =
+        venueObj?.name || g.name.split(",")[0].trim() || "Площадка школы";
+
       g.scheduleDays?.forEach((sched) => {
         // Parse day, time, and location using our unified scheduleParser helper
         const parsedSlots = parseScheduleString(sched);
@@ -225,6 +195,14 @@ export const ScheduleCalendar: React.FC<{
               // Filter by start/end date range if defined on group
               if (g.scheduleStartDate && dateStr < g.scheduleStartDate) continue;
               if (g.scheduleEndDate && dateStr > g.scheduleEndDate) continue;
+
+              // Skip cancelled training sessions
+              const isCancelled = (cancelledSessions || []).some(
+                (cs) =>
+                  isGroupMatch(cs.groupId, g.id, g.name) &&
+                  isDateMatch(cs.date, dateStr),
+              );
+              if (isCancelled) continue;
 
               const activeCoach = coaches.find((c) => c.id === g.coachId);
               const coachName = activeCoach
@@ -246,7 +224,7 @@ export const ScheduleCalendar: React.FC<{
                 groupName: g.name,
                 coachId: g.coachId || (activeCoach ? activeCoach.id : "all"),
                 coachName: coachName,
-                location: slot.location || "Манеж Спартак",
+                location: slot.location || fallbackLocation,
                 type: "regular",
               });
             }
@@ -256,63 +234,18 @@ export const ScheduleCalendar: React.FC<{
     });
 
     return list;
-  }, [groups, coaches, currentDate]);
+  }, [groups, coaches, counterparties, cancelledSessions, currentDate]);
 
-  // Combine repeating schedules + custom events with deduplication, and dynamically insert pending risk tasks as event cards
+  // Combine repeating schedules + custom events with deduplication
   const allEvents = useMemo(() => {
-    // Convert active tasks assigned to staff into calendar events
-    const taskEvents: CustomEvent[] = (tasks || [])
-      .filter((t) => t.status !== "completed")
-      .map((t) => {
-        const rawDate = t.dueDate;
-        const todayStr = new Date().toLocaleDateString("en-CA");
-        const tmrw = new Date();
-        tmrw.setDate(tmrw.getDate() + 1);
-        const tmrwStr = tmrw.toLocaleDateString("en-CA");
-
-        // Map 'Сегодня' or empty dates to today's date
-        let resolvedDate =
-          rawDate === "Сегодня" || !rawDate ? todayStr : rawDate;
-
-        // If the date is not in standard YYYY-MM-DD format (e.g. 'Завтра')
-        if (resolvedDate && !/^\d{4}-\d{2}-\d{2}$/.test(resolvedDate)) {
-          if (resolvedDate.toLowerCase().includes("завтра")) {
-            resolvedDate = tmrwStr;
-          } else {
-            resolvedDate = todayStr;
-          }
-        }
-
-        const isRisk =
-          t.title.toLowerCase().includes("риск") ||
-          t.title.toLowerCase().includes("risk");
-
-        return {
-          id: t.id,
-          title: t.title,
-          date: resolvedDate,
-          time: "12:00",
-          groupId: t.relatedClientId || "task_event",
-          groupName: "Поручение CRM",
-          coachId: "staff",
-          coachName: t.assignedTo === "manager" ? "Менеджер" : "Тренер",
-          location: t.description,
-          type: isRisk ? "match" : "meeting", // styled red for risk, indigo for default meeting
-        } as CustomEvent;
-      });
-
-    // Put customEvents and tasks first so that any custom overrides keep priority
-    const combined = [
-      ...customEvents,
-      ...taskEvents,
-      ...repeatingScheduleEvents,
-    ];
+    const combined = [...customEvents, ...repeatingScheduleEvents];
     const seenKeys = new Set<string>();
     const uniqueList: CustomEvent[] = [];
 
     combined.forEach((ev) => {
-      // Create a unique key for matching group + date + time + type
-      const key = `${ev.groupId || "all"}_${ev.date}_${ev.time}_${ev.type}`;
+      // Normalize start time (e.g. "17:00-18:00" -> "17:00") so overlapping slot strings never duplicate
+      const normalizedStartTime = (ev.time || "").split("-")[0].trim();
+      const key = `${ev.groupId || "all"}_${ev.date}_${normalizedStartTime}_${ev.type}`;
       if (!seenKeys.has(key)) {
         seenKeys.add(key);
         uniqueList.push(ev);
@@ -320,7 +253,7 @@ export const ScheduleCalendar: React.FC<{
     });
 
     return uniqueList;
-  }, [repeatingScheduleEvents, customEvents, tasks]);
+  }, [repeatingScheduleEvents, customEvents]);
 
   // Apply filters to combined events list
   const filteredEvents = useMemo(() => {
@@ -494,7 +427,9 @@ export const ScheduleCalendar: React.FC<{
     setNewEventCoachId(coaches[0]?.id || "");
     setNewEventTime("17:00");
     setNewEventType("regular");
-    setNewEventLocation("Манеж Спартак");
+    setNewEventLocation(
+      groups[0]?.name?.split(",")[0]?.trim() || LOCATIONS[0] || "Баумана 5",
+    );
     setNewEventNotes("");
     setShowAddModal(true);
   };
@@ -552,8 +487,9 @@ export const ScheduleCalendar: React.FC<{
       const dateObj = new Date(newEventDate);
       const weekdayAbbr = RU_WEEKDAYS[dateObj.getDay()];
 
+      const groupBaseLocation = gObj.name.split(",")[0].trim();
       const locPrefix =
-        newEventLocation && newEventLocation !== "Манеж Спартак"
+        newEventLocation && newEventLocation !== groupBaseLocation
           ? `${newEventLocation}: `
           : "";
       const slotToAdd = `${locPrefix}${weekdayAbbr} ${newEventTime}`;
@@ -590,15 +526,13 @@ export const ScheduleCalendar: React.FC<{
       return;
     }
 
-    if (id.startsWith("rep_")) {
+    const repMatch = id.match(/^rep_(.+)_(\d{4}-\d{2}-\d{2})_([0-9a-zA-Z]+)_\d+$/);
+    if (repMatch) {
       // repeating event deletion, delete the matching scheduleDay string from the group's config
-      const parts = id.split("_");
-      const groupId = parts[1];
-      const targetTime = parts[3];
+      const [, groupId, dateStr, targetTime] = repMatch;
       const gObj = groups.find((g) => g.id === groupId);
       if (gObj) {
         // match specific day of week
-        const dateStr = parts[2];
         const dateObj = new Date(dateStr);
         const dayAbbr = RU_WEEKDAYS[dateObj.getDay()];
 
@@ -642,12 +576,11 @@ export const ScheduleCalendar: React.FC<{
 
     // Update group schedules for repeating events
     repIds.forEach((id) => {
-      const parts = id.split("_");
-      const groupId = parts[1];
-      const targetTime = parts[3];
+      const repMatch = id.match(/^rep_(.+)_(\d{4}-\d{2}-\d{2})_([0-9a-zA-Z]+)_\d+$/);
+      if (!repMatch) return;
+      const [, groupId, dateStr, targetTime] = repMatch;
       const gObj = groups.find((g) => g.id === groupId);
       if (gObj) {
-        const dateStr = parts[2];
         const dateObj = new Date(dateStr);
         const dayAbbr = RU_WEEKDAYS[dateObj.getDay()];
         const updatedSlots = (gObj.scheduleDays || []).filter((s) => {

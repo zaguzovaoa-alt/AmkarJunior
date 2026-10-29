@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import * as XLSX from "xlsx";
 import { HeaderDescription } from "./HeaderDescription";
 import { useCRM } from "../context/CRMContext";
 import {
@@ -167,6 +168,11 @@ const FIELD_DEFINITIONS = {
       default: "Иван",
     },
     {
+      key: "childBirthDate",
+      label: "Дата рождения (ДД.ММ.ГГГГ / ГГГГ-ММ-ДД)",
+      default: "2016-05-15",
+    },
+    {
       key: "childBirthYear",
       label: "Год рождения ребенка",
       default: 2016,
@@ -295,9 +301,10 @@ const FIELD_DEFINITIONS = {
 
 interface DirectorCRMProps {
   setActiveTab?: (tab: string) => void;
+  initialSection?: "metrics" | "import" | "training_sessions";
 }
 
-export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
+export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialSection }) => {
   const {
     clients,
     leads,
@@ -1048,13 +1055,14 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
   // New Staging States for Data Loader
   const [activeSection, setActiveSection] = useState<
     "metrics" | "import" | "training_sessions"
-  >("metrics");
+  >(initialSection || "metrics");
   const [selectedSessionDetail, setSelectedSessionDetail] = useState<
     any | null
   >(null);
   const [importType, setImportType] = useState<
     "clients" | "leads" | "finances" | "coaches"
   >("clients");
+  const [defaultImportGroupId, setDefaultImportGroupId] = useState<string>("");
   const [rawText, setRawText] = useState("");
   const [dragActive, setDragActive] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -1154,11 +1162,25 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
         const childName = nameParts.slice(1).join(" ") || "";
 
         let birthYear = 2016;
+        let birthDateIso = "";
         let age = 10;
-        const yearMatch = birthdateLine.match(/\b\d{4}\b/);
-        if (yearMatch) {
-          birthYear = parseInt(yearMatch[0]);
+
+        // Parse full date DD-MM-YYYY or DD.MM.YYYY or YYYY-MM-DD
+        const dmyMatch = birthdateLine.match(/(\d{2})[-./](\d{2})[-./](\d{4})/);
+        const ymdMatch = birthdateLine.match(/(\d{4})[-./](\d{2})[-./](\d{2})/);
+        if (dmyMatch) {
+          birthYear = parseInt(dmyMatch[3], 10);
+          birthDateIso = `${dmyMatch[3]}-${dmyMatch[2]}-${dmyMatch[1]}`;
+        } else if (ymdMatch) {
+          birthYear = parseInt(ymdMatch[1], 10);
+          birthDateIso = `${ymdMatch[1]}-${ymdMatch[2]}-${ymdMatch[3]}`;
+        } else {
+          const yearMatch = birthdateLine.match(/\b(20\d{2}|19\d{2})\b/);
+          if (yearMatch) {
+            birthYear = parseInt(yearMatch[0], 10);
+          }
         }
+
         const ageMatch = birthdateLine.match(/\((\d+)\)/);
         if (ageMatch) {
           age = parseInt(ageMatch[1]);
@@ -1169,6 +1191,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
         let parentName = "";
         let parentPhone = "";
         let parentEmail = "";
+        let detectedGroupName = "";
         const notesParts: string[] = [];
 
         let j = i + 2;
@@ -1185,9 +1208,21 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
           }
 
           const lcNext = nextLine.toLowerCase();
-          if (lcNext === "родители") {
+          if (lcNext === "родители" || lcNext === "представители") {
             j++;
             continue;
+          }
+
+          // Check if line matches an existing group name in CRM
+          if (!detectedGroupName && groups.length > 0) {
+            const matchedGrp = groups.find(
+              (g) =>
+                nextLine.toLowerCase().includes(g.name.toLowerCase()) ||
+                g.name.toLowerCase().includes(nextLine.toLowerCase()),
+            );
+            if (matchedGrp && nextLine.length >= 4) {
+              detectedGroupName = matchedGrp.name;
+            }
           }
 
           // If looks like a valid Parent FIO
@@ -1199,15 +1234,26 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
 
           // Email check
           if (nextLine.includes("@")) {
-            parentEmail = nextLine;
+            const emailMatch = nextLine.match(/[^\s,;]+@[^\s,;]+/);
+            parentEmail = emailMatch ? emailMatch[0] : nextLine;
             j++;
             continue;
           }
 
-          // Phone pattern check (usually start with 7/8/+, or contains 10-11 numbers)
-          const cleanPh = nextLine.replace(/[\s\-\(\)\+]/g, "");
-          if (/^\+?\d{9,15}$/.test(cleanPh)) {
-            parentPhone = nextLine;
+          // Phone pattern check (extract 10-11 digit Russian phone number even if line has labels)
+          const digitsOnly = nextLine.replace(/\D/g, "");
+          if (digitsOnly.length >= 10 && digitsOnly.length <= 12 && !nextLine.match(/\d{2}[-./]\d{2}[-./]\d{4}/)) {
+            let normalizedPh = digitsOnly;
+            if (normalizedPh.length === 10) normalizedPh = "+7" + normalizedPh;
+            else if (normalizedPh.length === 11 && normalizedPh.startsWith("8")) normalizedPh = "+7" + normalizedPh.slice(1);
+            else if (normalizedPh.length === 11 && normalizedPh.startsWith("7")) normalizedPh = "+" + normalizedPh;
+            else normalizedPh = "+" + normalizedPh;
+
+            if (!parentPhone) {
+              parentPhone = normalizedPh;
+            } else {
+              notesParts.push(`Доп. тел: ${normalizedPh}`);
+            }
             j++;
             continue;
           }
@@ -1216,17 +1262,21 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
           j++;
         }
 
+        const defaultGrp = groups.find((g) => g.id === defaultImportGroupId);
+
         blocks.push({
           childSurname,
           childName,
+          childBirthDate: birthDateIso || `${birthYear}-01-01`,
           childBirthYear: birthYear,
           childAge: age,
           parentName,
           parentPhone,
           parentEmail,
+          groupName: detectedGroupName || defaultGrp?.name || "",
           notes:
             notesParts.join(" | ") ||
-            "Скопировано из веб-карточки личного кабинета",
+            "Перенесен из AkratoPRIME",
         });
 
         i = j;
@@ -1299,16 +1349,41 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
       }
 
       if (
-        cellText.includes("фамил") ||
-        cellText.includes("surname") ||
-        cellText.includes("last")
+        cellText.includes("родител") ||
+        cellText.includes("представител") ||
+        cellText.includes("мама") ||
+        cellText.includes("папа") ||
+        cellText.includes("контактное лицо") ||
+        cellText.includes("заказчик")
       ) {
         guessed[c] =
-          type === "clients"
-            ? "childSurname"
-            : type === "leads"
+          type === "coaches"
+            ? "name"
+            : type === "clients"
+              ? "parentName"
+              : type === "leads"
+                ? "parentName"
+                : "skip";
+      } else if (
+        cellText.includes("фамил") ||
+        cellText.includes("surname") ||
+        cellText.includes("last") ||
+        cellText.includes("ученик") ||
+        cellText.includes("спортсмен") ||
+        cellText.includes("ребен") ||
+        cellText.includes("ребён") ||
+        cellText.includes("клиент") ||
+        cellText.includes("фио") ||
+        cellText.includes("fio")
+      ) {
+        guessed[c] =
+          type === "coaches"
+            ? "name"
+            : type === "clients"
               ? "childSurname"
-              : "skip";
+              : type === "leads"
+                ? "childSurname"
+                : "skip";
       } else if (
         cellText.includes("имя") ||
         cellText.includes("name") ||
@@ -1325,7 +1400,8 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
       } else if (
         cellText.includes("тел") ||
         cellText.includes("phone") ||
-        cellText.includes("номер")
+        cellText.includes("номер") ||
+        cellText.includes("моб")
       ) {
         guessed[c] =
           type === "clients"
@@ -1333,22 +1409,6 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
             : type === "leads"
               ? "parentPhone"
               : "skip";
-      } else if (
-        cellText.includes("род") ||
-        cellText.includes("родител") ||
-        cellText.includes("мама") ||
-        cellText.includes("папа") ||
-        cellText.includes("fio") ||
-        cellText.includes("фио")
-      ) {
-        guessed[c] =
-          type === "coaches"
-            ? "name"
-            : type === "clients"
-              ? "parentName"
-              : type === "leads"
-                ? "parentName"
-                : "skip";
       } else if (
         cellText.includes("email") ||
         cellText.includes("mail") ||
@@ -1361,13 +1421,15 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
               ? "parentEmail"
               : "skip";
       } else if (
+        cellText.includes("дата рожд") ||
+        cellText.includes("д.р") ||
         cellText.includes("год") ||
         cellText.includes("рожд") ||
         cellText.includes("birth")
       ) {
         guessed[c] =
           type === "clients"
-            ? "childBirthYear"
+            ? "childBirthDate"
             : type === "coaches"
               ? "joinedYear"
               : "skip";
@@ -1474,7 +1536,24 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
       const uniqueSuffix = `${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 4)}`;
 
       if (type === "clients") {
-        const birthYear = parseInt(rowDict.childBirthYear) || 2016;
+        let rawBirth = String(rowDict.childBirthDate || rowDict.childBirthYear || "").trim();
+        let birthYear = parseInt(rowDict.childBirthYear) || 2016;
+        let childBirthDate = rowDict.childBirthDate || "";
+
+        const dmyMatch = rawBirth.match(/(\d{2})[-./](\d{2})[-./](\d{4})/);
+        const ymdMatch = rawBirth.match(/(\d{4})[-./](\d{2})[-./](\d{2})/);
+        if (dmyMatch) {
+          birthYear = parseInt(dmyMatch[3], 10);
+          childBirthDate = `${dmyMatch[3]}-${dmyMatch[2]}-${dmyMatch[1]}`;
+        } else if (ymdMatch) {
+          birthYear = parseInt(ymdMatch[1], 10);
+          childBirthDate = `${ymdMatch[1]}-${ymdMatch[2]}-${ymdMatch[3]}`;
+        } else {
+          const yrMatch = rawBirth.match(/\b(20\d{2}|19\d{2})\b/);
+          if (yrMatch) birthYear = parseInt(yrMatch[1], 10);
+          if (!childBirthDate) childBirthDate = `${birthYear}-01-01`;
+        }
+
         let childSurname = (rowDict.childSurname || "").trim();
         let childName = (rowDict.childName || "").trim();
 
@@ -1499,25 +1578,57 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
           childName = `№${idx + 1}`;
         }
 
+        // Normalize parent phone (and extract from parentName if combined in one cell)
+        let rawParentName = (rowDict.parentName || "").trim();
+        let rawPh = (rowDict.parentPhone || "").trim();
+        if (!rawPh && rawParentName) {
+          const embeddedPhone = rawParentName.match(/(?:\+7|8|7)[\s(-]*\d{3}[\s)-]*\d{3}[\s-]*\d{2}[\s-]*\d{2}/);
+          if (embeddedPhone) {
+            rawPh = embeddedPhone[0];
+            rawParentName = rawParentName
+              .replace(embeddedPhone[0], "")
+              .replace(/[,;()]+$/g, "")
+              .trim();
+          }
+        }
+        const phDigits = rawPh.replace(/\D/g, "");
+        if (phDigits.length === 10) rawPh = "+7" + phDigits;
+        else if (phDigits.length === 11 && phDigits.startsWith("8")) rawPh = "+7" + phDigits.slice(1);
+        else if (phDigits.length === 11 && phDigits.startsWith("7")) rawPh = "+" + phDigits;
+
+        // Match group by name or fallback to selected default group
+        const defaultGrp = groups.find((g) => g.id === defaultImportGroupId);
+        const rawGroupName = (rowDict.groupName || "").trim();
+        const matchedGrp = rawGroupName
+          ? groups.find(
+              (g) =>
+                g.name.toLowerCase() === rawGroupName.toLowerCase() ||
+                g.name.toLowerCase().includes(rawGroupName.toLowerCase()) ||
+                rawGroupName.toLowerCase().includes(g.name.toLowerCase()),
+            )
+          : defaultGrp;
+
         loaded.push({
           id: rowDict.id || `cl_loaded_${uniqueSuffix}`,
           childSurname,
           childName,
+          childBirthDate,
           childBirthYear: birthYear,
           childAge: rowDict.childAge
             ? parseInt(rowDict.childAge)
             : new Date().getFullYear() - birthYear,
-          parentName: rowDict.parentName || "",
-          parentPhone: rowDict.parentPhone || "",
-          parentEmail: rowDict.parentEmail || "",
-          groupName: rowDict.groupName || null,
+          parentName: rawParentName || "Родитель",
+          parentPhone: rawPh,
+          parentEmail: (rowDict.parentEmail || "").trim(),
+          groupId: matchedGrp?.id || null,
+          groupName: matchedGrp?.name || rawGroupName || null,
           status: (rowDict.status || "active") as any,
           abonement: (rowDict.abonement || "12_sessions") as any,
           abonementStatus: (rowDict.abonementStatus || "Оплачено") as any,
           abonementSessionsLeft: rowDict.abonementSessionsLeft
             ? parseInt(rowDict.abonementSessionsLeft)
-            : 12,
-          coachId: rowDict.coachId || null,
+            : 8,
+          coachId: matchedGrp?.coachId || rowDict.coachId || null,
           coachName: rowDict.coachName || null,
           medicalCertificateUrl: null,
           insuranceUrl: null,
@@ -1531,7 +1642,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
           },
           achievements: [],
           notes:
-            rowDict.notes || "Загружен массовым импортом директором школы.",
+            rowDict.notes || "Импортирован из AkratoPRIME / таблицы.",
         });
       } else if (type === "leads") {
         let childSurname = (rowDict.childSurname || "").trim();
@@ -1672,14 +1783,60 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
     }
   };
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
+  const handleFileUpload = (file: File) => {
+    const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+    const reader = new FileReader();
 
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const file = e.dataTransfer.files[0];
-      const reader = new FileReader();
+    if (isExcel) {
+      reader.onload = (event) => {
+        try {
+          const data = event.target?.result;
+          if (!data) return;
+          const workbook = XLSX.read(data, { type: "array", cellDates: true });
+          const firstSheetName = workbook.SheetNames[0];
+          if (!firstSheetName) {
+            setErrorMessage("В загруженном Excel-файле не найдено листов.");
+            return;
+          }
+          const worksheet = workbook.Sheets[firstSheetName];
+          const rows = XLSX.utils.sheet_to_json<any[]>(worksheet, {
+            header: 1,
+            raw: false,
+            dateNF: "dd.mm.yyyy",
+            defval: "",
+          });
+
+          const nonEmptyRows = rows
+            .map((row) =>
+              (row || []).map((cell) =>
+                String(cell ?? "")
+                  .replace(/[\r\n\t]+/g, " ")
+                  .trim(),
+              ),
+            )
+            .filter((row) => row.some((cell) => cell !== ""));
+
+          if (nonEmptyRows.length === 0) {
+            setErrorMessage("Загруженный файл Excel не содержит данных.");
+            return;
+          }
+
+          const tsvText = nonEmptyRows.map((row) => row.join("\t")).join("\n");
+          setRawText(tsvText);
+          parseData(tsvText, importType);
+          setSuccessMessage(
+            `Файл «${file.name}» успешно прочитан (${nonEmptyRows.length} строк). Проверьте сопоставление колонок ниже.`,
+          );
+          setTimeout(() => setSuccessMessage(null), 6000);
+        } catch (err) {
+          console.error("Ошибка чтения Excel файла:", err);
+          setErrorMessage(
+            "Не удалось прочитать файл Excel (.xlsx). Попробуйте сохранить его в формате CSV или скопировать строки напрямую.",
+          );
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
       reader.onload = (event) => {
         if (event.target?.result) {
           const text = event.target.result as string;
@@ -1688,6 +1845,16 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
         }
       };
       reader.readAsText(file);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileUpload(e.dataTransfer.files[0]);
     }
   };
 
@@ -1704,30 +1871,30 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
     }
 
     try {
-      // Auto-detect isAkratoFormat
+      // Auto-detect isAkratoFormat (only when not a multi-column table)
+      const firstLineCols = trimmed.split(/\r?\n/)[0].split(/\t|;/).length;
+      const isTabular = firstLineCols >= 3;
       const isAkratoFormat =
-        trimmed.toLowerCase().includes("родители") ||
-        trimmed.toLowerCase().includes("в базе с:") ||
-        trimmed.toLowerCase().includes("в базе с");
+        !isTabular &&
+        (trimmed.toLowerCase().includes("родители") ||
+          trimmed.toLowerCase().includes("в базе с:") ||
+          trimmed.toLowerCase().includes("в базе с"));
 
       if (isAkratoFormat) {
-        setImportType("clients");
         const blocks = parseAkratoBlocks(trimmed);
-        if (blocks.length === 0) {
-          setErrorMessage(
-            "Обнаружен структурированный формат карточек CRM, но не удалось распознать ни одного профиля. Проверьте пример формата в инструкции.",
-          );
-          return;
-        }
+        if (blocks.length > 0) {
+          setImportType("clients");
 
         const grid = blocks.map((b) => [
           b.childSurname,
           b.childName,
+          b.childBirthDate,
           String(b.childBirthYear),
           String(b.childAge),
           b.parentName,
           b.parentPhone,
           b.parentEmail,
+          b.groupName || "",
           b.notes,
         ]);
 
@@ -1737,22 +1904,25 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
         const mappings = [
           "childSurname",
           "childName",
+          "childBirthDate",
           "childBirthYear",
           "childAge",
           "parentName",
           "parentPhone",
           "parentEmail",
+          "groupName",
           "notes",
         ];
         setColMappings(mappings);
 
         applyMappings(grid, mappings, false, "clients");
         setErrorMessage(null);
-        setSuccessMessage(
-          `Формат карточек AkratoPRIME успешно распознан и разобран! Импортировано учеников: ${blocks.length}.`,
-        );
-        setTimeout(() => setSuccessMessage(null), 5000);
-        return;
+          setSuccessMessage(
+            `Формат карточек AkratoPRIME успешно распознан и разобран! Импортировано учеников: ${blocks.length}.`,
+          );
+          setTimeout(() => setSuccessMessage(null), 5000);
+          return;
+        }
       }
 
       const grid = parseTextToGrid(trimmed);
@@ -4259,11 +4429,50 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                 </div>
               </div>
 
+              {importType === "clients" && groups.length > 0 && (
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider block">
+                    Привязать учеников к группе (по умолчанию):
+                  </label>
+                  <select
+                    value={defaultImportGroupId}
+                    onChange={(e) => {
+                      setDefaultImportGroupId(e.target.value);
+                    }}
+                    className="w-full text-xs font-bold bg-slate-50 border border-gray-200 rounded-xl p-2.5 focus:ring-1 focus:ring-red-500 text-slate-800"
+                  >
+                    <option value="">Определять автоматически из таблицы / Без группы</option>
+                    {groups.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {/* Paste Text Area & File Drop Zone */}
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider block">
-                  2. Вставьте строки или перетащите файл:
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider block">
+                    2. Вставьте скопированный список или выберите файл:
+                  </label>
+                  <label className="cursor-pointer inline-flex items-center space-x-1 px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg text-[10px] font-bold border border-red-200 transition">
+                    <Upload className="w-3 h-3" />
+                    <span>Загрузить Excel (.xlsx) / CSV / TXT</span>
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.csv,.tsv,.txt"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        handleFileUpload(file);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                </div>
 
                 {/* Drag zone wrapper */}
                 <div
@@ -4281,7 +4490,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab }) => {
                     id="import-data-textarea"
                     value={rawText}
                     onChange={(e) => setRawText(e.target.value)}
-                    placeholder="Вставьте сюда ячейки, скопированные из Excel или txt файлов..."
+                    placeholder="Скопируйте карточки из AkratoPRIME (Ctrl+A, Ctrl+C) или строки из Excel и вставьте сюда (Ctrl+V)..."
                     className="w-full h-36 p-3 text-xs font-mono bg-slate-50 border-0 focus:ring-0 rounded-xl resize-none focus:outline-none placeholder-gray-400"
                   />
                   {dragActive && (

@@ -49,9 +49,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // Calculate unread (unseen) messages for current user
   const unreadMessagesCount = messages.filter((m) => {
+    const isLeadership = currentRole === "director" || currentRole === "admin";
     const isVisible =
       !m.visibleTo ||
       m.visibleTo.includes(currentRole) ||
+      (isLeadership &&
+        (m.visibleTo.includes("director") || m.visibleTo.includes("admin"))) ||
       m.senderRole === currentRole;
     if (!isVisible) return false;
 
@@ -60,7 +63,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
       (m.senderId && m.senderId === currentUserId) ||
       (currentUserName &&
         m.senderName?.trim().toLowerCase() === currentUserName) ||
-      (m.senderRole === currentRole && !m.senderId);
+      (m.senderRole === currentRole && !m.senderId) ||
+      (isLeadership &&
+        (m.senderRole === "director" || m.senderRole === "admin") &&
+        m.senderId === currentUserId);
     if (isMe) return false;
 
     // Check if current user has viewed/read it
@@ -68,11 +74,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
     const isReadByMe =
       readByList.includes(currentUserId) ||
       readByList.includes(currentRole) ||
+      (isLeadership &&
+        (readByList.includes("director") || readByList.includes("admin"))) ||
       (m.readers &&
         m.readers.some(
           (r) =>
             r.id === currentUserId ||
             r.id === currentRole ||
+            (isLeadership && (r.role === "director" || r.role === "admin")) ||
             (currentUserName &&
               r.name?.trim().toLowerCase() === currentUserName),
         ));

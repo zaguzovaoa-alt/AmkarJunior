@@ -201,9 +201,11 @@ interface CRMContextType {
   ) => Promise<void>;
   notifications: AppNotification[];
   addNotification: (
-    notif: Omit<AppNotification, "id" | "isRead" | "dateString">,
+    notif: Omit<AppNotification, "id" | "isRead" | "dateString"> & { id?: string },
   ) => void;
   markNotificationRead: (id: string) => void;
+  markAllNotificationsRead: () => Promise<void>;
+  clearReadNotifications: () => Promise<void>;
   toggleCalendarSync: () => void;
   triggerManualCalendarSync: () => void;
   resetAllData: () => void;
@@ -1434,18 +1436,18 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     // Immediate local state update
     setLeads((prev) => [...prev, newLead]);
 
-    // Automatically trigger task for Manager and Director locally
-    const managerTaskId = `t_${Date.now()}_m`;
+    // Automatically trigger task for Manager and Director locally (deterministic IDs matching server.ts)
+    const managerTaskId = `t_${leadId}_m`;
     const childFullTitle = [newLead.childSurname, newLead.childName].filter(Boolean).join(" ") || "Ребенок";
     const ageText = newLead.childAge > 0 ? ` (${newLead.childAge} лет)` : "";
 
     const managerTask: CRMTask = {
       id: managerTaskId,
-      title: `НОВАЯ ЗАЯВКА: ${childFullTitle}`,
+      title: `⚡ НОВАЯ ЗАЯВКА: ${childFullTitle}`,
       assignedTo: "manager",
       status: "new",
-      dueDate: new Date().toLocaleDateString("ru-RU"),
-      description: `Внимание! Поступила новая заявка из канала [${newLead.source}]. 
+      dueDate: moscowDate,
+      description: `🔥 Внимание! Поступила новая заявка из канала [${newLead.source}]. 
 Родитель: ${newLead.parentName}
 Телефон: ${newLead.parentPhone}
 Ребенок: ${childFullTitle}${ageText}
@@ -1453,19 +1455,25 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       relatedLeadId: newLead.id,
     };
 
-    const directorTaskId = `t_${Date.now()}_d`;
+    const directorTaskId = `t_${leadId}_d`;
     const directorTask: CRMTask = {
       id: directorTaskId,
       title: `Контроль: Новая заявка [ ${newLead.source} ]`,
       assignedTo: "director",
       status: "new",
-      dueDate: new Date().toLocaleDateString("ru-RU"),
+      dueDate: moscowDate,
       description: `Новый потенциальный клиент: ${childFullTitle}${ageText}. Источник: ${newLead.source}. Телефон: ${newLead.parentPhone}`,
+      relatedLeadId: newLead.id,
     };
 
-    setTasks((prev) => [managerTask, directorTask, ...prev]);
+    setTasks((prev) => [
+      managerTask,
+      directorTask,
+      ...prev.filter((t) => t.id !== managerTaskId && t.id !== directorTaskId),
+    ]);
 
     // 1. Submit to server API (sends Telegram alert server-side, broadcasts OS Web Push, and writes to Firestore)
+    let serverSaved = false;
     try {
       const serverRes = await fetch("/api/leads/submit", {
         method: "POST",
@@ -1473,6 +1481,9 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         body: JSON.stringify(newLead),
       });
       const resJson = await serverRes.json().catch(() => null);
+      if (serverRes.ok && resJson?.status === "OK") {
+        serverSaved = true;
+      }
       if (resJson?.telegramSent) {
         newLead.telegramNotified = true;
       }
@@ -1480,16 +1491,18 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       console.warn("Server lead submit notice:", err);
     }
 
-    // 2. Direct Firestore fallback sync
-    setDoc(doc(db, "leads", leadId), newLead).catch((err) => { 
-      handleFirestoreError(err, OperationType.WRITE, "leads");
-    });
-    setDoc(doc(db, "tasks", managerTaskId), managerTask).catch((err) => { 
-      handleFirestoreError(err, OperationType.WRITE, "tasks");
-    });
-    setDoc(doc(db, "tasks", directorTaskId), directorTask).catch((err) => { 
-      handleFirestoreError(err, OperationType.WRITE, "tasks");
-    });
+    // 2. Direct Firestore fallback sync (only if server call didn't already persist them, using deterministic IDs)
+    if (!serverSaved) {
+      setDoc(doc(db, "leads", leadId), newLead).catch((err) => { 
+        handleFirestoreError(err, OperationType.WRITE, "leads");
+      });
+      setDoc(doc(db, "tasks", managerTaskId), managerTask).catch((err) => { 
+        handleFirestoreError(err, OperationType.WRITE, "tasks");
+      });
+      setDoc(doc(db, "tasks", directorTaskId), directorTask).catch((err) => { 
+        handleFirestoreError(err, OperationType.WRITE, "tasks");
+      });
+    }
 
     if (calendarSyncEnabled) {
       setCalendarSyncLog((prev) => [
@@ -1521,12 +1534,15 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       console.warn("Client telegram alert fallback notice:", e);
     }
 
-    addNotification({
-      title: `Новая заявка: ${childFullTitle}`,
-      body: `Родитель: ${newLead.parentName} (${newLead.parentPhone}). Источник: ${newLead.source}`,
-      type: "system",
-      targetRole: ["director", "admin", "manager"],
-    });
+    if (!serverSaved) {
+      addNotification({
+        id: `notif_${leadId}`,
+        title: `⚡ Новая заявка: ${childFullTitle}`,
+        body: `Родитель: ${newLead.parentName} (${newLead.parentPhone}). Источник: ${newLead.source}`,
+        type: "system",
+        targetRole: ["director", "admin", "manager"],
+      });
+    }
   };
 
   const resendLeadTelegram = async (
@@ -2511,8 +2527,9 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   const addChatMessage = async (
     msgData: Omit<ChatMessage, "id" | "timestamp">,
   ) => {
-    const id = `msg_${Date.now()}`;
-    const timeNow = new Date().toLocaleTimeString("ru-RU", {
+    const now = new Date();
+    const id = `msg_${now.getTime()}`;
+    const timeNow = now.toLocaleTimeString("ru-RU", {
       hour: "2-digit",
       minute: "2-digit",
     });
@@ -2524,11 +2541,25 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       readAt: timeNow,
     };
 
+    // Ensure director & admin roles stay synchronized in visibility
+    let normalizedVisibleTo = msgData.visibleTo
+      ? Array.from(new Set(msgData.visibleTo))
+      : undefined;
+    if (normalizedVisibleTo) {
+      if (normalizedVisibleTo.includes("director") && !normalizedVisibleTo.includes("admin")) {
+        normalizedVisibleTo.push("admin");
+      } else if (normalizedVisibleTo.includes("admin") && !normalizedVisibleTo.includes("director")) {
+        normalizedVisibleTo.push("director");
+      }
+    }
+
     const newMsg: ChatMessage = {
       ...msgData,
       id,
       timestamp: timeNow,
+      createdAt: now.toISOString(),
       senderId,
+      visibleTo: normalizedVisibleTo,
       readBy: [senderId],
       readers: [initialReader],
       isRead: false,
@@ -2542,6 +2573,38 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       handleFirestoreError(err, OperationType.WRITE, "messages");
       console.warn("Failed to sync new message in Firestore:", err);
     });
+
+    // Notify recipients (excluding sender's own role)
+    const allTargetRoles: ("manager" | "trainer" | "parent" | "director" | "admin")[] =
+      normalizedVisibleTo && normalizedVisibleTo.length > 0
+        ? normalizedVisibleTo
+        : ["manager", "trainer", "director", "admin"];
+
+    const recipientRoles = allTargetRoles.filter((r) => {
+      if (r === msgData.senderRole) return false;
+      if (
+        (msgData.senderRole === "director" && r === "admin") ||
+        (msgData.senderRole === "admin" && r === "director")
+      ) {
+        return false;
+      }
+      return true;
+    });
+
+    if (recipientRoles.length > 0) {
+      const previewText =
+        msgData.text.length > 90
+          ? `${msgData.text.slice(0, 90)}...`
+          : msgData.text || (msgData.fileName ? `Файл: ${msgData.fileName}` : "Новое вложение");
+
+      addNotification({
+        id: `notif_${id}`,
+        title: `💬 Сообщение: ${msgData.senderName}`,
+        body: previewText,
+        type: "message",
+        targetRole: recipientRoles,
+      });
+    }
   };
 
   const markChatMessageAsRead = async (
@@ -2664,9 +2727,9 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   async function addNotification(
-    notifData: Omit<AppNotification, "id" | "isRead" | "dateString">,
+    notifData: Omit<AppNotification, "id" | "isRead" | "dateString"> & { id?: string },
   ) {
-    const id = `notif_${Date.now()}`;
+    const id = notifData.id || `notif_${Date.now()}`;
     const dateString = new Date().toISOString();
     const newNotif: AppNotification = {
       ...notifData,
@@ -2675,8 +2738,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       dateString,
     };
 
-    setNotifications((prev) => [newNotif, ...prev]);
-    setDoc(doc(db, "notifications", id), newNotif).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
+    setNotifications((prev) => [newNotif, ...prev.filter((n) => n.id !== id)]);
+    setDoc(doc(db, "notifications", id), removeUndefined(newNotif)).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn("Failed to sync new notification in Firestore:", err);
     });
 
@@ -2705,6 +2768,36 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         err,
       );
     });
+  };
+
+  const markAllNotificationsRead = async () => {
+    const unread = notifications.filter((n) => !n.isRead);
+    if (unread.length === 0) return;
+    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    try {
+      await Promise.all(
+        unread.map((n) =>
+          updateDoc(doc(db, "notifications", n.id), { isRead: true }).catch(() => {}),
+        ),
+      );
+    } catch (e) {
+      console.warn("Failed to mark all notifications as read:", e);
+    }
+  };
+
+  const clearReadNotifications = async () => {
+    const readNotifs = notifications.filter((n) => n.isRead);
+    if (readNotifs.length === 0) return;
+    setNotifications((prev) => prev.filter((n) => !n.isRead));
+    try {
+      await Promise.all(
+        readNotifs.map((n) =>
+          deleteDoc(doc(db, "notifications", n.id)).catch(() => {}),
+        ),
+      );
+    } catch (e) {
+      console.warn("Failed to clear read notifications:", e);
+    }
   };
 
   const toggleCalendarSync = () => {
@@ -3373,11 +3466,16 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         deleteBatch.delete(doc(db, "clients", item.id));
       }
       await deleteBatch.commit(); }
-      const batch = writeBatch(db);
-      for (const item of newClients) {
-        batch.set(doc(db, "clients", item.id), item);
+      const chunkSize = 400;
+      for (let i = 0; i < newClients.length; i += chunkSize) {
+        const batch = writeBatch(db);
+        for (const item of newClients.slice(i, i + chunkSize)) {
+          const cleanItem = JSON.parse(JSON.stringify(item));
+          batch.set(doc(db, "clients", cleanItem.id), cleanItem);
+        }
+        await batch.commit();
       }
-      await batch.commit();
+      setClients(newClients);
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "clients");
     }
@@ -3419,11 +3517,20 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const appendClients = async (newClients: Client[]) => {
     try {
-      const batch = writeBatch(db);
-      for (const item of newClients) {
-        batch.set(doc(db, "clients", item.id), item);
+      setClients((prev) => {
+        const existingIds = new Set(prev.map((c) => c.id));
+        const uniqueNew = newClients.filter((c) => !existingIds.has(c.id));
+        return [...prev, ...uniqueNew];
+      });
+      const chunkSize = 400;
+      for (let i = 0; i < newClients.length; i += chunkSize) {
+        const batch = writeBatch(db);
+        for (const item of newClients.slice(i, i + chunkSize)) {
+          const cleanItem = JSON.parse(JSON.stringify(item));
+          batch.set(doc(db, "clients", cleanItem.id), cleanItem, { merge: true });
+        }
+        await batch.commit();
       }
-      await batch.commit();
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "clients");
     }
@@ -4103,6 +4210,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         notifications,
         addNotification,
         markNotificationRead,
+        markAllNotificationsRead,
+        clearReadNotifications,
         addChatMessage,
         updateChatMessage,
         deleteChatMessage,
