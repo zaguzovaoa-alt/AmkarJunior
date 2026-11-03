@@ -158,6 +158,29 @@
         "records": { "type": "array" }
       },
       "required": ["id", "groupId", "groupName", "date", "dateString", "coachId", "coachName", "presentCount", "sickCount", "absentCount", "records"]
+    },
+    "VideoLesson": {
+      "title": "VideoLesson",
+      "description": "Educational football video lesson in the Knowledge Base for parents and students",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "videoUrl": { "type": "string" },
+        "thumbnailUrl": { "type": "string" },
+        "category": { "type": "string" },
+        "duration": { "type": "string" },
+        "ageGroup": { "type": "string" },
+        "coachTips": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorRole": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "isPinned": { "type": "boolean" },
+        "viewsCount": { "type": "number" }
+      },
+      "required": ["id", "title", "description", "videoUrl", "category", "authorName", "authorRole", "createdAt"]
     }
   },
   "firestore": {
@@ -200,6 +223,10 @@
     "store_orders": {
       "schema": "StoreOrder",
       "description": "Orders placed for store equipment"
+    },
+    "video_lessons": {
+      "schema": "VideoLesson",
+      "description": "Knowledge Base video lessons published by director and administrator for parents"
     }
   }
 }

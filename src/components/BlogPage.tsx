@@ -4,6 +4,7 @@ import { BlogCard } from "./BlogCard";
 import { ArticleView } from "./ArticleView";
 import { useCRM } from "../context/CRMContext";
 import { AmkarLogo } from "./AmkarLogo";
+import { VideoLessonsModule } from "./VideoLessonsModule";
 import {
   Search,
   BookOpen,
@@ -14,6 +15,7 @@ import {
   TrendingUp,
   Award,
   Filter,
+  Film,
 } from "lucide-react";
 
 interface BlogPageProps {
@@ -22,7 +24,8 @@ interface BlogPageProps {
 }
 
 export const BlogPage: React.FC<BlogPageProps> = ({ initialSlug, onGoHome }) => {
-  const { schoolName } = useCRM();
+  const { schoolName, videoLessons } = useCRM();
+  const [blogSectionTab, setBlogSectionTab] = useState<"articles" | "videos">("articles");
   const [selectedArticle, setSelectedArticle] = useState<BlogArticle | null>(() => {
     if (initialSlug) {
       return getArticleBySlug(initialSlug) || null;
@@ -192,26 +195,60 @@ export const BlogPage: React.FC<BlogPageProps> = ({ initialSlug, onGoHome }) => 
 
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-4 py-10 space-y-10">
-        {/* Category Filter Chips */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-          <Filter className="w-4 h-4 text-slate-400 flex-shrink-0 mr-1" />
-          {categories.map((cat) => {
-            const isActive = activeCategory === cat;
-            return (
-              <button
-                key={cat}
-                onClick={() => setActiveCategory(cat)}
-                className={`px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition whitespace-nowrap ${
-                  isActive
-                    ? "bg-red-600 text-white shadow-md shadow-red-600/20"
-                    : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80"
-                }`}
-              >
-                {cat}
-              </button>
-            );
-          })}
+        {/* Top Tab Switcher: Статьи блога | Видеоуроки */}
+        <div className="bg-white rounded-2xl p-2 border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setBlogSectionTab("articles")}
+              className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-2 cursor-pointer ${
+                blogSectionTab === "articles"
+                  ? "bg-slate-900 text-white shadow-xs"
+                  : "text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              <BookOpen className="w-4 h-4" />
+              <span>Статьи и методички ({BLOG_ARTICLES.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setBlogSectionTab("videos")}
+              className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center gap-2 cursor-pointer ${
+                blogSectionTab === "videos"
+                  ? "bg-red-600 text-white shadow-xs"
+                  : "text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              <Film className="w-4 h-4" />
+              <span>Видеоуроки ({videoLessons.length})</span>
+            </button>
+          </div>
         </div>
+
+        {blogSectionTab === "videos" ? (
+          <VideoLessonsModule />
+        ) : (
+          <>
+            {/* Category Filter Chips */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+              <Filter className="w-4 h-4 text-slate-400 flex-shrink-0 mr-1" />
+              {categories.map((cat) => {
+                const isActive = activeCategory === cat;
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => setActiveCategory(cat)}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition whitespace-nowrap ${
+                      isActive
+                        ? "bg-red-600 text-white shadow-md shadow-red-600/20"
+                        : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80"
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                );
+              })}
+            </div>
 
         {/* Search Results Count */}
         {searchQuery && (
@@ -278,6 +315,8 @@ export const BlogPage: React.FC<BlogPageProps> = ({ initialSlug, onGoHome }) => 
               </div>
             </div>
           </div>
+        )}
+          </>
         )}
 
         {/* Geo Perm Box */}

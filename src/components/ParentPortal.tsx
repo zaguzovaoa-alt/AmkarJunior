@@ -60,6 +60,8 @@ import {
   ParentKBCategory,
   ParentKBArticle,
 } from "../data/parentKnowledgeBase";
+import { VideoLessonsModule } from "./VideoLessonsModule";
+import { Film, Play } from "lucide-react";
 
 interface ParentPortalProps {
   activeTab: string;
@@ -128,6 +130,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
     storeOrders,
     homeworks,
     homeworkSubmissions,
+    videoLessons,
     createOrder,
     submitHomework,
     crmConfig,
@@ -264,6 +267,7 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
     achievements: myClientRaw?.achievements || [],
   } as any;
   const [selectedArticle, setSelectedArticle] = useState<ParentKBArticle | null>(null);
+  const [kbSubTab, setKbSubTab] = useState<"articles" | "videos">("articles");
   const [kbCategory, setKbCategory] = useState<ParentKBCategory>("Все разделы");
   const [kbSearchQuery, setKbSearchQuery] = useState<string>("");
   const [kbShowSavedOnly, setKbShowSavedOnly] = useState<boolean>(false);
@@ -3002,7 +3006,69 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
               exit={{ opacity: 0 }}
               className="space-y-6 text-left"
             >
-              {(() => {
+              {/* Top Segmented Sub-Navigation: Статьи и памятки | Видеоуроки */}
+              <div className="bg-white rounded-2xl p-2 border border-gray-200/80 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setKbSubTab("articles")}
+                    className={`flex-1 sm:flex-initial px-4 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center justify-center gap-2 cursor-pointer ${
+                      kbSubTab === "articles"
+                        ? "bg-slate-900 text-white shadow-xs"
+                        : "bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                    }`}
+                  >
+                    <BookOpen className="w-4 h-4" />
+                    <span>Статьи и памятки</span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono tabular-nums ${
+                        kbSubTab === "articles"
+                          ? "bg-white/15 text-amber-300"
+                          : "bg-slate-100 text-slate-500"
+                      }`}
+                    >
+                      {kbArticles.length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setKbSubTab("videos")}
+                    className={`flex-1 sm:flex-initial px-4 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center justify-center gap-2 cursor-pointer ${
+                      kbSubTab === "videos"
+                        ? "bg-red-600 text-white shadow-xs"
+                        : "bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                    }`}
+                  >
+                    <Film className="w-4 h-4" />
+                    <span>Видеоуроки</span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono tabular-nums ${
+                        kbSubTab === "videos"
+                          ? "bg-white/20 text-white"
+                          : "bg-red-50 text-red-600 font-bold"
+                      }`}
+                    >
+                      {videoLessons.length}
+                    </span>
+                  </button>
+                </div>
+
+                <div className="px-3 py-1.5 flex items-center justify-between sm:justify-end gap-2 text-[11px] text-slate-500">
+                  <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2.5 py-1 rounded-lg">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>Синхронизация с тренерским штабом в реальном времени</span>
+                  </span>
+                </div>
+              </div>
+
+              {kbSubTab === "videos" ? (
+                <VideoLessonsModule
+                  clientId={myClient?.id || "default"}
+                  childName={myClient?.childName}
+                />
+              ) : (
+                (() => {
                 // Determine personal focus area based on child's metrics
                 const pTech = myClient.progress?.technique || 4.5;
                 const pTact = myClient.progress?.tactics || 4.4;
@@ -3840,7 +3906,8 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                     )}
                   </>
                 );
-              })()}
+                })()
+              )}
             </motion.div>
           )}
 

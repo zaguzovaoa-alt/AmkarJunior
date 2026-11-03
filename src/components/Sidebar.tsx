@@ -165,6 +165,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             label: "Google Календарь",
             icon: RefreshCw,
           },
+          { id: "hq_knowledge", label: "База знаний", icon: BookOpen },
           { id: "hq_store", label: "Магазин (Админ)", icon: ShoppingCart },
           { id: "hq_settings", label: "Настройки", icon: Settings },
         ];
@@ -188,6 +189,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             icon: MessageSquare,
             badge: finalMessageCount || undefined,
           },
+          { id: "hq_knowledge", label: "База знаний", icon: BookOpen },
           {
             id: "hq_calendar_sync",
             label: "Google Календарь",

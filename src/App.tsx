@@ -213,7 +213,7 @@ function DashboardContainer() {
             />
           );
         }
-        if (currentTab === "trainer_knowledge") {
+        if (currentTab === "trainer_knowledge" || currentTab === "hq_knowledge") {
           return (
             <TrainerCRM
               activeTab="trainer_knowledge"
@@ -297,6 +297,14 @@ function DashboardContainer() {
               setActiveTab={setCurrentTab}
             />
           );
+        if (currentTab === "trainer_knowledge" || currentTab === "hq_knowledge") {
+          return (
+            <TrainerCRM
+              activeTab="trainer_knowledge"
+              setActiveTab={setCurrentTab}
+            />
+          );
+        }
         if (currentTab === "hq_store") return <AdminStore />;
         if (currentTab === "hq_home" || currentTab === "director_home")
           return <DirectorCRM setActiveTab={setCurrentTab} />;

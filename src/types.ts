@@ -96,6 +96,32 @@ export interface HomeworkSubmission {
   dateDone?: string;
 }
 
+export type VideoLessonCategory =
+  | 'Техника и дриблинг'
+  | 'Домашние тренировки'
+  | 'ОФП и координация'
+  | 'Удар и передача'
+  | 'Тактика и мышление'
+  | 'Разминка и здоровье';
+
+export interface VideoLesson {
+  id: string;
+  title: string;
+  description: string;
+  videoUrl: string;
+  thumbnailUrl?: string;
+  category: VideoLessonCategory | string;
+  duration?: string;
+  ageGroup?: string;
+  coachTips?: string;
+  authorName: string;
+  authorRole: 'director' | 'admin' | 'trainer';
+  createdAt: string;
+  updatedAt?: string;
+  isPinned?: boolean;
+  viewsCount?: number;
+}
+
 export interface AIProgressReport {
   id: string;
   clientId: string;
@@ -153,6 +179,9 @@ export interface Client {
   childBirthDate?: string;
   childAge: number;
   status: ClientStatus;
+  inactiveAt?: string;
+  inactiveReason?: string;
+  previousGroupName?: string | null;
   abonement: 'none' | '12_sessions' | '8_sessions' | '4_sessions' | '1_session';
   abonementStatus: 'Оплачено' | 'Ожидает оплаты' | 'Нет абонемента' | 'Не оплачено';
   abonementExpirationDate?: string;

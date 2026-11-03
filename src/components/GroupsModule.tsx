@@ -141,9 +141,13 @@ export const GroupsModule: React.FC = () => {
     }
   };
 
-  // 4. Dynamic metrics
+  // 4. Dynamic metrics (active/attending students)
+  const activeAttendingClients = useMemo(
+    () => clients.filter((c) => c.status !== "inactive"),
+    [clients],
+  );
   const totalGroupsCount = groups.length;
-  const totalClientsInGroups = clients.filter(
+  const totalClientsInGroups = activeAttendingClients.filter(
     (c) =>
       c.groupName &&
       groups.some(
@@ -151,7 +155,7 @@ export const GroupsModule: React.FC = () => {
           g.name.trim().toLowerCase() === c.groupName?.trim().toLowerCase(),
       ),
   ).length;
-  const unassignedClients = clients.filter(
+  const unassignedClients = activeAttendingClients.filter(
     (c) =>
       !c.groupName ||
       !groups.some(
@@ -341,8 +345,8 @@ export const GroupsModule: React.FC = () => {
     }
   };
 
-  // Filter clients based on search query
-  const filteredClients = clients
+  // Filter clients based on search query (excluding inactive clients moved to Неактивные)
+  const filteredClients = activeAttendingClients
     .filter((c) => {
       const fullName =
         `${c.childName} ${c.childSurname} ${c.parentName}`.toLowerCase();
@@ -545,7 +549,7 @@ export const GroupsModule: React.FC = () => {
                 {groups.map((group) => {
                   // Get dynamic client count assigned to this group name by stripping whitespace and matching case-insensitively
                   const groupClientsList = group.isSelectTeam
-                    ? clients
+                    ? activeAttendingClients
                         .filter((c) => group.selectedClientIds?.includes(c.id))
                         .sort((a, b) =>
                           `${a.childSurname || ""} ${a.childName || ""}`.localeCompare(
@@ -553,7 +557,7 @@ export const GroupsModule: React.FC = () => {
                             "ru",
                           ),
                         )
-                    : clients
+                    : activeAttendingClients
                         .filter(
                           (c) =>
                             c.groupName &&
@@ -1522,8 +1526,8 @@ export const GroupsModule: React.FC = () => {
                 // Build full list of group students
                 const groupStudents = (() => {
                   const list = analyticsGroup.isSelectTeam
-                    ? clients.filter((c) => analyticsGroup.selectedClientIds?.includes(c.id))
-                    : clients.filter(
+                    ? activeAttendingClients.filter((c) => analyticsGroup.selectedClientIds?.includes(c.id))
+                    : activeAttendingClients.filter(
                         (c) =>
                           c.groupId === analyticsGroup.id ||
                           (c.groupName &&

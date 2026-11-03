@@ -40,7 +40,9 @@ import {
   Counterparty,
   CancelledSession,
   AIProgressReport,
+  VideoLesson,
 } from "../types";
+import { INITIAL_VIDEO_LESSONS } from "../data/initialVideoLessons";
 
 // Helper to recursively remove undefined properties before writing to Firestore
 function removeUndefined<T>(obj: T): T {
@@ -107,6 +109,16 @@ interface CRMContextType {
   addHomework: (hw: Omit<Homework, "id" | "dateAssigned">) => Promise<void>;
   deleteHomework: (id: string) => Promise<void>;
   submitHomework: (homeworkId: string, clientId: string) => Promise<void>;
+  videoLessons: VideoLesson[];
+  addVideoLesson: (
+    lesson: Omit<VideoLesson, "id" | "createdAt" | "viewsCount">,
+  ) => Promise<VideoLesson>;
+  updateVideoLesson: (
+    id: string,
+    updates: Partial<Omit<VideoLesson, "id">>,
+  ) => Promise<void>;
+  deleteVideoLesson: (id: string) => Promise<void>;
+  incrementVideoLessonViews: (id: string) => Promise<void>;
   calendarSyncEnabled: boolean;
   calendarSyncStatus: "connected" | "disconnected" | "syncing";
   calendarSyncLog: string[];
@@ -505,6 +517,16 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   >(() => {
     const cached = localStorage.getItem("amkar_homework_submissions");
     return cached ? JSON.parse(cached) : [];
+  });
+  const [videoLessons, setVideoLessons] = useState<VideoLesson[]>(() => {
+    try {
+      const cached = localStorage.getItem("amkar_video_lessons");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_VIDEO_LESSONS;
   });
   const [counterparties, setCounterparties] = useState<Counterparty[]>(INITIAL_COUNTERPARTIES);
   const [cancelledSessions, setCancelledSessions] = useState<CancelledSession[]>(() => {
@@ -1217,6 +1239,60 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       (err) => console.warn("Config listener notice:", err)
     );
 
+    const unsubVideoLessonsCatalog = onSnapshot(
+      doc(db, "_config", "video_lessons_catalog"),
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          if (Array.isArray(data?.items)) {
+            const sorted = [...(data.items as VideoLesson[])].sort((a, b) => {
+              if (Boolean(a.isPinned) !== Boolean(b.isPinned)) {
+                return a.isPinned ? -1 : 1;
+              }
+              return (b.createdAt || "").localeCompare(a.createdAt || "");
+            });
+            setVideoLessons(sorted);
+            try {
+              localStorage.setItem("amkar_video_lessons", JSON.stringify(sorted));
+            } catch {}
+          }
+        } else {
+          // Seed initial catalog into _config/video_lessons_catalog so all parents see it in real time
+          setDoc(
+            doc(db, "_config", "video_lessons_catalog"),
+            { items: INITIAL_VIDEO_LESSONS, updatedAt: new Date().toISOString() },
+            { merge: true },
+          ).catch(() => {});
+        }
+      },
+      (err) => console.warn("Video lessons catalog listener notice:", err),
+    );
+
+    const unsubVideoLessonsCol = onSnapshot(
+      collection(db, "video_lessons"),
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const list: VideoLesson[] = [];
+          snapshot.forEach((d) => {
+            list.push(d.data() as VideoLesson);
+          });
+          list.sort((a, b) => {
+            if (Boolean(a.isPinned) !== Boolean(b.isPinned)) {
+              return a.isPinned ? -1 : 1;
+            }
+            return (b.createdAt || "").localeCompare(a.createdAt || "");
+          });
+          setVideoLessons(list);
+          try {
+            localStorage.setItem("amkar_video_lessons", JSON.stringify(list));
+          } catch {}
+        }
+      },
+      () => {
+        // Ignore if rules for video_lessons collection are not yet deployed; _config/video_lessons_catalog handles real-time sync
+      },
+    );
+
     return () => {
       unsubConfig();
       unsubLeads();
@@ -1233,6 +1309,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       unsubCounterparties();
       unsubProducts();
       unsubCancelledSessions();
+      unsubVideoLessonsCatalog();
+      unsubVideoLessonsCol();
     };
   }, [firebaseReady]);
 
@@ -4154,6 +4232,123 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     });
   };
 
+  const syncVideoLessonsToFirestore = async (nextList: VideoLesson[]) => {
+    try {
+      localStorage.setItem("amkar_video_lessons", JSON.stringify(nextList));
+    } catch {}
+    try {
+      await setDoc(
+        doc(db, "_config", "video_lessons_catalog"),
+        {
+          items: removeUndefined(nextList),
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true },
+      );
+    } catch (e) {
+      console.warn("Failed to sync video_lessons_catalog:", e);
+    }
+  };
+
+  const addVideoLesson = async (
+    lessonData: Omit<VideoLesson, "id" | "createdAt" | "viewsCount">,
+  ): Promise<VideoLesson> => {
+    const nowIso = new Date().toISOString();
+    const newLesson: VideoLesson = removeUndefined({
+      ...lessonData,
+      id: `vl_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      viewsCount: 1,
+    });
+
+    let updatedList: VideoLesson[] = [];
+    setVideoLessons((prev) => {
+      const next = [newLesson, ...prev].sort((a, b) => {
+        if (Boolean(a.isPinned) !== Boolean(b.isPinned)) {
+          return a.isPinned ? -1 : 1;
+        }
+        return (b.createdAt || "").localeCompare(a.createdAt || "");
+      });
+      updatedList = next;
+      return next;
+    });
+
+    await syncVideoLessonsToFirestore(updatedList);
+    setDoc(doc(db, "video_lessons", newLesson.id), newLesson).catch(() => {});
+
+    addNotification({
+      title: `🎬 Новый видеоурок: ${newLesson.title}`,
+      body: `В раздел «База знаний → Видеоуроки» добавлен новый материал (${newLesson.category}).`,
+      type: "system",
+      targetRole: ["parent", "trainer", "director", "admin"],
+      relatedTab: "parent_knowledge",
+    });
+
+    return newLesson;
+  };
+
+  const updateVideoLesson = async (
+    id: string,
+    updates: Partial<Omit<VideoLesson, "id">>,
+  ) => {
+    const cleanUpdates = removeUndefined({
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    });
+    let updatedList: VideoLesson[] = [];
+    setVideoLessons((prev) => {
+      const next = prev
+        .map((vl) => (vl.id === id ? { ...vl, ...cleanUpdates } : vl))
+        .sort((a, b) => {
+          if (Boolean(a.isPinned) !== Boolean(b.isPinned)) {
+            return a.isPinned ? -1 : 1;
+          }
+          return (b.createdAt || "").localeCompare(a.createdAt || "");
+        });
+      updatedList = next;
+      return next;
+    });
+
+    await syncVideoLessonsToFirestore(updatedList);
+    updateDoc(doc(db, "video_lessons", id), cleanUpdates as any).catch(() => {});
+  };
+
+  const deleteVideoLesson = async (id: string) => {
+    let updatedList: VideoLesson[] = [];
+    setVideoLessons((prev) => {
+      const next = prev.filter((vl) => vl.id !== id);
+      updatedList = next;
+      return next;
+    });
+
+    await syncVideoLessonsToFirestore(updatedList);
+    deleteDoc(doc(db, "video_lessons", id)).catch(() => {});
+  };
+
+  const incrementVideoLessonViews = async (id: string) => {
+    let updatedList: VideoLesson[] = [];
+    let targetLesson: VideoLesson | undefined;
+    setVideoLessons((prev) => {
+      const next = prev.map((vl) => {
+        if (vl.id === id) {
+          targetLesson = { ...vl, viewsCount: (vl.viewsCount || 0) + 1 };
+          return targetLesson;
+        }
+        return vl;
+      });
+      updatedList = next;
+      return next;
+    });
+
+    if (targetLesson) {
+      await syncVideoLessonsToFirestore(updatedList);
+      updateDoc(doc(db, "video_lessons", id), {
+        viewsCount: targetLesson.viewsCount,
+      }).catch(() => {});
+    }
+  };
+
   return (
     <CRMContext.Provider
       value={{
@@ -4245,6 +4440,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         addHomework,
         deleteHomework,
         submitHomework,
+        videoLessons,
+        addVideoLesson,
+        updateVideoLesson,
+        deleteVideoLesson,
+        incrementVideoLessonViews,
         deleteLead,
         deleteClient,
         deleteTask,

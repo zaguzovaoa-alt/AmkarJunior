@@ -25,17 +25,6 @@ export const AttendanceTable: React.FC<AttendanceTableProps> = ({ group, clients
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
-  const groupPlayers = useMemo(() => {
-    return (group.isSelectTeam
-      ? clients.filter(c => group.selectedClientIds?.includes(c.id))
-      : clients.filter(c => c.groupName === group.name)
-    ).sort((a, b) => {
-      const nameA = `${a.childSurname || ""} ${a.childName || ""}`.trim().toLowerCase();
-      const nameB = `${b.childSurname || ""} ${b.childName || ""}`.trim().toLowerCase();
-      return nameA.localeCompare(nameB, "ru");
-    });
-  }, [group, clients]);
-
   const monthSessions = useMemo(() => {
     return trainingSessions.filter(session => {
       if (session.groupId !== group.id && session.groupName !== group.name) return false;
@@ -43,6 +32,22 @@ export const AttendanceTable: React.FC<AttendanceTableProps> = ({ group, clients
       return sessionDate.getMonth() === month && sessionDate.getFullYear() === year;
     });
   }, [trainingSessions, group.id, group.name, month, year]);
+
+  const groupPlayers = useMemo(() => {
+    const base = group.isSelectTeam
+      ? clients.filter(c => group.selectedClientIds?.includes(c.id))
+      : clients.filter(c => c.groupName === group.name);
+    return base
+      .filter(c => {
+        if (c.status !== 'inactive') return true;
+        return monthSessions.some(s => s.records?.some(r => r.clientId === c.id));
+      })
+      .sort((a, b) => {
+        const nameA = `${a.childSurname || ""} ${a.childName || ""}`.trim().toLowerCase();
+        const nameB = `${b.childSurname || ""} ${b.childName || ""}`.trim().toLowerCase();
+        return nameA.localeCompare(nameB, "ru");
+      });
+  }, [group, clients, monthSessions]);
 
   const handlePrevMonth = () => {
     setCurrentDate(new Date(year, month - 1, 1));

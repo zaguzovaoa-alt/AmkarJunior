@@ -38,6 +38,8 @@ import {
   AlertTriangle,
   Ban,
   Layers,
+  BookOpen,
+  Film,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { compressImage } from "../utils/image";
@@ -58,6 +60,7 @@ import {
 } from "../utils/sessionMatching";
 import { AIProgressReportCard } from "./AIProgressReportCard";
 import { TrainerCancelModal } from "./TrainerCancelModal";
+import { VideoLessonsModule } from "./VideoLessonsModule";
 
 const formatBirthDate = (dateString?: string, fallbackYear?: number) => {
   if (!dateString) return fallbackYear ? `${fallbackYear} г.р.` : "";
@@ -101,6 +104,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
     userProfile,
     homeworks,
     homeworkSubmissions,
+    videoLessons,
     addHomework,
     deleteHomework,
     cancelledSessions,
@@ -226,6 +230,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
     title: '', description: '', videoUrl: '', groupId: '', groupName: '', dueDate: ''
   });
   const [addPlayerSearch, setAddPlayerSearch] = useState("");
+  const [knowledgeSubTab, setKnowledgeSubTab] = useState<"videos" | "materials">("videos");
 
   const handleTrainerSubmitRisk = async () => {
     if (!trainerSelectedClientId) return;
@@ -265,16 +270,18 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
     ? groups
     : groups.filter((g) => g.coachId === myCoach.id);
 
-  const relevantClients = isManagement
-    ? clients
-    : clients.filter(
-        (c) =>
-          myGroups.some(
-            (g) =>
-              g.name === c.groupName ||
-              (g.isSelectTeam && g.selectedClientIds?.includes(c.id)),
-          ) || c.coachId === myCoach.id,
-      );
+  const relevantClients = (
+    isManagement
+      ? clients
+      : clients.filter(
+          (c) =>
+            myGroups.some(
+              (g) =>
+                g.name === c.groupName ||
+                (g.isSelectTeam && g.selectedClientIds?.includes(c.id)),
+            ) || c.coachId === myCoach.id,
+        )
+  ).filter((c) => c.status !== "inactive");
 
   const myClients = relevantClients.sort((a, b) => {
     const nameA = `${a.childSurname || ""} ${a.childName || ""}`.trim().toLowerCase();
@@ -571,8 +578,8 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
     } else {
       setAttendanceDate(getLocalTodayYMD());
     }
-    // Pre-populate actual client players in that group using case-insensitive trimmed matching
-    const groupPlayersBase: any[] = groupObj?.isSelectTeam
+    // Pre-populate actual client players in that group using case-insensitive trimmed matching (excluding inactive)
+    const groupPlayersBase: any[] = (groupObj?.isSelectTeam
       ? clients.filter((c) => groupObj.selectedClientIds?.includes(c.id))
       : clients.filter(
           (c) =>
@@ -580,7 +587,8 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
             resolvedName &&
             c.groupName.trim().toLowerCase() ===
               resolvedName.trim().toLowerCase(),
-        );
+        )
+    ).filter((c) => c.status !== "inactive");
     const groupTrialLeads = (leads || [])
       .filter(
         (l) =>
@@ -631,14 +639,15 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
       // If manual counts were not manually edited, keep them responsive to the checkboxes:
       if (!isManualCountTouched) {
         const groupObj = groups.find((g) => g.name === selectedGroupForAttendance || g.id === selectedGroupForAttendance);
-        const groupPlayersBase: any[] = groupObj?.isSelectTeam
+        const groupPlayersBase: any[] = (groupObj?.isSelectTeam
           ? clients.filter((c) => groupObj.selectedClientIds?.includes(c.id))
           : clients.filter(
               (c) =>
                 c.groupName &&
                 selectedGroupForAttendance &&
                 c.groupName.trim().toLowerCase() === selectedGroupForAttendance.trim().toLowerCase(),
-            );
+            )
+        ).filter((c) => c.status !== "inactive");
         let paid = 0;
         let unpaid = 0;
         Object.entries(next).forEach(([id, rec]: [string, any]) => {
@@ -663,14 +672,15 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
 
   const markAllPlayersPresent = () => {
     const groupObj = groups.find((g) => g.name === selectedGroupForAttendance || g.id === selectedGroupForAttendance);
-    const groupPlayersBase: any[] = groupObj?.isSelectTeam
+    const groupPlayersBase: any[] = (groupObj?.isSelectTeam
       ? clients.filter((c) => groupObj.selectedClientIds?.includes(c.id))
       : clients.filter(
           (c) =>
             c.groupName &&
             selectedGroupForAttendance &&
             c.groupName.trim().toLowerCase() === selectedGroupForAttendance.trim().toLowerCase(),
-        );
+        )
+    ).filter((c) => c.status !== "inactive");
     const groupTrialLeads = (leads || [])
       .filter(
         (l) =>
@@ -915,25 +925,31 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
             <h1 className="text-2xl font-bold text-slate-950 font-sans tracking-tight">
               {activeTab === "trainer_messages"
                 ? "Внутренние сообщения и чат школы"
-                : currentRole !== "trainer" && activeTab === "trainer_attendance"
-                  ? "Табели и посещаемость групп"
-                  : `Добрый день, ${(() => {
-                      const rawName =
-                        currentRole === "trainer"
-                          ? myCoach.name
-                          : userProfile?.name || appUser?.fullName || myCoach.name;
-                      const parts = rawName.trim().split(/\s+/);
-                      if (parts.length >= 2) {
-                        return `${parts[1]} ${parts[0]}`;
-                      }
-                      return rawName;
-                    })()}!`}
+                : activeTab === "trainer_knowledge"
+                  ? "База знаний • Видеоуроки и методички"
+                  : currentRole !== "trainer" && activeTab === "trainer_attendance"
+                    ? "Табели и посещаемость групп"
+                    : `Добрый день, ${(() => {
+                        const rawName =
+                          currentRole === "trainer"
+                            ? myCoach.name
+                            : userProfile?.name || appUser?.fullName || myCoach.name;
+                        const parts = rawName.trim().split(/\s+/);
+                        if (parts.length >= 2) {
+                          return `${parts[1]} ${parts[0]}`;
+                        }
+                        return rawName;
+                      })()}!`}
             </h1>
             <HeaderDescription
               text={
                 activeTab === "trainer_messages" ? (
                   <>
                     Единое пространство связи тренеров, руководства, менеджеров и родителей с контролем прочтения и обменом фото/файлами.
+                  </>
+                ) : activeTab === "trainer_knowledge" ? (
+                  <>
+                    Размещайте обучающие видеоуроки с названиями и описаниями для родителей и воспитанников в реальном времени, а также управляйте методическими материалами.
                   </>
                 ) : (
                   <>
@@ -3403,11 +3419,16 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                           <span className="text-gray-500">Кол-во игроков:</span>
                           <span className="font-bold text-slate-800">
                             {grp.isSelectTeam
-                              ? clients.filter((c) =>
-                                  grp.selectedClientIds?.includes(c.id),
+                              ? clients.filter(
+                                  (c) =>
+                                    c.status !== "inactive" &&
+                                    grp.selectedClientIds?.includes(c.id),
                                 ).length
-                              : clients.filter((c) => c.groupName === grp.name)
-                                  .length}
+                              : clients.filter(
+                                  (c) =>
+                                    c.status !== "inactive" &&
+                                    c.groupName === grp.name,
+                                ).length}
                           </span>
                         </div>
                         <div className="flex justify-between">
@@ -3453,10 +3474,15 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                 if (!grp) return null;
                 const groupPlayers = (
                   grp.isSelectTeam
-                    ? clients.filter((c) =>
-                        grp.selectedClientIds?.includes(c.id),
+                    ? clients.filter(
+                        (c) =>
+                          c.status !== "inactive" &&
+                          grp.selectedClientIds?.includes(c.id),
                       )
-                    : clients.filter((c) => c.groupName === grp.name)
+                    : clients.filter(
+                        (c) =>
+                          c.status !== "inactive" && c.groupName === grp.name,
+                      )
                 ).sort((a, b) => {
                   const nameA = `${a.childSurname || ""} ${a.childName || ""}`
                     .trim()
@@ -4075,84 +4101,146 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
           </div>
         )}
 
-        {/* TAB 10: TRAINER KNOWLEDGE */}
+        {/* TAB 10: TRAINER & HQ KNOWLEDGE BASE */}
         {activeTab === "trainer_knowledge" && (
-          <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm text-left space-y-6">
-            <div className="flex justify-between items-center border-b pb-3 mb-4">
-              <h3 className="text-lg font-bold text-slate-900">
-                Учебно-методические материалы
-              </h3>
-              <button
-                onClick={() =>
-                  alert("Открывается окно загрузки нового файла...")
-                }
-                className="px-4 py-2 bg-emerald-500 text-white font-bold text-xs rounded-xl hover:bg-emerald-600 transition flex items-center space-x-2"
-              >
-                <Upload className="w-4 h-4" />
-                <span>Загрузить методичку</span>
-              </button>
+          <div className="space-y-6 text-left">
+            {/* Sub-Navigation Bar: Видеоуроки | Учебно-методические материалы */}
+            <div className="bg-white rounded-2xl p-2 border border-gray-200/80 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setKnowledgeSubTab("videos")}
+                  className={`flex-1 sm:flex-initial px-4 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center justify-center gap-2 cursor-pointer ${
+                    knowledgeSubTab === "videos"
+                      ? "bg-red-600 text-white shadow-xs"
+                      : "bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                  }`}
+                >
+                  <Film className="w-4 h-4" />
+                  <span>Видеоуроки</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono tabular-nums ${
+                      knowledgeSubTab === "videos"
+                        ? "bg-white/20 text-white"
+                        : "bg-red-50 text-red-600 font-bold"
+                    }`}
+                  >
+                    {videoLessons.length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setKnowledgeSubTab("materials")}
+                  className={`flex-1 sm:flex-initial px-4 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center justify-center gap-2 cursor-pointer ${
+                    knowledgeSubTab === "materials"
+                      ? "bg-slate-900 text-white shadow-xs"
+                      : "bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                  }`}
+                >
+                  <BookOpen className="w-4 h-4" />
+                  <span>Учебно-методические файлы</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono tabular-nums ${
+                      knowledgeSubTab === "materials"
+                        ? "bg-white/15 text-amber-300"
+                        : "bg-slate-100 text-slate-500"
+                    }`}
+                  >
+                    5
+                  </span>
+                </button>
+              </div>
+
+              <div className="px-3 py-1.5 flex items-center justify-between sm:justify-end gap-2 text-[11px] text-slate-500">
+                <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2.5 py-1 rounded-lg">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Мгновенная публикация в кабинеты родителей</span>
+                </span>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[
-                {
-                  name: "План тренировки 21.05.2025",
-                  size: "PDF • 245 КБ",
-                  date: "Загружено сегодня",
-                },
-                {
-                  name: "Упражнения на владение мячом",
-                  size: "PDF • 1.2 МБ",
-                  date: "Загружено вчера",
-                },
-                {
-                  name: "Методика ОФП для тренеров",
-                  size: "PDF • 3.4 МБ",
-                  date: "18 мая 2026",
-                },
-                {
-                  name: "Правила проведения матчей ПФЛ",
-                  size: "DOCX • 54 КБ",
-                  date: "10 мая 2026",
-                },
-                {
-                  name: "Презентация: Психология победителя",
-                  size: "PPTX • 8.1 МБ",
-                  date: "01 мая 2026",
-                },
-              ].map((file, idx) => (
-                <div
-                  key={idx}
-                  className="p-4 bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md transition"
-                >
-                  <div className="w-12 h-12 bg-rose-50 rounded-xl flex items-center justify-center mb-4 border border-rose-100">
-                    <span className="text-xs font-black text-rose-600 uppercase">
-                      {file.name.split(".").pop()?.substring(0, 3) ||
-                        file.size.split(" ")[0]}
-                    </span>
-                  </div>
-                  <h4
-                    className="font-bold text-slate-900 text-sm mb-1 line-clamp-2"
-                    title={file.name}
-                  >
-                    {file.name}
-                  </h4>
-                  <p className="text-xs text-gray-500 font-medium mb-4">
-                    {file.size} • {file.date}
-                  </p>
-
+            {knowledgeSubTab === "videos" ? (
+              <VideoLessonsModule />
+            ) : (
+              <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm text-left space-y-6">
+                <div className="flex justify-between items-center border-b pb-3 mb-4">
+                  <h3 className="text-lg font-bold text-slate-900">
+                    Учебно-методические материалы
+                  </h3>
                   <button
                     onClick={() =>
-                      alert(`Начата симуляция скачивания файла: ${file.name}`)
+                      alert("Открывается окно загрузки нового файла...")
                     }
-                    className="w-full flex items-center justify-center space-x-2 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold py-2 rounded-xl text-xs transition"
+                    className="px-4 py-2 bg-emerald-500 text-white font-bold text-xs rounded-xl hover:bg-emerald-600 transition flex items-center space-x-2"
                   >
-                    <Download className="w-4 h-4" />
-                    <span>Скачать файл</span>
+                    <Upload className="w-4 h-4" />
+                    <span>Загрузить методичку</span>
                   </button>
                 </div>
-              ))}
-            </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {[
+                    {
+                      name: "План тренировки 21.05.2025",
+                      size: "PDF • 245 КБ",
+                      date: "Загружено сегодня",
+                    },
+                    {
+                      name: "Упражнения на владение мячом",
+                      size: "PDF • 1.2 МБ",
+                      date: "Загружено вчера",
+                    },
+                    {
+                      name: "Методика ОФП для тренеров",
+                      size: "PDF • 3.4 МБ",
+                      date: "18 мая 2026",
+                    },
+                    {
+                      name: "Правила проведения матчей ПФЛ",
+                      size: "DOCX • 54 КБ",
+                      date: "10 мая 2026",
+                    },
+                    {
+                      name: "Презентация: Психология победителя",
+                      size: "PPTX • 8.1 МБ",
+                      date: "01 мая 2026",
+                    },
+                  ].map((file, idx) => (
+                    <div
+                      key={idx}
+                      className="p-4 bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md transition"
+                    >
+                      <div className="w-12 h-12 bg-rose-50 rounded-xl flex items-center justify-center mb-4 border border-rose-100">
+                        <span className="text-xs font-black text-rose-600 uppercase">
+                          {file.name.split(".").pop()?.substring(0, 3) ||
+                            file.size.split(" ")[0]}
+                        </span>
+                      </div>
+                      <h4
+                        className="font-bold text-slate-900 text-sm mb-1 line-clamp-2"
+                        title={file.name}
+                      >
+                        {file.name}
+                      </h4>
+                      <p className="text-xs text-gray-500 font-medium mb-4">
+                        {file.size} • {file.date}
+                      </p>
+
+                      <button
+                        onClick={() =>
+                          alert(`Начата симуляция скачивания файла: ${file.name}`)
+                        }
+                        className="w-full flex items-center justify-center space-x-2 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold py-2 rounded-xl text-xs transition"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span>Скачать файл</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

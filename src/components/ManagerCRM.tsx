@@ -35,6 +35,9 @@ import {
   Send,
   Link,
   X,
+  UserMinus,
+  UserCheck,
+  RotateCcw,
 } from "lucide-react";
 import { Client, Lead, ClientStatus, CRMTask } from "../types";
 import { calculateAge, isBirthdayToday, cleanClientNotes } from "../utils/dateUtils";
@@ -878,7 +881,125 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
     );
   };
 
-  // Filter clients logically
+  const [statusActionToast, setStatusActionToast] = useState<{
+    text: string;
+    targetTab?: string;
+    undoAction?: () => Promise<void>;
+  } | null>(null);
+  const [isBulkStatusLoading, setIsBulkStatusLoading] = useState(false);
+
+  const canManageInactiveStatus =
+    currentRole === "director" ||
+    currentRole === "admin" ||
+    currentRole === "manager";
+
+  const handleMarkClientInactive = async (client: Client) => {
+    const prevStatus = client.status || "active";
+    const prevGroup = client.groupName || null;
+    try {
+      await updateClient(client.id, {
+        status: "inactive",
+        inactiveAt: new Date().toISOString(),
+        previousGroupName: prevGroup || client.previousGroupName || null,
+      });
+      if (selectedClientId === client.id) {
+        setEditStatus("inactive");
+      }
+      setStatusActionToast({
+        text: `${client.childSurname} ${client.childName} перенесён во вкладку «Неактивные» (сейчас не посещает)`,
+        targetTab: "inactive",
+        undoAction: async () => {
+          await updateClient(client.id, {
+            status: prevStatus,
+            groupName: prevGroup,
+          });
+          if (selectedClientId === client.id) {
+            setEditStatus(prevStatus);
+          }
+          setStatusActionToast(null);
+        },
+      });
+    } catch (err) {
+      console.error("Failed to mark client inactive:", err);
+    }
+  };
+
+  const handleRestoreClientActive = async (client: Client) => {
+    const restoredGroup = client.groupName || client.previousGroupName || null;
+    try {
+      await updateClient(client.id, {
+        status: "active",
+        groupName: restoredGroup,
+      });
+      if (selectedClientId === client.id) {
+        setEditStatus("active");
+      }
+      setStatusActionToast({
+        text: `${client.childSurname} ${client.childName} восстановлен в статусе «Активный»${restoredGroup ? ` (${restoredGroup})` : ""}!`,
+        targetTab: "all",
+      });
+    } catch (err) {
+      console.error("Failed to restore client:", err);
+    }
+  };
+
+  const handleBulkMoveToInactive = async () => {
+    if (selectedClientIds.size === 0) return;
+    setIsBulkStatusLoading(true);
+    try {
+      const ids = Array.from(selectedClientIds);
+      const nowIso = new Date().toISOString();
+      await Promise.all(
+        ids.map((id) => {
+          const cl = clients.find((c) => c.id === id);
+          return updateClient(id, {
+            status: "inactive",
+            inactiveAt: nowIso,
+            previousGroupName: cl?.groupName || cl?.previousGroupName || null,
+          });
+        }),
+      );
+      setSelectedClientIds(new Set());
+      setStatusActionToast({
+        text: `Перенесено во вкладку «Неактивные»: ${ids.length} чел.`,
+        targetTab: "inactive",
+      });
+    } catch (err) {
+      console.error("Failed bulk move to inactive:", err);
+    } finally {
+      setIsBulkStatusLoading(false);
+    }
+  };
+
+  const handleBulkRestoreToActive = async () => {
+    if (selectedClientIds.size === 0) return;
+    setIsBulkStatusLoading(true);
+    try {
+      const ids = Array.from(selectedClientIds);
+      await Promise.all(
+        ids.map((id) => {
+          const cl = clients.find((c) => c.id === id);
+          return updateClient(id, {
+            status: "active",
+            groupName: cl?.groupName || cl?.previousGroupName || null,
+          });
+        }),
+      );
+      setSelectedClientIds(new Set());
+      setStatusActionToast({
+        text: `Восстановлено в статус «Активный»: ${ids.length} чел.`,
+        targetTab: "all",
+      });
+    } catch (err) {
+      console.error("Failed bulk restore to active:", err);
+    } finally {
+      setIsBulkStatusLoading(false);
+    }
+  };
+
+  // Filter clients logically:
+  // When filterStatus === "all", exclude "inactive" clients so that clients marked as not attending
+  // are genuinely moved into the dedicated "Неактивные" tab.
   const filteredClients = clients
     .filter((c) => {
       const matchesSearch =
@@ -887,7 +1008,10 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
         c.parentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (c.parentPhone && c.parentPhone.includes(searchTerm));
 
-      const matchesStatus = filterStatus === "all" || c.status === filterStatus;
+      const matchesStatus =
+        filterStatus === "all"
+          ? c.status !== "inactive"
+          : c.status === filterStatus;
       const matchesGroup =
         filterGroup === "all" ||
         (c.groupName &&
@@ -923,6 +1047,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
 
   React.useEffect(() => {
     setCurrentPage(1);
+    setSelectedClientIds(new Set());
   }, [searchTerm, filterStatus, filterGroup, filterAbonement, filterBranch, itemsPerPage]);
 
   const paginatedClients = filteredClients.slice(
@@ -1559,25 +1684,32 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                   </div>
                 </div>
               </div>
-              <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm flex flex-col justify-between">
+              <div
+                onClick={() => setFilterStatus(filterStatus === "inactive" ? "all" : "inactive")}
+                className={`bg-white rounded-xl p-4 border shadow-sm flex flex-col justify-between cursor-pointer transition ${
+                  filterStatus === "inactive"
+                    ? "border-slate-900 ring-2 ring-slate-900/10"
+                    : "border-gray-100 hover:border-gray-300"
+                }`}
+                title="Нажмите, чтобы перейти во вкладку «Неактивные»"
+              >
                 <div className="flex justify-between items-start">
                   <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wide">
-                    Отток / Завершили
+                    Неактивные (Не посещают)
                   </span>
-                  <div className="w-6 h-6 rounded-md bg-rose-50 text-rose-500 flex items-center justify-center">
-                    <TrendingDown className="w-3.5 h-3.5" />
+                  <div className="w-6 h-6 rounded-md bg-slate-100 text-slate-600 flex items-center justify-center">
+                    <UserMinus className="w-3.5 h-3.5" />
                   </div>
                 </div>
                 <div className="mt-3">
                   <div className="text-2xl font-bold text-gray-900">
-                    {
-                      clients.filter(
-                        (c) => c.status === "left" || c.status === "inactive",
-                      ).length
-                    }
+                    {clients.filter((c) => c.status === "inactive").length}
                   </div>
-                  <div className="text-[10px] text-rose-500 font-bold mt-1 tracking-wide">
-                    -8 к прошлому месяцу
+                  <div className="text-[10px] text-slate-500 font-bold mt-1 tracking-wide flex items-center justify-between">
+                    <span>В архиве непосещающих</span>
+                    <span className="underline text-slate-700">
+                      {filterStatus === "inactive" ? "Показать активных" : "Открыть →"}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1586,76 +1718,92 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Left table directory (2 cols) */}
               <div className="lg:col-span-2 space-y-4">
-                <div className="flex items-center space-x-2 text-[10px] font-bold font-sans overflow-x-auto pb-2 scrollbar-hide">
-                  <span className="text-gray-900 mr-2 text-sm font-extrabold pr-2">
-                    Список клиентов
-                  </span>
-                  <button
-                    onClick={() => setFilterStatus("all")}
-                    className={`px-3 py-1.5 rounded-full shrink-0 transition-colors ${filterStatus === "all" ? "bg-black text-white" : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"}`}
-                  >
-                    Все{" "}
-                    <span
-                      className={`font-medium ml-1 ${filterStatus === "all" ? "text-gray-300" : "text-gray-400"}`}
-                    >
-                      {clients.length}
+                <div className="flex items-center justify-between gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                  <div className="flex items-center space-x-1.5 text-[10px] font-bold font-sans shrink-0">
+                    <span className="text-gray-900 mr-1.5 text-sm font-extrabold pr-1">
+                      Список клиентов
                     </span>
-                  </button>
-                  <button
-                    onClick={() => setFilterStatus("active")}
-                    className={`px-3 py-1.5 rounded-full shrink-0 transition-colors ${filterStatus === "active" ? "bg-black text-white" : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"}`}
-                  >
-                    Активные{" "}
-                    <span
-                      className={`font-medium ml-1 ${filterStatus === "active" ? "text-gray-300" : "text-gray-400"}`}
+                    <button
+                      onClick={() => setFilterStatus("all")}
+                      className={`px-3 py-1.5 rounded-full shrink-0 transition-colors cursor-pointer ${filterStatus === "all" ? "bg-black text-white shadow-xs" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"}`}
                     >
-                      {clients.filter((c) => c.status === "active").length}
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => setFilterStatus("paused")}
-                    className={`px-3 py-1.5 rounded-full shrink-0 transition-colors ${filterStatus === "paused" ? "bg-black text-white" : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"}`}
-                  >
-                    На паузе{" "}
-                    <span
-                      className={`font-medium ml-1 ${filterStatus === "paused" ? "text-gray-300" : "text-gray-400"}`}
+                      Актуальные{" "}
+                      <span
+                        className={`font-medium ml-1 ${filterStatus === "all" ? "text-gray-300" : "text-gray-400"}`}
+                      >
+                        {clients.filter((c) => c.status !== "inactive").length}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setFilterStatus("active")}
+                      className={`px-3 py-1.5 rounded-full shrink-0 transition-colors cursor-pointer ${filterStatus === "active" ? "bg-black text-white shadow-xs" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"}`}
                     >
-                      {clients.filter((c) => c.status === "paused").length}
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => setFilterStatus("left")}
-                    className={`px-3 py-1.5 rounded-full shrink-0 transition-colors ${filterStatus === "left" ? "bg-black text-white" : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"}`}
-                  >
-                    Завершили{" "}
-                    <span
-                      className={`font-medium ml-1 ${filterStatus === "left" ? "text-gray-300" : "text-gray-400"}`}
+                      Активные{" "}
+                      <span
+                        className={`font-medium ml-1 ${filterStatus === "active" ? "text-gray-300" : "text-gray-400"}`}
+                      >
+                        {clients.filter((c) => c.status === "active").length}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setFilterStatus("trial")}
+                      className={`px-3 py-1.5 rounded-full shrink-0 transition-colors cursor-pointer ${filterStatus === "trial" ? "bg-black text-white shadow-xs" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"}`}
                     >
-                      {clients.filter((c) => c.status === "left").length}
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => setFilterStatus("trial")}
-                    className={`px-3 py-1.5 rounded-full shrink-0 transition-colors ${filterStatus === "trial" ? "bg-black text-white" : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"}`}
-                  >
-                    Пробный период{" "}
-                    <span
-                      className={`font-medium ml-1 ${filterStatus === "trial" ? "text-gray-300" : "text-gray-400"}`}
+                      Пробный период{" "}
+                      <span
+                        className={`font-medium ml-1 ${filterStatus === "trial" ? "text-gray-300" : "text-gray-400"}`}
+                      >
+                        {clients.filter((c) => c.status === "trial").length}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setFilterStatus("paused")}
+                      className={`px-3 py-1.5 rounded-full shrink-0 transition-colors cursor-pointer ${filterStatus === "paused" ? "bg-black text-white shadow-xs" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"}`}
                     >
-                      {clients.filter((c) => c.status === "trial").length}
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => setFilterStatus("inactive")}
-                    className={`px-3 py-1.5 rounded-full shrink-0 transition-colors ${filterStatus === "inactive" ? "bg-black text-white" : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"}`}
-                  >
-                    Отвал{" "}
-                    <span
-                      className={`font-medium ml-1 ${filterStatus === "inactive" ? "text-gray-300" : "text-gray-400"}`}
+                      На паузе{" "}
+                      <span
+                        className={`font-medium ml-1 ${filterStatus === "paused" ? "text-gray-300" : "text-gray-400"}`}
+                      >
+                        {clients.filter((c) => c.status === "paused").length}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setFilterStatus("left")}
+                      className={`px-3 py-1.5 rounded-full shrink-0 transition-colors cursor-pointer ${filterStatus === "left" ? "bg-black text-white shadow-xs" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"}`}
                     >
-                      {clients.filter((c) => c.status === "inactive").length}
-                    </span>
-                  </button>
+                      Завершили{" "}
+                      <span
+                        className={`font-medium ml-1 ${filterStatus === "left" ? "text-gray-300" : "text-gray-400"}`}
+                      >
+                        {clients.filter((c) => c.status === "left").length}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Dedicated 'Неактивные' Tab */}
+                  <div className="flex items-center pl-2 border-l border-gray-200 shrink-0">
+                    <button
+                      onClick={() => setFilterStatus("inactive")}
+                      className={`px-3.5 py-1.5 rounded-full text-[10px] font-extrabold shrink-0 transition-all flex items-center gap-1.5 cursor-pointer ${
+                        filterStatus === "inactive"
+                          ? "bg-slate-900 text-white shadow-sm ring-2 ring-slate-900/15"
+                          : "bg-slate-100 text-slate-700 border border-slate-200/80 hover:bg-slate-200/70"
+                      }`}
+                      title="Клиенты, которые сейчас не посещают школу (перенесены директором или администратором)"
+                    >
+                      <UserMinus className="w-3 h-3" />
+                      <span>Неактивные</span>
+                      <span
+                        className={`px-1.5 py-0.2 rounded-full text-[9px] font-bold ${
+                          filterStatus === "inactive"
+                            ? "bg-white/20 text-white"
+                            : "bg-white text-slate-600"
+                        }`}
+                      >
+                        {clients.filter((c) => c.status === "inactive").length}
+                      </span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="bg-white rounded-2xl p-4 px-5 border border-gray-100 shadow-sm space-y-4">
@@ -1703,9 +1851,9 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                           backgroundPosition: "right 10px center",
                         }}
                       >
-                        <option value="all">Статус: Все</option>
+                        <option value="all">Статус: Актуальные</option>
                         <option value="active">Активные</option>
-                        <option value="inactive">Неактивные</option>
+                        <option value="inactive">Неактивные (не посещают)</option>
                         <option value="trial">На пробном периоде</option>
                         <option value="paused">На паузе</option>
                         <option value="left">Ушли / Выпускники</option>
@@ -1746,6 +1894,121 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                           </option>
                           <option value="none">Нет абонемента</option>
                         </select>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Toast Feedback for moving/restoring clients */}
+                  {statusActionToast && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900 text-white text-xs shadow-sm animate-in fade-in duration-150">
+                      <div className="flex items-center gap-2 font-medium">
+                        <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span>{statusActionToast.text}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {statusActionToast.undoAction && (
+                          <button
+                            onClick={statusActionToast.undoAction}
+                            className="px-2.5 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-white font-bold text-[10px] transition cursor-pointer flex items-center gap-1"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            <span>Отменить</span>
+                          </button>
+                        )}
+                        {statusActionToast.targetTab &&
+                          filterStatus !== statusActionToast.targetTab && (
+                            <button
+                              onClick={() => {
+                                setFilterStatus(statusActionToast.targetTab!);
+                                setStatusActionToast(null);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-[10px] transition cursor-pointer"
+                            >
+                              {statusActionToast.targetTab === "inactive"
+                                ? "Перейти в «Неактивные» →"
+                                : "Перейти к активным →"}
+                            </button>
+                          )}
+                        <button
+                          onClick={() => setStatusActionToast(null)}
+                          className="p-1 text-slate-400 hover:text-white transition cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Context Banner when viewing the 'Неактивные' Tab */}
+                  {filterStatus === "inactive" && (
+                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-start gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-slate-200/80 text-slate-700 flex items-center justify-center shrink-0 mt-0.5">
+                          <UserMinus className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-extrabold text-slate-900">
+                            Вкладка «Неактивные» — клиенты, которые сейчас не посещают школу
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+                            Эти ученики скрыты из основного списка и текущих ведомостей посещаемости тренеров, но вся их история и закрепленная группа сохранены. Нажмите <b>«Восстановить»</b> напротив любого ученика, чтобы вернуть его в активный состав.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setFilterStatus("all")}
+                        className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold text-[11px] shrink-0 transition cursor-pointer self-start sm:self-center"
+                      >
+                        ← К актуальному списку
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Bulk Action Bar when checkboxes are selected */}
+                  {selectedClientIds.size > 0 && canManageInactiveStatus && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white text-xs shadow-md">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded-full bg-white/15 font-extrabold text-[11px]">
+                          {selectedClientIds.size}
+                        </span>
+                        <span className="font-semibold">
+                          выбрано учеников
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {filterStatus !== "inactive" ? (
+                          <button
+                            onClick={handleBulkMoveToInactive}
+                            disabled={isBulkStatusLoading}
+                            className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-extrabold text-[11px] transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                          >
+                            <UserMinus className="w-3.5 h-3.5" />
+                            <span>
+                              {isBulkStatusLoading
+                                ? "Перенос..."
+                                : "Перенести в «Неактивные» (не посещают)"}
+                            </span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={handleBulkRestoreToActive}
+                            disabled={isBulkStatusLoading}
+                            className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-extrabold text-[11px] transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                          >
+                            <UserCheck className="w-3.5 h-3.5" />
+                            <span>
+                              {isBulkStatusLoading
+                                ? "Восстановление..."
+                                : "Восстановить выбранных в Активные"}
+                            </span>
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setSelectedClientIds(new Set())}
+                          className="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-200 font-bold text-[11px] transition cursor-pointer"
+                        >
+                          Снять выделение
+                        </button>
                       </div>
                     </div>
                   )}
@@ -1915,13 +2178,13 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                               <td className="p-2 md:p-3 hidden sm:table-cell align-middle">
                                 <div className="flex flex-col gap-1 items-start">
                                   <span
-                                    className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide capitalize ${
+                                    className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide ${
                                       client.status === "active"
                                         ? "bg-emerald-50 text-emerald-600"
                                         : client.status === "left"
                                           ? "bg-red-50 text-red-600"
                                           : client.status === "inactive"
-                                            ? "bg-gray-100 text-gray-500"
+                                            ? "bg-slate-100 text-slate-600 border border-slate-200"
                                             : client.status === "trial"
                                               ? "bg-blue-50 text-blue-600"
                                               : "bg-amber-50 text-amber-600"
@@ -1932,11 +2195,16 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                       : client.status === "left"
                                         ? "Завершил"
                                         : client.status === "inactive"
-                                          ? "Отвал"
+                                          ? "Не посещает"
                                           : client.status === "trial"
                                             ? "Пробный период"
                                             : "На паузе"}
                                   </span>
+                                  {client.status === "inactive" && client.inactiveAt && (
+                                    <span className="text-[9px] text-slate-400 font-medium">
+                                      с {new Date(client.inactiveAt).toLocaleDateString("ru-RU")}
+                                    </span>
+                                  )}
                                   {client.relationshipRisk &&
                                     client.relationshipRisk !== "none" && (
                                       <span
@@ -2064,19 +2332,47 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                 </div>
                               </td>
                               <td className="p-2 md:p-3 align-middle flex justify-end space-x-1 items-center">
-                                {client.abonementStatus !== "Оплачено" && (
+                                {client.status === "inactive" && canManageInactiveStatus ? (
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setPaymentModalClient(client);
-                                      setIsPaymentModalOpen(true);
+                                      handleRestoreClientActive(client);
                                     }}
-                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[10px] rounded-lg shadow-xs transition flex items-center gap-1 mr-1"
-                                    title="Принять оплату и указать абонемент"
+                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[10px] rounded-lg shadow-xs transition flex items-center gap-1 mr-1 cursor-pointer"
+                                    title="Восстановить ученика в статусе активного"
                                   >
-                                    <CreditCard className="w-3 h-3" />
-                                    <span>Оплатить</span>
+                                    <RotateCcw className="w-3 h-3" />
+                                    <span>Восстановить</span>
                                   </button>
+                                ) : (
+                                  <>
+                                    {client.abonementStatus !== "Оплачено" && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setPaymentModalClient(client);
+                                          setIsPaymentModalOpen(true);
+                                        }}
+                                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[10px] rounded-lg shadow-xs transition flex items-center gap-1 mr-1 cursor-pointer"
+                                        title="Принять оплату и указать абонемент"
+                                      >
+                                        <CreditCard className="w-3 h-3" />
+                                        <span>Оплатить</span>
+                                      </button>
+                                    )}
+                                    {canManageInactiveStatus && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleMarkClientInactive(client);
+                                        }}
+                                        className="p-1.5 text-slate-400 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                                        title="Сейчас не посещает — перенести во вкладку «Неактивные»"
+                                      >
+                                        <UserMinus className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </>
                                 )}
                                 <button
                                   className="text-gray-400 hover:text-black p-1 hover:bg-gray-100 rounded transition-colors"
@@ -2512,7 +2808,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                               }}
                             >
                               <option value="active">Активный</option>
-                              <option value="inactive">Отвал</option>
+                              <option value="inactive">Неактивный (не посещает)</option>
                               <option value="trial">Пробное</option>
                               <option value="paused">На паузе</option>
                               <option value="left">Завершил</option>
@@ -2682,13 +2978,13 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                               <span>({formatBirthDate(selectedClient.childBirthDate, selectedClient.childBirthYear)})</span>
                             </div>
                             <span
-                              className={`px-3 py-1 rounded-full text-[10px] font-bold tracking-wide capitalize ${
+                              className={`px-3 py-1 rounded-full text-[10px] font-bold tracking-wide ${
                                 selectedClient.status === "active"
                                   ? "bg-emerald-50 text-emerald-600"
                                   : selectedClient.status === "left"
                                     ? "bg-red-50 text-red-600"
                                     : selectedClient.status === "inactive"
-                                      ? "bg-gray-100 text-gray-500"
+                                      ? "bg-slate-100 text-slate-600 border border-slate-200"
                                       : selectedClient.status === "trial"
                                         ? "bg-blue-50 text-blue-600"
                                         : "bg-amber-50 text-amber-600"
@@ -2699,13 +2995,51 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                 : selectedClient.status === "left"
                                   ? "Завершил"
                                   : selectedClient.status === "inactive"
-                                    ? "Отвал"
+                                    ? "Неактивный (не посещает)"
                                     : selectedClient.status === "trial"
                                       ? "Пробный период"
                                       : "На паузе"}
                             </span>
                           </div>
                         </div>
+
+                        {/* Quick Inactive / Restore Status Toggle for Director & Admin */}
+                        {canManageInactiveStatus && (
+                          <div className="pt-1">
+                            {selectedClient.status === "inactive" ? (
+                              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                                <div className="flex items-center justify-between text-[11px]">
+                                  <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                                    <UserMinus className="w-3.5 h-3.5 text-slate-500" />
+                                    Сейчас во вкладке «Неактивные»
+                                  </span>
+                                  {selectedClient.inactiveAt && (
+                                    <span className="text-[10px] text-slate-400">
+                                      с {new Date(selectedClient.inactiveAt).toLocaleDateString("ru-RU")}
+                                    </span>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRestoreClientActive(selectedClient)}
+                                  className="w-full py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                  <span>Восстановить в статусе активного</span>
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleMarkClientInactive(selectedClient)}
+                                className="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-amber-50 text-slate-700 hover:text-amber-900 border border-slate-200 hover:border-amber-200 font-bold text-[11px] transition flex items-center justify-center gap-1.5 cursor-pointer"
+                              >
+                                <UserMinus className="w-3.5 h-3.5 text-slate-500" />
+                                <span>Сейчас не посещает → В «Неактивные»</span>
+                              </button>
+                            )}
+                          </div>
+                        )}
 
                         {/* Summary Info */}
                         <div className="grid grid-cols-2 gap-y-4 gap-x-2 text-[11px]">

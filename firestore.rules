@@ -199,6 +199,10 @@ service cloud.firestore {
       allow read, write: if isSignedIn();
     }
 
+    match /video_lessons/{lessonId} {
+      allow read, write: if isSignedIn();
+    }
+
     match /test/{testId} {
       allow read, write: if isSignedIn();
     }
