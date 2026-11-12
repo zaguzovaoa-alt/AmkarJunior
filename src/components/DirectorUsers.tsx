@@ -32,6 +32,7 @@ import {
   CheckCheck,
 } from "lucide-react";
 import { handleFirestoreError, OperationType } from "../firebase";
+import { isSameCoachName, normalizePhone10 } from "../utils/coachMatching";
 
 export const DirectorUsers: React.FC = () => {
   const { coaches } = useCRM();
@@ -103,23 +104,25 @@ export const DirectorUsers: React.FC = () => {
     return unsub;
   }, []);
 
-  const isUserCoach = (u: AppUser) => {
-    return coaches.some((c) => {
-      if (c.id === u.uid) return true;
-      if (u.phone && c.phone) {
-        const uClean = u.phone.replace(/\D/g, "").slice(-10);
-        const cClean = c.phone.replace(/\D/g, "").slice(-10);
-        if (uClean && cClean && uClean === cClean) return true;
-      }
-      if (
-        u.fullName &&
-        c.name &&
-        u.fullName.trim().toLowerCase() === c.name.trim().toLowerCase()
-      ) {
+  const findExistingCoachForUser = (u: {
+    uid?: string | null;
+    phone?: string | null;
+    fullName?: string | null;
+  }) => {
+    const uClean = normalizePhone10(u.phone);
+    return coaches.find((c) => {
+      if (u.uid && c.id === u.uid) return true;
+      const cClean = normalizePhone10(c.phone);
+      if (uClean && cClean && uClean === cClean) return true;
+      if (u.fullName && c.name && isSameCoachName(u.fullName, c.name)) {
         return true;
       }
       return false;
     });
+  };
+
+  const isUserCoach = (u: AppUser) => {
+    return Boolean(findExistingCoachForUser(u));
   };
 
   const handleToggleCoachRole = async (u: AppUser) => {
@@ -136,22 +139,7 @@ export const DirectorUsers: React.FC = () => {
           } сохранится в полном объёме.`
         )
       ) {
-        const existingCoach = coaches.find((c) => {
-          if (c.id === u.uid) return true;
-          if (u.phone && c.phone) {
-            const uClean = u.phone.replace(/\D/g, "").slice(-10);
-            const cClean = c.phone.replace(/\D/g, "").slice(-10);
-            if (uClean && cClean && uClean === cClean) return true;
-          }
-          if (
-            u.fullName &&
-            c.name &&
-            u.fullName.trim().toLowerCase() === c.name.trim().toLowerCase()
-          ) {
-            return true;
-          }
-          return false;
-        });
+        const existingCoach = findExistingCoachForUser(u);
         if (existingCoach) {
           try {
             await deleteDoc(doc(db, "coaches", existingCoach.id));
@@ -278,40 +266,51 @@ export const DirectorUsers: React.FC = () => {
                 ? "Тренер / Менеджер"
                 : "Тренер";
 
-        const coachDoc = {
-          id: idToSave as string,
-          name: formData.fullName.trim(),
-          role: coachRole,
-          phone: formData.phone?.trim() || "",
-          telegram: "",
-          status: "Активен",
-          joinedYear: new Date().getFullYear(),
-          rating: 5,
-          avatarUrl: "",
-          groupsCount: 0,
-          kidsCount: 0,
-          workload: 0,
-          paymentType: "per_session",
-          rate: 1000,
-          feedback: {
-            professionalism: 5,
-            communication: 5,
-            results: 5,
-            discipline: 5,
-          },
-        };
-        await setDoc(doc(db, "coaches", idToSave as string), coachDoc, {
+        const existingCoach = findExistingCoachForUser({
+          uid: idToSave as string,
+          phone: formData.phone,
+          fullName: formData.fullName,
+        });
+        const targetCoachId = existingCoach ? existingCoach.id : (idToSave as string);
+
+        const coachDoc = existingCoach
+          ? {
+              ...existingCoach,
+              id: targetCoachId,
+              name: formData.fullName.trim(),
+              role: coachRole,
+              phone: formData.phone?.trim() || existingCoach.phone || "",
+            }
+          : {
+              id: targetCoachId,
+              name: formData.fullName.trim(),
+              role: coachRole,
+              phone: formData.phone?.trim() || "",
+              telegram: "",
+              status: "Активен",
+              joinedYear: new Date().getFullYear(),
+              rating: 5,
+              avatarUrl: "",
+              groupsCount: 0,
+              kidsCount: 0,
+              workload: 0,
+              paymentType: "per_session",
+              rate: 1000,
+              feedback: {
+                professionalism: 5,
+                communication: 5,
+                results: 5,
+                discipline: 5,
+              },
+            };
+        await setDoc(doc(db, "coaches", targetCoachId), coachDoc, {
           merge: true,
         }).catch((err) => console.warn("Failed to sync coach:", err));
       } else if (editingUserId && !isAlsoCoach && formData.role !== "trainer") {
-        const existingCoach = coaches.find((c) => {
-          if (c.id === editingUserId) return true;
-          if (formData.phone && c.phone) {
-            const uClean = formData.phone.replace(/\D/g, "").slice(-10);
-            const cClean = c.phone.replace(/\D/g, "").slice(-10);
-            if (uClean && cClean && uClean === cClean) return true;
-          }
-          return false;
+        const existingCoach = findExistingCoachForUser({
+          uid: editingUserId,
+          phone: formData.phone,
+          fullName: formData.fullName,
         });
         if (existingCoach) {
           await deleteDoc(doc(db, "coaches", existingCoach.id)).catch(() => {});

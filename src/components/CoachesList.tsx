@@ -31,6 +31,8 @@ import {
 } from "lucide-react";
 
 import { compressImage } from "../utils/image";
+import { isSameCoachName } from "../utils/coachMatching";
+import { isGroupMatch } from "../utils/sessionMatching";
 
 export const CoachesList: React.FC = () => {
   const {
@@ -499,18 +501,15 @@ export const CoachesList: React.FC = () => {
                         const coachGroups = groups.filter(
                           (g) =>
                             g.coachId === ch.id ||
-                            (g.coachName === ch.name && ch.name),
+                            (g.coachName && isSameCoachName(g.coachName, ch.name)),
                         );
                         const coachGroupsCount = coachGroups.length;
                         const coachKidsCount = clients.filter(
                           (c) =>
-                            c.status === "active" &&
+                            c.status !== "inactive" &&
                             c.groupName &&
-                            coachGroups.some(
-                              (g) =>
-                                g.name &&
-                                g.name.trim().toLowerCase() ===
-                                  c.groupName?.trim().toLowerCase(),
+                            coachGroups.some((g) =>
+                              isGroupMatch(undefined, c.groupName, g.id, g.name)
                             ),
                         ).length;
 
@@ -530,7 +529,9 @@ export const CoachesList: React.FC = () => {
 
                         // All groups that don't belong to this coach
                         const uncoachedGroups = groups.filter(
-                          (g) => g.coachId !== ch.id,
+                          (g) =>
+                            g.coachId !== ch.id &&
+                            !(g.coachName && isSameCoachName(g.coachName, ch.name)),
                         );
 
                         return (

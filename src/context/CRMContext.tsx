@@ -17,6 +17,7 @@ import { db, handleFirestoreError, OperationType } from "../firebase";
 import { sendTelegramAlert } from "../utils/telegram";
 import { findCoachScheduleConflicts } from "../utils/scheduleParser";
 import { isGroupMatch, isDateMatch, normalizeDateToYMD } from "../utils/sessionMatching";
+import { isSameCoachName, normalizePhone10 } from "../utils/coachMatching";
 import {
   Lead,
   Client,
@@ -1017,14 +1018,63 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       (err) => handleSnapshotErr(err, "tasks"),
     );
 
+    let coachesSnapshotReceived = false;
+
     const unsubCoaches = onSnapshot(
       collection(db, "coaches"),
       (snapshot) => {
-        const list: Coach[] = [];
-        snapshot.forEach((doc) => {
-          list.push(doc.data() as Coach);
+        coachesSnapshotReceived = true;
+        const rawList: Coach[] = [];
+        snapshot.forEach((docSnap) => {
+          rawList.push(docSnap.data() as Coach);
         });
-        setCoaches(list);
+
+        // Deduplicate coach records that refer to the same person (e.g. "Никонов Данила Владимирович" vs "Никонов Данил Владимирович" or temp_ duplicates)
+        const deduped: Coach[] = [];
+        rawList.forEach((c) => {
+          const cPhone = normalizePhone10(c.phone);
+          const existingIdx = deduped.findIndex((existing) => {
+            if (existing.id === c.id) return true;
+            const ePhone = normalizePhone10(existing.phone);
+            if (cPhone && ePhone && cPhone === ePhone) return true;
+            if (c.name && existing.name && isSameCoachName(c.name, existing.name)) {
+              return true;
+            }
+            return false;
+          });
+
+          if (existingIdx === -1) {
+            deduped.push(c);
+          } else {
+            const existing = deduped[existingIdx];
+            // Prefer non-temp ID (e.g. "c_...") as canonical ID so existing group links remain intact
+            const existingIsTemp = existing.id.startsWith("temp_") || existing.id.startsWith("virtual_");
+            const currentIsTemp = c.id.startsWith("temp_") || c.id.startsWith("virtual_");
+            const primary = existingIsTemp && !currentIsTemp ? c : existing;
+            const secondary = primary === c ? existing : c;
+
+            // Prefer "Данила" spelling if present, or longer full name
+            const bestName =
+              [primary.name, secondary.name]
+                .filter(Boolean)
+                .sort((a, b) => {
+                  const aHasDanila = a.toLowerCase().includes("данила") ? 1 : 0;
+                  const bHasDanila = b.toLowerCase().includes("данила") ? 1 : 0;
+                  if (bHasDanila !== aHasDanila) return bHasDanila - aHasDanila;
+                  return b.length - a.length;
+                })[0] || primary.name;
+
+            deduped[existingIdx] = {
+              ...primary,
+              name: bestName,
+              phone: primary.phone || secondary.phone || "",
+              telegram: primary.telegram || secondary.telegram || "",
+              avatarUrl: primary.avatarUrl || secondary.avatarUrl || "",
+            };
+          }
+        });
+
+        setCoaches(deduped);
       },
       (err) => handleSnapshotErr(err, "coaches"),
     );
@@ -1036,14 +1086,18 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
           const u = docSnap.data();
           if (u.role === "trainer" && u.fullName) {
             setCoaches((prev) => {
-              const cleanPhone = (p?: string) => (p || "").replace(/\D/g, "");
-              const exists = prev.some(
+              // Wait until coaches snapshot has loaded so we never create blind duplicates
+              if (!coachesSnapshotReceived && prev.length === 0) {
+                return prev;
+              }
+              const uPhone = normalizePhone10(u.phone);
+              const existingIdx = prev.findIndex(
                 (c) =>
                   c.id === docSnap.id ||
-                  (cleanPhone(c.phone) && cleanPhone(c.phone) === cleanPhone(u.phone)) ||
-                  (c.name.trim().toLowerCase() === u.fullName.trim().toLowerCase()),
+                  (uPhone && normalizePhone10(c.phone) === uPhone) ||
+                  isSameCoachName(c.name, u.fullName),
               );
-              if (!exists) {
+              if (existingIdx === -1) {
                 const newC: Coach = {
                   id: docSnap.id,
                   name: u.fullName.trim(),
@@ -1068,6 +1122,14 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
                 };
                 setDoc(doc(db, "coaches", docSnap.id), newC, { merge: true }).catch(() => {});
                 return [...prev, newC];
+              } else {
+                const existing = prev[existingIdx];
+                const needsPhone = !existing.phone && u.phone;
+                if (needsPhone) {
+                  const updated = [...prev];
+                  updated[existingIdx] = { ...existing, phone: u.phone };
+                  return updated;
+                }
               }
               return prev;
             });

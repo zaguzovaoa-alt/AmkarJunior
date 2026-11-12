@@ -26,6 +26,13 @@ import { toYearMonthString, formatSessionDateDisplay } from "../utils/dateUtils"
 import { formatGroupNameDisplay } from "../utils/formatters";
 import { compressImage } from "../utils/image";
 import { TrainerCancelModal } from "./TrainerCancelModal";
+import {
+  resolveTrainerIdentity,
+  isGroupAssignedToCoach,
+  isSessionAssignedToCoach,
+  isSameCoachName,
+} from "../utils/coachMatching";
+import { isGroupMatch } from "../utils/sessionMatching";
 
 export const TrainerSessions: React.FC = () => {
   const {
@@ -40,13 +47,6 @@ export const TrainerSessions: React.FC = () => {
     updateTrainingSessionProtocol,
   } = useCRM();
   const { appUser } = useAuth();
-
-  const myCoach =
-    coaches.find(
-      (c) =>
-        c.name.toLowerCase() === appUser?.fullName?.toLowerCase() ||
-        (c.phone && appUser?.phone && c.phone === appUser?.phone),
-    ) || coaches[0];
 
   const [selectedSession, setSelectedSession] = useState<TrainingSessionProtocol | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -63,12 +63,27 @@ export const TrainerSessions: React.FC = () => {
 
   const isPrivileged = currentRole === "admin" || currentRole === "director";
 
-  const targetCoach =
-    isPrivileged && selectedCoachId !== "all"
-      ? coaches.find((c) => c.id === selectedCoachId)
-      : myCoach;
+  const {
+    myCoach,
+    coachIds: targetCoachIds,
+    coachNames: targetCoachNames,
+  } = resolveTrainerIdentity({
+    coaches,
+    groups,
+    appUser,
+    overrideCoachId:
+      isPrivileged && selectedCoachId !== "all" ? selectedCoachId : null,
+  });
+
+  const targetCoach = myCoach;
 
   const isAllCoachesMode = isPrivileged && selectedCoachId === "all";
+
+  const targetCoachGroups = isAllCoachesMode
+    ? groups
+    : groups.filter((g) =>
+        isGroupAssignedToCoach(g, targetCoachIds, targetCoachNames)
+      );
 
   const [sessionTab, setSessionTab] = useState<"completed" | "cancelled">("completed");
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -85,15 +100,12 @@ export const TrainerSessions: React.FC = () => {
       if (isAllCoachesMode) return true;
 
       // 3. For specific coach:
-      const cId = targetCoach?.id;
-      const cName = targetCoach?.name || "";
       return (
-        cs.coachId === cId ||
-        (cName && cs.coachName?.toLowerCase().includes(cName.toLowerCase())) ||
-        groups.some(
-          (g) =>
-            (g.name === cs.groupName || g.id === cs.groupId) &&
-            (g.coachId === cId || (cName && g.coachName?.toLowerCase().includes(cName.toLowerCase())))
+        (cs.coachId && targetCoachIds.has(cs.coachId)) ||
+        (cs.coachName &&
+          targetCoachNames.some((n) => isSameCoachName(cs.coachName, n))) ||
+        targetCoachGroups.some((g) =>
+          isGroupMatch(cs.groupId, cs.groupName, g.id, g.name)
         )
       );
     })
@@ -108,13 +120,11 @@ export const TrainerSessions: React.FC = () => {
       if (isAllCoachesMode) return true;
 
       // 3. For specific coach:
-      const cId = targetCoach?.id;
-      const cName = targetCoach?.name || "";
-      return (
-        s.coachId === cId ||
-        (cName && s.coachName?.toLowerCase().includes(cName.toLowerCase())) ||
-        s.assistantId === cId ||
-        (cName && s.assistantName?.toLowerCase().includes(cName.toLowerCase()))
+      return isSessionAssignedToCoach(
+        s,
+        targetCoachIds,
+        targetCoachNames,
+        targetCoachGroups
       );
     })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -140,17 +150,23 @@ export const TrainerSessions: React.FC = () => {
     ? mySessions.filter((s) => Boolean(s.coachName && s.coachName !== "Неизвестный тренер")).length
     : mySessions.filter(
         (s) =>
-          s.coachId === targetCoach?.id ||
-          Boolean(targetCoach?.name && s.coachName?.toLowerCase().includes(targetCoach.name.toLowerCase())),
+          (s.coachId && targetCoachIds.has(s.coachId)) ||
+          Boolean(
+            s.coachName &&
+              targetCoachNames.some((n) => isSameCoachName(s.coachName, n))
+          ),
       ).length;
 
   const countAssistant = isAllCoachesMode
     ? mySessions.filter((s) => Boolean(s.assistantId || s.assistantName)).length
     : mySessions.filter(
         (s) =>
-          (s.assistantId === targetCoach?.id ||
-            Boolean(targetCoach?.name && s.assistantName?.toLowerCase().includes(targetCoach.name.toLowerCase()))) &&
-          s.coachId !== targetCoach?.id,
+          ((s.assistantId && targetCoachIds.has(s.assistantId)) ||
+            Boolean(
+              s.assistantName &&
+                targetCoachNames.some((n) => isSameCoachName(s.assistantName, n))
+            )) &&
+          !(s.coachId && targetCoachIds.has(s.coachId)),
       ).length;
 
   const openSessionDetail = (session: TrainingSessionProtocol) => {
@@ -1470,7 +1486,7 @@ export const TrainerSessions: React.FC = () => {
         onClose={() => setShowCancelModal(false)}
         defaultCoachName={targetCoach?.name || myCoach?.name || ""}
         initialMode={cancelModalMode}
-        coachGroups={isPrivileged && selectedCoachId === "all" ? groups : (targetCoach ? groups.filter(g => g.coachId === targetCoach.id) : groups)}
+        coachGroups={targetCoachGroups}
         coachName={targetCoach?.name || myCoach?.name || ""}
         coachId={targetCoach?.id || myCoach?.id || ""}
       />

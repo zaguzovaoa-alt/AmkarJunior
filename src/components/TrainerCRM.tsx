@@ -61,6 +61,13 @@ import {
 import { AIProgressReportCard } from "./AIProgressReportCard";
 import { TrainerCancelModal } from "./TrainerCancelModal";
 import { VideoLessonsModule } from "./VideoLessonsModule";
+import {
+  resolveTrainerIdentity,
+  isGroupAssignedToCoach,
+  isSessionAssignedToCoach,
+  getGroupActualPlayersCount,
+  isSameCoachName,
+} from "../utils/coachMatching";
 
 const formatBirthDate = (dateString?: string, fallbackYear?: number) => {
   if (!dateString) return fallbackYear ? `${fallbackYear} г.р.` : "";
@@ -111,26 +118,82 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
     addCancelledSession,
   } = useCRM();
   const { appUser } = useAuth();
+  const [previewCoachId, setPreviewCoachId] = useState<string>("");
 
-  // Try to find coach based on logged in user's full name, email, or phone.
-  const myCoach = coaches.find(
-    (c) =>
-      (c.name && appUser?.fullName && c.name.toLowerCase() === appUser.fullName.toLowerCase()) ||
-      (c.phone && appUser?.phone && c.phone === appUser.phone),
-  ) || {
-    id: appUser?.uid || "coach_current",
-    name: appUser?.fullName || coaches[0]?.name || "Тренер",
-    role: appUser?.role === "director" ? "Директор" : "Тренер",
-  };
+  // Deduplicated list of coaches for leadership preview switcher
+  const uniqueCoachesForSwitcher = useMemo(() => {
+    const result: typeof coaches = [];
+    coaches.forEach((c) => {
+      if (!c.name) return;
+      const existingIdx = result.findIndex((r) => isSameCoachName(r.name, c.name));
+      if (existingIdx === -1) {
+        result.push(c);
+      } else {
+        const existingGroups = groups.filter(
+          (g) => g.coachId === result[existingIdx].id || isSameCoachName(g.coachName, result[existingIdx].name)
+        ).length;
+        const currentGroups = groups.filter(
+          (g) => g.coachId === c.id || isSameCoachName(g.coachName, c.name)
+        ).length;
+        if (currentGroups > existingGroups) {
+          result[existingIdx] = c;
+        }
+      }
+    });
+    return result;
+  }, [coaches, groups]);
 
-  const getGroupAttendanceRate = (groupId: string) => {
-    const groupSessions = (trainingSessions || []).filter(s => s.groupId === groupId);
+  // If leadership switched role to "trainer" and their own user account has no groups,
+  // allow selecting any trainer (or default to the trainer if previewCoachId is chosen)
+  const effectiveOverrideCoachId = useMemo(() => {
+    if (previewCoachId) return previewCoachId;
+    const isAppUserLeadership =
+      appUser?.role === "director" ||
+      appUser?.role === "admin" ||
+      appUser?.role === "manager";
+    if (currentRole === "trainer" && isAppUserLeadership) {
+      const selfIdentity = resolveTrainerIdentity({ coaches, groups, appUser });
+      const selfGroups = groups.filter((g) =>
+        isGroupAssignedToCoach(g, selfIdentity.coachIds, selfIdentity.coachNames)
+      );
+      if (selfGroups.length === 0 && uniqueCoachesForSwitcher.length > 0) {
+        const nikonov = uniqueCoachesForSwitcher.find((c) =>
+          isSameCoachName(c.name, "Никонов Данила Владимирович")
+        );
+        return nikonov?.id || uniqueCoachesForSwitcher[0].id;
+      }
+    }
+    return null;
+  }, [previewCoachId, appUser, currentRole, coaches, groups, uniqueCoachesForSwitcher]);
+
+  const {
+    myCoach,
+    coachIds: myCoachIds,
+    coachNames: myCoachNames,
+  } = useMemo(
+    () =>
+      resolveTrainerIdentity({
+        coaches,
+        groups,
+        appUser,
+        overrideCoachId: effectiveOverrideCoachId,
+      }),
+    [coaches, groups, appUser, effectiveOverrideCoachId]
+  );
+
+  const getGroupAttendanceRate = (groupId: string, groupName?: string) => {
+    const groupSessions = (trainingSessions || []).filter((s) =>
+      isGroupMatch(s.groupId, s.groupName, groupId, groupName)
+    );
     if (groupSessions.length === 0) return "-";
     let totalPresent = 0;
     let totalRecords = 0;
-    groupSessions.forEach(session => {
+    groupSessions.forEach((session) => {
       totalPresent += session.presentCount || 0;
-      totalRecords += (session.presentCount || 0) + (session.absentCount || 0) + (session.sickCount || 0);
+      totalRecords +=
+        (session.presentCount || 0) +
+        (session.absentCount || 0) +
+        (session.sickCount || 0);
     });
     if (totalRecords === 0) return "-";
     return Math.round((totalPresent / totalRecords) * 100) + "%";
@@ -262,32 +325,53 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
   };
 
   const isManagement =
-    currentRole === "director" ||
-    currentRole === "admin" ||
-    currentRole === "manager";
+    (currentRole === "director" ||
+      currentRole === "admin" ||
+      currentRole === "manager") &&
+    !previewCoachId;
 
-  const myGroups = isManagement
-    ? groups
-    : groups.filter((g) => g.coachId === myCoach.id);
+  const myGroups = useMemo(
+    () =>
+      isManagement
+        ? groups
+        : groups.filter((g) =>
+            isGroupAssignedToCoach(g, myCoachIds, myCoachNames)
+          ),
+    [isManagement, groups, myCoachIds, myCoachNames]
+  );
 
-  const relevantClients = (
-    isManagement
-      ? clients
-      : clients.filter(
-          (c) =>
-            myGroups.some(
-              (g) =>
-                g.name === c.groupName ||
-                (g.isSelectTeam && g.selectedClientIds?.includes(c.id)),
-            ) || c.coachId === myCoach.id,
-        )
-  ).filter((c) => c.status !== "inactive");
+  const relevantClients = useMemo(
+    () =>
+      (isManagement
+        ? clients
+        : clients.filter(
+            (c) =>
+              myGroups.some(
+                (g) =>
+                  isGroupMatch(undefined, c.groupName, g.id, g.name) ||
+                  (g.isSelectTeam && g.selectedClientIds?.includes(c.id)),
+              ) ||
+              (c.coachId && myCoachIds.has(c.coachId)) ||
+              (c.coachName &&
+                myCoachNames.some((n) => isSameCoachName(c.coachName, n))),
+          )
+      ).filter((c) => c.status !== "inactive"),
+    [isManagement, clients, myGroups, myCoachIds, myCoachNames]
+  );
 
-  const myClients = relevantClients.sort((a, b) => {
-    const nameA = `${a.childSurname || ""} ${a.childName || ""}`.trim().toLowerCase();
-    const nameB = `${b.childSurname || ""} ${b.childName || ""}`.trim().toLowerCase();
-    return nameA.localeCompare(nameB, "ru");
-  });
+  const myClients = useMemo(
+    () =>
+      [...relevantClients].sort((a, b) => {
+        const nameA = `${a.childSurname || ""} ${a.childName || ""}`
+          .trim()
+          .toLowerCase();
+        const nameB = `${b.childSurname || ""} ${b.childName || ""}`
+          .trim()
+          .toLowerCase();
+        return nameA.localeCompare(nameB, "ru");
+      }),
+    [relevantClients]
+  );
   const coachTasks = tasks.filter((t) => t.assignedTo === "trainer");
 
   // Unreported sessions detection for Trainer (last 14 days)
@@ -578,15 +662,11 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
     } else {
       setAttendanceDate(getLocalTodayYMD());
     }
-    // Pre-populate actual client players in that group using case-insensitive trimmed matching (excluding inactive)
+    // Pre-populate actual client players in that group using robust group matching (excluding inactive)
     const groupPlayersBase: any[] = (groupObj?.isSelectTeam
       ? clients.filter((c) => groupObj.selectedClientIds?.includes(c.id))
-      : clients.filter(
-          (c) =>
-            c.groupName &&
-            resolvedName &&
-            c.groupName.trim().toLowerCase() ===
-              resolvedName.trim().toLowerCase(),
+      : clients.filter((c) =>
+          isGroupMatch(undefined, c.groupName, groupObj?.id, resolvedName)
         )
     ).filter((c) => c.status !== "inactive");
     const groupTrialLeads = (leads || [])
@@ -636,16 +716,14 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
         [playerId]: { status, reason },
       };
 
-      // If manual counts were not manually edited, keep them responsive to the checkboxes:
       if (!isManualCountTouched) {
-        const groupObj = groups.find((g) => g.name === selectedGroupForAttendance || g.id === selectedGroupForAttendance);
+        const groupObj = groups.find((g) =>
+          isGroupMatch(g.id, g.name, selectedGroupForAttendance, selectedGroupForAttendance)
+        );
         const groupPlayersBase: any[] = (groupObj?.isSelectTeam
           ? clients.filter((c) => groupObj.selectedClientIds?.includes(c.id))
-          : clients.filter(
-              (c) =>
-                c.groupName &&
-                selectedGroupForAttendance &&
-                c.groupName.trim().toLowerCase() === selectedGroupForAttendance.trim().toLowerCase(),
+          : clients.filter((c) =>
+              isGroupMatch(undefined, c.groupName, groupObj?.id, selectedGroupForAttendance)
             )
         ).filter((c) => c.status !== "inactive");
         let paid = 0;
@@ -671,14 +749,13 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
   };
 
   const markAllPlayersPresent = () => {
-    const groupObj = groups.find((g) => g.name === selectedGroupForAttendance || g.id === selectedGroupForAttendance);
+    const groupObj = groups.find((g) =>
+      isGroupMatch(g.id, g.name, selectedGroupForAttendance, selectedGroupForAttendance)
+    );
     const groupPlayersBase: any[] = (groupObj?.isSelectTeam
       ? clients.filter((c) => groupObj.selectedClientIds?.includes(c.id))
-      : clients.filter(
-          (c) =>
-            c.groupName &&
-            selectedGroupForAttendance &&
-            c.groupName.trim().toLowerCase() === selectedGroupForAttendance.trim().toLowerCase(),
+      : clients.filter((c) =>
+          isGroupMatch(undefined, c.groupName, groupObj?.id, selectedGroupForAttendance)
         )
     ).filter((c) => c.status !== "inactive");
     const groupTrialLeads = (leads || [])
@@ -870,10 +947,15 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
   const weekDates = getWeekDates();
   const weekChartDays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
-  const mySessions =
-    trainingSessions?.filter(
-      (s) => s.coachId === myCoach.id || s.coachName.includes(myCoach.name),
-    ) || [];
+  const mySessions = useMemo(
+    () =>
+      isManagement
+        ? trainingSessions || []
+        : (trainingSessions || []).filter((s) =>
+            isSessionAssignedToCoach(s, myCoachIds, myCoachNames, myGroups)
+          ),
+    [isManagement, trainingSessions, myCoachIds, myCoachNames, myGroups]
+  );
 
   const dailyAttendance = weekDates.map((date, idx) => {
     const dateStr =
@@ -961,18 +1043,57 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center space-x-3 bg-emerald-50 border border-emerald-155 px-4 py-2 rounded-xl">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse"></span>
-          <div className="text-xs text-left">
-            <span className="font-extrabold text-emerald-700">
-              {currentRole === "admin"
-                ? "Администратор"
-                : currentRole === "director"
-                  ? "Директор"
-                  : currentRole === "manager"
-                    ? "Менеджер"
-                    : myCoach.role}
-            </span>
+        <div className="flex flex-wrap items-center gap-3">
+          {(appUser?.role === "director" ||
+            appUser?.role === "admin" ||
+            appUser?.role === "manager") &&
+            uniqueCoachesForSwitcher.length > 0 && (
+              <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl">
+                <GraduationCap className="w-4 h-4 text-slate-600 shrink-0" />
+                <span className="text-[11px] font-bold text-slate-600 whitespace-nowrap">
+                  Кабинет тренера:
+                </span>
+                <select
+                  value={effectiveOverrideCoachId || ""}
+                  onChange={(e) => {
+                    setPreviewCoachId(e.target.value);
+                    setSelectedGroupId(null);
+                    setSelectedGroupForAttendance(null);
+                  }}
+                  className="bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500/30 cursor-pointer"
+                >
+                  {currentRole !== "trainer" && (
+                    <option value="">Все тренеры (Сводка)</option>
+                  )}
+                  {uniqueCoachesForSwitcher.map((c) => {
+                    const gCount = groups.filter(
+                      (g) =>
+                        g.coachId === c.id ||
+                        isSameCoachName(g.coachName, c.name)
+                    ).length;
+                    return (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({gCount} гр.)
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            )}
+
+          <div className="flex items-center space-x-3 bg-emerald-50 border border-emerald-155 px-4 py-2 rounded-xl">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse"></span>
+            <div className="text-xs text-left">
+              <span className="font-extrabold text-emerald-700">
+                {currentRole === "admin" && !previewCoachId
+                  ? "Администратор"
+                  : currentRole === "director" && !previewCoachId
+                    ? "Директор"
+                    : currentRole === "manager" && !previewCoachId
+                      ? "Менеджер"
+                      : `${myCoach.role}: ${myCoach.name}`}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -1068,8 +1189,12 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                   {myGroups.length}
                 </div>
                 <div className="text-[10px] text-gray-400 mt-0.5">
-                  {myGroups.reduce((acc, g) => acc + g.playersCount, 0)} игроков
-                  закреплено
+                  {myClients.length ||
+                    myGroups.reduce(
+                      (acc, g) => acc + getGroupActualPlayersCount(g, clients),
+                      0,
+                    )}{" "}
+                  игроков закреплено
                 </div>
               </div>
               <div className="bg-white p-4 rounded-xl border border-gray-105 shadow-xs text-left">
@@ -1092,19 +1217,17 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                 </span>
                 <div className="text-2xl font-black text-emerald-600 mt-1">
                   {(() => {
-                    const mySessions = (trainingSessions || []).filter(
-                      (s) =>
-                        s.coachId === myCoach.id ||
-                        s.coachName.includes(myCoach.name),
-                    );
                     if (mySessions.length === 0) return "0%";
                     const totalPlayers = mySessions.reduce(
                       (sum, s) =>
-                        sum + s.presentCount + s.sickCount + s.absentCount,
+                        sum +
+                        (s.presentCount || 0) +
+                        (s.sickCount || 0) +
+                        (s.absentCount || 0),
                       0,
                     );
                     const present = mySessions.reduce(
-                      (sum, s) => sum + s.presentCount,
+                      (sum, s) => sum + (s.presentCount || 0),
                       0,
                     );
                     return totalPlayers > 0
@@ -1113,13 +1236,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                   })()}
                 </div>
                 <div className="text-[10px] text-emerald-600 mt-0.5 font-bold">
-                  На основе{" "}
-                  {trainingSessions?.filter(
-                    (s) =>
-                      s.coachId === myCoach.id ||
-                      s.coachName.includes(myCoach.name),
-                  ).length || 0}{" "}
-                  табелей
+                  На основе {mySessions.length} табелей
                 </div>
               </div>
               <div className="bg-white p-4 rounded-xl border border-gray-105 shadow-xs text-left">
@@ -1128,12 +1245,9 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                 </span>
                 <div className="text-2xl font-black text-amber-500 mt-1">
                   {(() => {
-                    const localMyClients = myClients.filter((c) =>
-                      myGroups.some((g) => g.name === c.groupName),
-                    );
-                    if (localMyClients.length === 0) return "0.0";
+                    if (myClients.length === 0) return "0.0";
                     let totalScore = 0;
-                    localMyClients.forEach((c) => {
+                    myClients.forEach((c) => {
                       totalScore +=
                         ((c.progress?.technique || 0) +
                           (c.progress?.tactics || 0) +
@@ -1141,7 +1255,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                           (c.progress?.discipline || 0)) /
                         4;
                     });
-                    return (totalScore / localMyClients.length).toFixed(1);
+                    return (totalScore / myClients.length).toFixed(1);
                   })()}
                 </div>
                 <div className="text-[10px] text-gray-400 mt-0.5">
@@ -1242,7 +1356,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                                 {formatGroupNameDisplay(g.name)}
                               </div>
                               <div className="text-[10px] text-gray-400 mt-0.5">
-                                {g.playersCount} игроков
+                                {getGroupActualPlayersCount(g, clients)} игроков
                               </div>
                             </div>
                             <div className="flex items-center space-x-1.5 shrink-0">
@@ -1586,14 +1700,16 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                                 <span className="truncate">{grp.name}</span>
                               </div>
                               <div className="text-[9px] text-gray-400 truncate">
-                                Тренировка сегодня, 17:00
+                                {(grp.scheduleDays || []).length > 0
+                                  ? grp.scheduleDays.join(", ")
+                                  : "Расписание уточняется"}
                               </div>
                             </div>
                           </div>
                           <div className="flex space-x-3 sm:space-x-4 shrink-0 justify-end items-center text-xs">
                             <div className="text-left w-12 hidden sm:block">
                               <div className="font-bold text-slate-800 text-[11px]">
-                                {grp.playersCount}
+                                {getGroupActualPlayersCount(grp, clients)}
                               </div>
                               <div className="text-[9px] text-gray-400">
                                 Игроков
@@ -1601,7 +1717,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                             </div>
                             <div className="text-left w-20 hidden lg:block">
                               <div className="font-bold text-slate-800 text-[11px]">
-                                {getGroupAttendanceRate(grp.id)}
+                                {getGroupAttendanceRate(grp.id, grp.name)}
                               </div>
                               <div className="text-[9px] text-gray-400">
                                 Посещаемость
@@ -1798,7 +1914,11 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
         {/* TAB 2: SCHEDULE */}
         {activeTab === "trainer_schedule" && (
           <div className="bg-white rounded-2xl p-0 border border-slate-200 overflow-hidden shadow-sm">
-            <ScheduleCalendar filteredCoachId={myCoach.id} />
+            <ScheduleCalendar
+              filteredCoachId={isManagement ? undefined : myCoach.id}
+              filteredCoachIds={isManagement ? undefined : Array.from(myCoachIds)}
+              filteredCoachNames={isManagement ? undefined : myCoachNames}
+            />
           </div>
         )}
 
@@ -1871,7 +1991,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                           <p className="text-[11px] text-gray-500 mt-1 font-medium">
                             Обучается:{" "}
                             <span className="font-semibold text-slate-700">
-                              {g.playersCount}
+                              {getGroupActualPlayersCount(g, clients)}
                             </span>{" "}
                             воспитанников
                           </p>
@@ -2036,20 +2156,21 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                   </div>
                   <div className="flex flex-col space-y-2">
                     {(() => {
-                      const groupObj = groups.find(
-                        (g) => g.name === selectedGroupForAttendance,
+                      const groupObj = groups.find((g) =>
+                        isGroupMatch(g.id, g.name, selectedGroupForAttendance, selectedGroupForAttendance)
                       );
                       const groupPlayersBase: any[] = groupObj?.isSelectTeam
                         ? myClients.filter((c) =>
                             groupObj.selectedClientIds?.includes(c.id),
                           )
-                        : myClients.filter((c) => {
-                            const cGroup = c.groupName?.trim().toLowerCase();
-                            const sGroup = selectedGroupForAttendance
-                              ?.trim()
-                              .toLowerCase();
-                            return !!cGroup && !!sGroup && cGroup === sGroup;
-                          });
+                        : myClients.filter((c) =>
+                            isGroupMatch(
+                              undefined,
+                              c.groupName,
+                              groupObj?.id,
+                              selectedGroupForAttendance
+                            )
+                          );
                       const groupTrialLeads = (leads || [])
                         .filter(
                           (l) =>
@@ -3418,23 +3539,13 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                         <div className="flex justify-between">
                           <span className="text-gray-500">Кол-во игроков:</span>
                           <span className="font-bold text-slate-800">
-                            {grp.isSelectTeam
-                              ? clients.filter(
-                                  (c) =>
-                                    c.status !== "inactive" &&
-                                    grp.selectedClientIds?.includes(c.id),
-                                ).length
-                              : clients.filter(
-                                  (c) =>
-                                    c.status !== "inactive" &&
-                                    c.groupName === grp.name,
-                                ).length}
+                            {getGroupActualPlayersCount(grp, clients)}
                           </span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-500">Посещаемость:</span>
                           <span className="font-bold text-emerald-600">
-                            {getGroupAttendanceRate(grp.id)}
+                            {getGroupAttendanceRate(grp.id, grp.name)}
                           </span>
                         </div>
                         <div className="flex justify-between">
@@ -3481,7 +3592,8 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                       )
                     : clients.filter(
                         (c) =>
-                          c.status !== "inactive" && c.groupName === grp.name,
+                          c.status !== "inactive" &&
+                          isGroupMatch(undefined, c.groupName, grp.id, grp.name),
                       )
                 ).sort((a, b) => {
                   const nameA = `${a.childSurname || ""} ${a.childName || ""}`
@@ -4040,7 +4152,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                         setNewHomework({...newHomework, groupId: e.target.value, groupName: grp ? grp.name : ''});
                      }}>
                        <option value="">(Все группы)</option>
-                       {groups.filter(g => currentRole === 'trainer' ? g.coachId === myCoach.id : true).map(g => (
+                       {myGroups.map(g => (
                          <option key={g.id} value={g.id}>{g.name}</option>
                        ))}
                      </select>
@@ -4071,7 +4183,16 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
             )}
 
             <div className="space-y-4">
-              {homeworks.filter(hw => currentRole === 'trainer' ? groups.find(g => g.id === hw.groupId)?.coachId === myCoach.id || !hw.groupId : true).map(hw => {
+              {homeworks
+                .filter((hw) =>
+                  isManagement
+                    ? true
+                    : !hw.groupId ||
+                      myGroups.some((g) =>
+                        isGroupMatch(hw.groupId, hw.groupName, g.id, g.name)
+                      )
+                )
+                .map((hw) => {
                  const submissions = homeworkSubmissions.filter(s => s.homeworkId === hw.id);
                  return (
                    <div key={hw.id} className="p-4 bg-white border border-gray-200 rounded-2xl shadow-sm">

@@ -4,6 +4,7 @@ import { useCRM } from "../context/CRMContext";
 import { TrainingGroup } from "../types";
 import { parseScheduleString, RU_WEEKDAYS_MAP } from "../utils/scheduleParser";
 import { isGroupMatch, isDateMatch } from "../utils/sessionMatching";
+import { isSameCoachName } from "../utils/coachMatching";
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -68,7 +69,14 @@ const LOCATIONS = [
 export const ScheduleCalendar: React.FC<{
   filteredGroupId?: string;
   filteredCoachId?: string;
-}> = ({ filteredGroupId, filteredCoachId }) => {
+  filteredCoachIds?: string[];
+  filteredCoachNames?: string[];
+}> = ({
+  filteredGroupId,
+  filteredCoachId,
+  filteredCoachIds,
+  filteredCoachNames,
+}) => {
   const {
     groups,
     coaches,
@@ -94,6 +102,10 @@ export const ScheduleCalendar: React.FC<{
     filteredCoachId || "all",
   );
   const [selectedType, setSelectedType] = useState<string>("all");
+
+  useEffect(() => {
+    setSelectedCoachId(filteredCoachId || "all");
+  }, [filteredCoachId]);
 
   // Interactive state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -204,7 +216,11 @@ export const ScheduleCalendar: React.FC<{
               );
               if (isCancelled) continue;
 
-              const activeCoach = coaches.find((c) => c.id === g.coachId);
+              const activeCoach =
+                coaches.find((c) => c.id === g.coachId) ||
+                coaches.find(
+                  (c) => g.coachName && isSameCoachName(c.name, g.coachName)
+                );
               const coachName = activeCoach
                 ? activeCoach.name
                 : g.coachName || "Не указан";
@@ -269,16 +285,40 @@ export const ScheduleCalendar: React.FC<{
       // Force filter by filteredCoachId if provided by TrainerCRM
       if (
         filteredCoachId &&
-        ev.coachId !== filteredCoachId &&
         ev.coachId !== "all" &&
         ev.coachId !== "staff"
       ) {
-        return false; // Show only events belonging to this coach, cross-coach events etc.
+        const matchesId =
+          ev.coachId === filteredCoachId ||
+          Boolean(filteredCoachIds?.includes(ev.coachId));
+        const matchesName = Boolean(
+          ev.coachName &&
+            filteredCoachNames?.some((n) => isSameCoachName(ev.coachName, n))
+        );
+        if (!matchesId && !matchesName) {
+          return false;
+        }
       }
       const matchGroup =
         selectedGroupId === "all" || ev.groupId === selectedGroupId;
-      const matchCoach =
-        selectedCoachId === "all" || ev.coachId === selectedCoachId;
+
+      let matchCoach = selectedCoachId === "all" || ev.coachId === selectedCoachId;
+      if (!matchCoach && selectedCoachId !== "all") {
+        if (filteredCoachId && selectedCoachId === filteredCoachId) {
+          matchCoach =
+            Boolean(filteredCoachIds?.includes(ev.coachId)) ||
+            Boolean(
+              ev.coachName &&
+                filteredCoachNames?.some((n) => isSameCoachName(ev.coachName, n))
+            );
+        } else {
+          const targetCoachObj = coaches.find((c) => c.id === selectedCoachId);
+          if (targetCoachObj && ev.coachName) {
+            matchCoach = isSameCoachName(ev.coachName, targetCoachObj.name);
+          }
+        }
+      }
+
       const matchType = selectedType === "all" || ev.type === selectedType;
       return matchGroup && matchCoach && matchType;
     });
@@ -289,6 +329,9 @@ export const ScheduleCalendar: React.FC<{
     selectedType,
     filteredGroupId,
     filteredCoachId,
+    filteredCoachIds,
+    filteredCoachNames,
+    coaches,
   ]);
 
   // Navigation handlers
