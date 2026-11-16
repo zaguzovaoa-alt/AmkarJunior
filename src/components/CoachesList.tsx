@@ -1018,12 +1018,18 @@ export const CoachesList: React.FC = () => {
                     min="2015"
                     max="2027"
                     required
-                    value={newCoachJoinedYear}
+                    placeholder="2024"
+                    value={newCoachJoinedYear || ""}
                     onChange={(e) =>
                       setNewCoachJoinedYear(
-                        parseInt(e.target.value) || new Date().getFullYear(),
+                        e.target.value === "" ? 0 : parseInt(e.target.value, 10) || 0,
                       )
                     }
+                    onBlur={() => {
+                      if (!newCoachJoinedYear) {
+                        setNewCoachJoinedYear(new Date().getFullYear());
+                      }
+                    }}
                     className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold focus:outline-none"
                   />
                 </div>
@@ -1179,8 +1185,13 @@ export const CoachesList: React.FC = () => {
                   </label>
                   <input
                     type="number"
-                    value={newCoachRate}
-                    onChange={(e) => setNewCoachRate(Number(e.target.value))}
+                    placeholder="0"
+                    value={newCoachRate === 0 ? "" : newCoachRate}
+                    onChange={(e) =>
+                      setNewCoachRate(
+                        e.target.value === "" ? 0 : Number(e.target.value)
+                      )
+                    }
                     className="w-full px-3 py-2 border rounded-xl text-xs font-semibold focus:outline-none focus:border-red-600"
                   />
                 </div>
@@ -1361,12 +1372,18 @@ export const CoachesList: React.FC = () => {
                     min="2015"
                     max="2027"
                     required
-                    value={editCoachJoinedYear}
+                    placeholder="2024"
+                    value={editCoachJoinedYear || ""}
                     onChange={(e) =>
                       setEditCoachJoinedYear(
-                        parseInt(e.target.value) || new Date().getFullYear(),
+                        e.target.value === "" ? 0 : parseInt(e.target.value, 10) || 0,
                       )
                     }
+                    onBlur={() => {
+                      if (!editCoachJoinedYear) {
+                        setEditCoachJoinedYear(new Date().getFullYear());
+                      }
+                    }}
                     className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold focus:outline-none"
                   />
                 </div>
@@ -1522,8 +1539,13 @@ export const CoachesList: React.FC = () => {
                   </label>
                   <input
                     type="number"
-                    value={editCoachRate}
-                    onChange={(e) => setEditCoachRate(Number(e.target.value))}
+                    placeholder="0"
+                    value={editCoachRate === 0 ? "" : editCoachRate}
+                    onChange={(e) =>
+                      setEditCoachRate(
+                        e.target.value === "" ? 0 : Number(e.target.value)
+                      )
+                    }
                     className="w-full px-3 py-2 border rounded-xl text-xs font-semibold focus:outline-none focus:border-red-600"
                   />
                 </div>

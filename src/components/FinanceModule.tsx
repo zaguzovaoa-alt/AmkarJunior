@@ -13,6 +13,8 @@ import {
   AlertOctagon,
   ClipboardList,
   CheckSquare,
+  Check,
+  RotateCcw,
   Trash2,
   Plus,
   Settings,
@@ -69,6 +71,7 @@ export const FinanceModule: React.FC = () => {
     overwriteFinances,
     financeCategories,
     addFinanceCategory,
+    updateFinanceCategory,
     deleteFinanceCategory,
     addFinanceRecord,
     addAccount,
@@ -85,6 +88,7 @@ export const FinanceModule: React.FC = () => {
     addCounterparty,
     updateCounterparty,
     deleteCounterparty,
+    updateClient,
     currentRole,
   } = useCRM();
 
@@ -158,6 +162,8 @@ export const FinanceModule: React.FC = () => {
   const [fTargetMonth, setFTargetMonth] = useState(currentMonthStr);
   const [fDesc, setFDesc] = useState("");
   const [fCounterparty, setFCounterparty] = useState("");
+  const [fClientId, setFClientId] = useState<string>("");
+  const [fGroupName, setFGroupName] = useState<string>("");
 
   const [addSuccessMsg, setAddSuccessMsg] = useState("");
   const [addErrorMsg, setAddErrorMsg] = useState("");
@@ -214,28 +220,90 @@ export const FinanceModule: React.FC = () => {
     // Left intentionally blank
   }, [accounts, finances]);
 
-  const handleAddFinance = () => {
-    if (!fAmount || !fCat || !fAccount) {
-      setAddErrorMsg("Введите сумму, категорию и счет");
+  const handleAddFinance = async () => {
+    if (!fAmount || Number(fAmount) <= 0) {
+      setAddErrorMsg("Введите сумму операции больше 0 ₽");
       setTimeout(() => setAddErrorMsg(""), 3000);
       return;
     }
-    addFinanceRecord({
+
+    const availableCats = financeCategories.filter((c) => c.type === fType);
+    const selectedCatObj =
+      financeCategories.find((c) => c.id === fCat && c.type === fType) ||
+      availableCats[0];
+    const resolvedCategoryName =
+      selectedCatObj?.name ||
+      fCat ||
+      (fType === "income" ? "Абонементы" : "Прочие расходы");
+    const resolvedAccountId = fAccount || accounts[0]?.id || "acc_cash";
+
+    const linkedClient =
+      fType === "income" && fClientId
+        ? clients.find((c) => c.id === fClientId)
+        : undefined;
+
+    const selectedVenueCp =
+      fCounterparty ? counterparties.find((c) => c.id === fCounterparty) : undefined;
+
+    const finalDescription =
+      fDesc.trim() ||
+      (fType === "income"
+        ? linkedClient
+          ? `Ручное внесение: ${resolvedCategoryName} (${linkedClient.childSurname} ${linkedClient.childName})`
+          : selectedVenueCp
+            ? `${resolvedCategoryName}: площадка «${selectedVenueCp.name}»`
+            : `${resolvedCategoryName} (вручную, без привязки к игроку)${fGroupName ? `, Группа: ${fGroupName}` : ""}`
+        : "");
+
+    await addFinanceRecord({
       type: fType,
       amount: Number(fAmount),
-      category: financeCategories.find((c) => c.id === fCat)?.name || fCat,
+      category: resolvedCategoryName,
       date: fDate,
-      description: fDesc,
-      targetMonth: fTargetMonth,
-      accountId: fAccount,
-      isFixed: fIsFixed,
+      description: finalDescription,
+      targetMonth: fTargetMonth || fDate.substring(0, 7),
+      accountId: resolvedAccountId,
+      isFixed:
+        fType === "expense"
+          ? selectedCatObj?.expenseType === "fixed" || fIsFixed
+          : false,
       counterpartyId: fCounterparty || undefined,
+      groupName:
+        fType === "income"
+          ? fGroupName || linkedClient?.groupName || undefined
+          : undefined,
+      clientId: linkedClient?.id,
+      clientName: linkedClient
+        ? `${linkedClient.childSurname} ${linkedClient.childName}`.trim()
+        : undefined,
     });
+
+    if (linkedClient) {
+      const newPayment = {
+        id: `p_fin_${Date.now()}`,
+        date: fDate,
+        amount: Number(fAmount),
+        item: fDesc.trim() || resolvedCategoryName,
+        status: "Оплачено" as const,
+      };
+      await updateClient(linkedClient.id, {
+        payments: [newPayment, ...(linkedClient.payments || [])],
+      });
+    }
+
     setFAmount("");
     setFDesc("");
     setFCounterparty("");
-    setAddSuccessMsg("Запись добавлена!");
-    setTimeout(() => setAddSuccessMsg(""), 3000);
+    setFClientId("");
+    setFGroupName("");
+    setAddSuccessMsg(
+      fType === "income"
+        ? linkedClient
+          ? `Доход зачислен и привязан к игроку ${linkedClient.childSurname} ${linkedClient.childName}!`
+          : "Доход без привязки к игроку успешно зачислен!"
+        : "Расходная операция успешно проведена!",
+    );
+    setTimeout(() => setAddSuccessMsg(""), 3500);
   };
 
   // Directories State
@@ -244,6 +312,19 @@ export const FinanceModule: React.FC = () => {
   const [newCatExpenseType, setNewCatExpenseType] = useState<
     "variable" | "fixed"
   >("fixed");
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
+  const [editCatName, setEditCatName] = useState("");
+  const [editCatType, setEditCatType] = useState<"income" | "expense">("income");
+  const [editCatExpenseType, setEditCatExpenseType] = useState<
+    "variable" | "fixed"
+  >("fixed");
+  const [lastDeletedCat, setLastDeletedCat] = useState<{
+    id: string;
+    name: string;
+    type: "income" | "expense";
+    expenseType?: "variable" | "fixed";
+    isSystem?: boolean;
+  } | null>(null);
 
   // Grid/Cashflow state
   const [gridFilterMonth, setGridFilterMonth] = useState(currentMonthStr);
@@ -263,13 +344,180 @@ export const FinanceModule: React.FC = () => {
   const [pnlExpandedFixed, setPnlExpandedFixed] = useState(false);
 
   const handleAddCat = () => {
-    if (!newCatName) return;
+    if (!newCatName.trim()) return;
     addFinanceCategory({
-      name: newCatName,
+      name: newCatName.trim(),
       type: newCatType,
       expenseType: newCatType === "expense" ? newCatExpenseType : undefined,
     });
     setNewCatName("");
+  };
+
+  const handleStartEditCat = (cat: {
+    id: string;
+    name: string;
+    type: "income" | "expense";
+    expenseType?: "variable" | "fixed";
+  }) => {
+    setEditingCatId(cat.id);
+    setEditCatName(cat.name);
+    setEditCatType(cat.type);
+    setEditCatExpenseType(cat.expenseType || "fixed");
+  };
+
+  const handleSaveEditCat = async () => {
+    if (!editingCatId || !editCatName.trim()) return;
+    await updateFinanceCategory(editingCatId, {
+      name: editCatName.trim(),
+      type: editCatType,
+      expenseType: editCatType === "expense" ? editCatExpenseType : undefined,
+    });
+    setEditingCatId(null);
+    setEditCatName("");
+    showNotification("Аналитическая статья успешно обновлена");
+  };
+
+  const handleDeleteCat = async (cat: {
+    id: string;
+    name: string;
+    type: "income" | "expense";
+    expenseType?: "variable" | "fixed";
+    isSystem?: boolean;
+  }) => {
+    if (editingCatId === cat.id) {
+      setEditingCatId(null);
+    }
+    setLastDeletedCat(cat);
+    await deleteFinanceCategory(cat.id);
+    showNotification(`Статья «${cat.name}» удалена`);
+  };
+
+  const handleUndoDeleteCat = async () => {
+    if (!lastDeletedCat) return;
+    await addFinanceCategory({
+      id: lastDeletedCat.id,
+      name: lastDeletedCat.name,
+      type: lastDeletedCat.type,
+      expenseType: lastDeletedCat.expenseType,
+      isSystem: lastDeletedCat.isSystem,
+    });
+    showNotification(`Статья «${lastDeletedCat.name}» восстановлена`);
+    setLastDeletedCat(null);
+  };
+
+  const defaultSystemCategories: Array<{
+    id: string;
+    type: "income" | "expense";
+    name: string;
+    isSystem: boolean;
+    expenseType?: "variable" | "fixed";
+  }> = [
+    { id: "cat_in_ab", type: "income", name: "Абонементы", isSystem: true },
+    {
+      id: "cat_in_ab12",
+      type: "income",
+      name: "Абонементы 12 занятий",
+      isSystem: true,
+    },
+    {
+      id: "cat_in_1tr",
+      type: "income",
+      name: "Разовые тренировки",
+      isSystem: true,
+    },
+    {
+      id: "cat_in_subrent",
+      type: "income",
+      name: "Сдача площадок в аренду",
+      isSystem: true,
+    },
+    {
+      id: "cat_ex_acq",
+      type: "expense",
+      name: "Эквайринг (Комиссия ЮKassa)",
+      isSystem: true,
+      expenseType: "variable",
+    },
+  ];
+
+  // Sublease / Venue Rental Income states
+  const [subrentVenueId, setSubrentVenueId] = useState<string>("");
+  const [subrentCustomVenue, setSubrentCustomVenue] = useState<string>("");
+  const [subrentTenant, setSubrentTenant] = useState<string>("");
+  const [subrentHours, setSubrentHours] = useState<string>("");
+  const [subrentAmount, setSubrentAmount] = useState<string>("");
+  const [subrentDate, setSubrentDate] = useState<string>(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  });
+  const [subrentAccountId, setSubrentAccountId] = useState<string>("acc_bank");
+  const [subrentSuccessMsg, setSubrentSuccessMsg] = useState<string>("");
+  const [subrentErrorMsg, setSubrentErrorMsg] = useState<string>("");
+
+  const handleAddSubrentIncome = async () => {
+    if (!subrentAmount || Number(subrentAmount) <= 0) {
+      setSubrentErrorMsg("Введите сумму дохода больше 0 ₽");
+      setTimeout(() => setSubrentErrorMsg(""), 3000);
+      return;
+    }
+
+    const subrentCatObj = financeCategories.find(
+      (c) =>
+        c.id === "cat_in_subrent" ||
+        (c.type === "income" && c.name.toLowerCase().includes("аренд")),
+    );
+    const categoryName = subrentCatObj?.name || "Сдача площадок в аренду";
+
+    const venueObj = subrentVenueId
+      ? counterparties.find((c) => c.id === subrentVenueId)
+      : undefined;
+    const venueLabel =
+      venueObj?.name || subrentCustomVenue.trim() || "Площадка школы";
+
+    const detailsParts: string[] = [`Площадка: ${venueLabel}`];
+    if (subrentTenant.trim()) {
+      detailsParts.push(`Арендатор: ${subrentTenant.trim()}`);
+    }
+    if (subrentHours.trim()) {
+      detailsParts.push(`Время/часы: ${subrentHours.trim()}`);
+    }
+
+    const descriptionText = `Сдача площадки в аренду (${detailsParts.join(" • ")})`;
+
+    await addFinanceRecord({
+      type: "income",
+      category: categoryName,
+      amount: Number(subrentAmount),
+      date: subrentDate,
+      targetMonth: subrentDate.substring(0, 7),
+      description: descriptionText,
+      accountId: subrentAccountId || accounts[0]?.id || "acc_bank",
+      counterpartyId: venueObj?.id || undefined,
+      isFixed: false,
+    });
+
+    setSubrentAmount("");
+    setSubrentTenant("");
+    setSubrentHours("");
+    setSubrentCustomVenue("");
+    setSubrentSuccessMsg(
+      `Доход от сдачи площадки «${venueLabel}» успешно зачислен!`,
+    );
+    setTimeout(() => setSubrentSuccessMsg(""), 3500);
+  };
+
+  const missingSystemCategories = defaultSystemCategories.filter(
+    (sys) =>
+      !financeCategories.some(
+        (c) => c.id === sys.id || (c.name === sys.name && c.type === sys.type),
+      ),
+  );
+
+  const handleRestoreSystemCategories = async () => {
+    for (const sys of missingSystemCategories) {
+      await addFinanceCategory(sys);
+    }
+    showNotification("Системные статьи восстановлены");
   };
 
   // Accounts Form State
@@ -648,6 +896,36 @@ export const FinanceModule: React.FC = () => {
                   }`}
                 >
                   Неоплаченные
+                </button>
+                <button
+                  onClick={() => setActiveTab("input")}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                    activeTab === "input"
+                      ? "bg-white shadow-sm text-emerald-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  ОперВвод (Внести доход)
+                </button>
+                <button
+                  onClick={() => setActiveTab("client_income")}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                    activeTab === "client_income"
+                      ? "bg-white shadow-sm text-emerald-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  Доходы
+                </button>
+                <button
+                  onClick={() => setActiveTab("rent")}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                    activeTab === "rent"
+                      ? "bg-white shadow-sm text-emerald-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  Аренда площадок
                 </button>
               </>
             ) : (
@@ -1676,7 +1954,9 @@ export const FinanceModule: React.FC = () => {
                   <input
                     type="number"
                     value={fAmount}
-                    onChange={(e) => setFAmount(e.target.value)}
+                    onChange={(e) =>
+                      setFAmount(e.target.value.replace(/^0+(?=\d)/, ""))
+                    }
                     className="w-full p-2.5 bg-slate-50 border border-gray-200 focus:ring-1 focus:ring-emerald-500 outline-none rounded-xl font-mono text-sm"
                     placeholder="0"
                   />
@@ -1730,13 +2010,14 @@ export const FinanceModule: React.FC = () => {
                   Статья БДДС
                 </label>
                 <select
-                  value={fCat}
+                  value={
+                    fCat ||
+                    financeCategories.find((c) => c.type === fType)?.id ||
+                    ""
+                  }
                   onChange={(e) => setFCat(e.target.value)}
                   className="w-full p-2.5 bg-slate-50 border border-gray-200 outline-none rounded-xl text-sm font-semibold text-slate-800"
                 >
-                  <option value="" disabled>
-                    --- Выберите статью ---
-                  </option>
                   {financeCategories
                     .filter((c) => c.type === fType)
                     .map((c) => (
@@ -1746,6 +2027,88 @@ export const FinanceModule: React.FC = () => {
                     ))}
                 </select>
               </div>
+              {fType === "income" && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3.5 bg-emerald-50/40 border border-emerald-100 rounded-xl">
+                  <div>
+                    <label className="block text-[11px] font-bold text-emerald-800 uppercase tracking-widest mb-1.5">
+                      Привязка к игроку
+                    </label>
+                    <select
+                      value={fClientId}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        setFClientId(id);
+                        const found = clients.find((c) => c.id === id);
+                        if (found?.groupName) {
+                          setFGroupName(found.groupName);
+                        }
+                      }}
+                      className="w-full p-2.5 bg-white border border-emerald-200 outline-none rounded-xl text-xs font-bold text-slate-800"
+                    >
+                      <option value="">
+                        Без привязки к игроку (общий доход)
+                      </option>
+                      {clients
+                        .filter((c) => c.status !== "inactive")
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.childSurname} {c.childName} (
+                            {c.groupName || "Без группы"})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-emerald-800 uppercase tracking-widest mb-1.5">
+                      Группа (необязательно)
+                    </label>
+                    <select
+                      value={fGroupName}
+                      onChange={(e) => setFGroupName(e.target.value)}
+                      className="w-full p-2.5 bg-white border border-emerald-200 outline-none rounded-xl text-xs font-bold text-slate-800"
+                    >
+                      <option value="">Без привязки к группе</option>
+                      {groups.map((g) => (
+                        <option key={g.id} value={g.name}>
+                          {g.name} ({g.coachName})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {(fCat === "cat_in_subrent" ||
+                    financeCategories
+                      .find((c) => c.id === fCat)
+                      ?.name.toLowerCase()
+                      .includes("аренд")) && (
+                    <div className="sm:col-span-2 pt-2 border-t border-emerald-100">
+                      <label className="block text-[11px] font-bold text-emerald-800 uppercase tracking-widest mb-1.5">
+                        Площадка / Объект сдачи в аренду
+                      </label>
+                      <select
+                        value={fCounterparty}
+                        onChange={(e) => setFCounterparty(e.target.value)}
+                        className="w-full p-2.5 bg-white border border-emerald-200 outline-none rounded-xl text-xs font-bold text-slate-800"
+                      >
+                        <option value="">
+                          Общая сдача в аренду (или укажите площадку в примечании)
+                        </option>
+                        {counterparties
+                          .filter(
+                            (cp) =>
+                              cp.type === "school_rent" ||
+                              cp.type === "hall_rent" ||
+                              cp.type === "other",
+                          )
+                          .map((cp) => (
+                            <option key={cp.id} value={cp.id}>
+                              {cp.name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
               {fType === "expense" && (
                 <div>
                   <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
@@ -1774,14 +2137,22 @@ export const FinanceModule: React.FC = () => {
                   value={fDesc}
                   onChange={(e) => setFDesc(e.target.value)}
                   className="w-full p-2.5 bg-slate-50 border border-gray-200 outline-none rounded-xl text-sm"
-                  placeholder="За что произведена оплата?"
+                  placeholder={
+                    fType === "income"
+                      ? "Напр., оплата разовой тренировки, экипировка, взнос..."
+                      : "За что произведена оплата?"
+                  }
                 />
               </div>
               <button
                 onClick={handleAddFinance}
                 className="w-full py-3 bg-slate-900 text-white font-bold tracking-wide rounded-xl mt-4 hover:bg-slate-800 transition"
               >
-                Провести финансовую операцию
+                {fType === "income"
+                  ? fClientId
+                    ? "Провести доход с привязкой к игроку"
+                    : "Провести доход без привязки к игроку"
+                  : "Провести финансовую операцию"}
               </button>
               {addSuccessMsg && (
                 <p className="text-center text-sm font-bold text-emerald-600 mt-2">
@@ -2773,7 +3144,8 @@ export const FinanceModule: React.FC = () => {
                                 </span>
                                 <input
                                   type="number"
-                                  value={target}
+                                  placeholder="0"
+                                  value={target === 0 ? "" : target}
                                   onChange={(e) => {
                                     setPlan({
                                       ...plan,
@@ -2870,7 +3242,8 @@ export const FinanceModule: React.FC = () => {
                                 </span>
                                 <input
                                   type="number"
-                                  value={target}
+                                  placeholder="0"
+                                  value={target === 0 ? "" : target}
                                   onChange={(e) => {
                                     setPlan({
                                       ...plan,
@@ -2954,7 +3327,8 @@ export const FinanceModule: React.FC = () => {
                       </label>
                       <input
                         type="number"
-                        value={plan.renew12Count}
+                        placeholder="0"
+                        value={plan.renew12Count || ""}
                         onChange={(e) =>
                           setPlan({
                             ...plan,
@@ -2970,7 +3344,8 @@ export const FinanceModule: React.FC = () => {
                       </label>
                       <input
                         type="number"
-                        value={plan.renew8Count}
+                        placeholder="0"
+                        value={plan.renew8Count || ""}
                         onChange={(e) =>
                           setPlan({
                             ...plan,
@@ -2986,7 +3361,8 @@ export const FinanceModule: React.FC = () => {
                       </label>
                       <input
                         type="number"
-                        value={plan.renew4Count}
+                        placeholder="0"
+                        value={plan.renew4Count || ""}
                         onChange={(e) =>
                           setPlan({
                             ...plan,
@@ -3010,7 +3386,8 @@ export const FinanceModule: React.FC = () => {
                       </label>
                       <input
                         type="number"
-                        value={plan.new12Count}
+                        placeholder="0"
+                        value={plan.new12Count || ""}
                         onChange={(e) =>
                           setPlan({
                             ...plan,
@@ -3026,7 +3403,8 @@ export const FinanceModule: React.FC = () => {
                       </label>
                       <input
                         type="number"
-                        value={plan.new8Count}
+                        placeholder="0"
+                        value={plan.new8Count || ""}
                         onChange={(e) =>
                           setPlan({
                             ...plan,
@@ -3042,7 +3420,8 @@ export const FinanceModule: React.FC = () => {
                       </label>
                       <input
                         type="number"
-                        value={plan.new4Count}
+                        placeholder="0"
+                        value={plan.new4Count || ""}
                         onChange={(e) =>
                           setPlan({
                             ...plan,
@@ -3076,7 +3455,8 @@ export const FinanceModule: React.FC = () => {
                     <div className="relative">
                       <input
                         type="number"
-                        value={plan.price12}
+                        placeholder="0"
+                        value={plan.price12 || ""}
                         onChange={(e) =>
                           setPlan({ ...plan, price12: Number(e.target.value) })
                         }
@@ -3094,7 +3474,8 @@ export const FinanceModule: React.FC = () => {
                     <div className="relative">
                       <input
                         type="number"
-                        value={plan.price8}
+                        placeholder="0"
+                        value={plan.price8 || ""}
                         onChange={(e) =>
                           setPlan({ ...plan, price8: Number(e.target.value) })
                         }
@@ -3112,7 +3493,8 @@ export const FinanceModule: React.FC = () => {
                     <div className="relative">
                       <input
                         type="number"
-                        value={plan.price4}
+                        placeholder="0"
+                        value={plan.price4 || ""}
                         onChange={(e) =>
                           setPlan({ ...plan, price4: Number(e.target.value) })
                         }
@@ -3871,12 +4253,87 @@ export const FinanceModule: React.FC = () => {
                 const totalPaid = list.reduce((sum, item) => sum + item.paid, 0);
                 const currentDebt = Math.max(0, totalAccrued - totalPaid);
 
+                // Sublease / Venue Rental Income for the same selected period
+                const isSubrentRecordInPeriod = (f: any) => {
+                  if (f.type !== "income") return false;
+                  const catLower = (f.category || "").toLowerCase();
+                  const descLower = (f.description || "").toLowerCase();
+                  const isSubrent =
+                    f.category === "Сдача площадок в аренду" ||
+                    catLower.includes("сдача площад") ||
+                    catLower.includes("субаренд") ||
+                    descLower.includes("сдача площадки в аренду");
+                  if (!isSubrent) return false;
+
+                  if (rentMonth === "all") return true;
+
+                  if (rentDateMode === "period") {
+                    if (rentStartDate && f.date < rentStartDate) return false;
+                    if (rentEndDate && f.date > rentEndDate) return false;
+                    return true;
+                  }
+
+                  if (rentDateMode === "half1") {
+                    const activeM = rentMonth === "all" ? currentMonthStr : rentMonth;
+                    return f.date >= `${activeM}-01` && f.date <= `${activeM}-15`;
+                  }
+
+                  if (rentDateMode === "half2") {
+                    const activeM = rentMonth === "all" ? currentMonthStr : rentMonth;
+                    return f.date >= `${activeM}-16` && f.date <= `${activeM}-31`;
+                  }
+
+                  const recordMonth = f.targetMonth || f.date.substring(0, 7);
+                  return recordMonth === rentMonth;
+                };
+
+                const subrentIncomes = finances
+                  .filter(isSubrentRecordInPeriod)
+                  .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+
+                const totalSubrentIncome = subrentIncomes.reduce(
+                  (sum, f) => sum + Number(f.amount || 0),
+                  0,
+                );
+                const rentCompensationPct =
+                  totalAccrued > 0
+                    ? Math.round((totalSubrentIncome / totalAccrued) * 100)
+                    : 0;
+
+                // Group subrent income by venue
+                const subrentByVenueMap = new Map<
+                  string,
+                  { name: string; total: number; count: number }
+                >();
+                subrentIncomes.forEach((f) => {
+                  const cp = f.counterpartyId
+                    ? counterparties.find((c) => c.id === f.counterpartyId)
+                    : undefined;
+                  let venueName = cp?.name || "";
+                  if (!venueName && f.description) {
+                    const match = f.description.match(/Площадка:\s*([^•)]+)/i);
+                    if (match && match[1]) venueName = match[1].trim();
+                  }
+                  if (!venueName) venueName = "Площадка школы";
+                  const existing = subrentByVenueMap.get(venueName) || {
+                    name: venueName,
+                    total: 0,
+                    count: 0,
+                  };
+                  existing.total += Number(f.amount || 0);
+                  existing.count += 1;
+                  subrentByVenueMap.set(venueName, existing);
+                });
+                const subrentVenueList = Array.from(subrentByVenueMap.values()).sort(
+                  (a, b) => b.total - a.total,
+                );
+
                 return (
                   <>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                       <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                         <span className="text-slate-400 font-bold uppercase text-[10px] tracking-wider block">
-                          Начислено за аренду
+                          Начислено за аренду (расход)
                         </span>
                         <div className="text-xl font-bold text-slate-800 mt-1">
                           {totalAccrued.toLocaleString("ru-RU")} ₽
@@ -3906,6 +4363,265 @@ export const FinanceModule: React.FC = () => {
                         <span className="text-[11px] text-slate-500 mt-1 block">
                           К оплате площадкам
                         </span>
+                      </div>
+                      <div className="bg-emerald-50/70 p-4 rounded-xl border border-emerald-200/80">
+                        <span className="text-emerald-800 font-bold uppercase text-[10px] tracking-wider block">
+                          Доход от сдачи площадок
+                        </span>
+                        <div className="text-xl font-black text-emerald-700 mt-1">
+                          +{totalSubrentIncome.toLocaleString("ru-RU")} ₽
+                        </div>
+                        <span className="text-[11px] text-emerald-700/80 mt-1 block font-medium">
+                          {totalAccrued > 0
+                            ? `Окупает ${rentCompensationPct}% расходов на аренду`
+                            : `Статья «Сдача площадок в аренду» (${subrentIncomes.length} опер.)`}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Sublease / Venue Rental Income Section */}
+                    <div className="bg-emerald-50/30 border border-emerald-100 rounded-2xl p-5 space-y-5">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-0.5 rounded-md bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wider">
+                              Доход школы
+                            </span>
+                            <h3 className="font-bold text-slate-900 text-sm md:text-base">
+                              Доходы от сдачи площадок в аренду (Субаренда)
+                            </h3>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-1">
+                            Все поступления автоматически учитываются по отдельной аналитической статье{" "}
+                            <strong className="text-emerald-800">«Сдача площадок в аренду»</strong> в общем доходе школы (Дашборд, ОДДС, ОПУ / P&amp;L)
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Quick Entry Form for Sublease Income */}
+                      <div className="bg-white p-4 rounded-xl border border-emerald-100 shadow-xs space-y-3">
+                        <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                          <Plus className="w-4 h-4 text-emerald-600" />
+                          <span>Внести поступление от сдачи площадки в аренду</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+                          <div className="lg:col-span-2">
+                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                              Площадка / Объект
+                            </label>
+                            <select
+                              value={subrentVenueId}
+                              onChange={(e) => setSubrentVenueId(e.target.value)}
+                              className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 outline-none focus:border-emerald-500"
+                            >
+                              <option value="">-- Указать вручную ниже --</option>
+                              {counterparties
+                                .filter(
+                                  (cp) =>
+                                    cp.type === "school_rent" ||
+                                    cp.type === "hall_rent" ||
+                                    cp.type === "other",
+                                )
+                                .map((cp) => (
+                                  <option key={cp.id} value={cp.id}>
+                                    {cp.name}
+                                  </option>
+                                ))}
+                            </select>
+                            {!subrentVenueId && (
+                              <input
+                                type="text"
+                                value={subrentCustomVenue}
+                                onChange={(e) => setSubrentCustomVenue(e.target.value)}
+                                placeholder="Название поля / зала (напр., Манеж)"
+                                className="w-full mt-1.5 p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 outline-none focus:border-emerald-500"
+                              />
+                            )}
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                              Кому сдали (Арендатор)
+                            </label>
+                            <input
+                              type="text"
+                              value={subrentTenant}
+                              onChange={(e) => setSubrentTenant(e.target.value)}
+                              placeholder="Команда / ИП / ФИО"
+                              className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 outline-none focus:border-emerald-500"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                              Часы / Время аренды
+                            </label>
+                            <input
+                              type="text"
+                              value={subrentHours}
+                              onChange={(e) => setSubrentHours(e.target.value)}
+                              placeholder="Напр., 2 часа (20:00–22:00)"
+                              className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 outline-none focus:border-emerald-500"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                              Сумма дохода (₽)
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              value={subrentAmount}
+                              onChange={(e) =>
+                                setSubrentAmount(
+                                  e.target.value.replace(/^0+(?=\d)/, ""),
+                                )
+                              }
+                              placeholder="Сумма ₽"
+                              className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-emerald-700 outline-none focus:border-emerald-500 font-mono"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                              Дата и Счет
+                            </label>
+                            <input
+                              type="date"
+                              value={subrentDate}
+                              onChange={(e) => setSubrentDate(e.target.value)}
+                              className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-mono text-slate-800 outline-none focus:border-emerald-500 mb-1.5"
+                            />
+                            <select
+                              value={subrentAccountId}
+                              onChange={(e) => setSubrentAccountId(e.target.value)}
+                              className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-semibold text-slate-800 outline-none focus:border-emerald-500"
+                            >
+                              {calculatedAccounts.map((a) => (
+                                <option key={a.id} value={a.id}>
+                                  {a.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-1">
+                          <div>
+                            {subrentSuccessMsg && (
+                              <span className="text-xs font-bold text-emerald-600">
+                                {subrentSuccessMsg}
+                              </span>
+                            )}
+                            {subrentErrorMsg && (
+                              <span className="text-xs font-bold text-red-600">
+                                {subrentErrorMsg}
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleAddSubrentIncome}
+                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-xs transition flex items-center gap-1.5"
+                          >
+                            <Plus className="w-4 h-4" />
+                            <span>Зачислить доход от сдачи площадки</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Breakdown by Venue & Sublease Income Journal */}
+                      {subrentVenueList.length > 0 && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                          {subrentVenueList.map((v) => (
+                            <div
+                              key={v.name}
+                              className="bg-white p-3.5 rounded-xl border border-emerald-100 flex items-center justify-between"
+                            >
+                              <div className="min-w-0 pr-2">
+                                <div className="text-xs font-bold text-slate-800 truncate">
+                                  {v.name}
+                                </div>
+                                <div className="text-[10px] text-slate-400 font-medium">
+                                  Сдач в аренду: {v.count}
+                                </div>
+                              </div>
+                              <div className="text-sm font-black text-emerald-600 whitespace-nowrap">
+                                +{v.total.toLocaleString("ru-RU")} ₽
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="overflow-x-auto bg-white border border-emerald-100 rounded-xl">
+                        <table className="w-full text-left text-xs whitespace-nowrap">
+                          <thead className="bg-emerald-50/60 text-emerald-900 font-bold uppercase text-[10px]">
+                            <tr>
+                              <th className="px-4 py-2.5">Дата</th>
+                              <th className="px-4 py-2.5">Площадка</th>
+                              <th className="px-4 py-2.5">Детали сдачи (Арендатор / Часы)</th>
+                              <th className="px-4 py-2.5">Статья БДДС</th>
+                              <th className="px-4 py-2.5">Счет зачисления</th>
+                              <th className="px-4 py-2.5 text-right">Доход</th>
+                              <th className="px-4 py-2.5 text-center">Удалить</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {subrentIncomes.length === 0 ? (
+                              <tr>
+                                <td
+                                  colSpan={7}
+                                  className="px-4 py-5 text-center text-slate-400 font-medium"
+                                >
+                                  За выбранный период поступлений по статье «Сдача площадок в аренду» пока нет
+                                </td>
+                              </tr>
+                            ) : (
+                              subrentIncomes.map((f) => {
+                                const accObj = accounts.find((a) => a.id === f.accountId);
+                                const cpObj = f.counterpartyId
+                                  ? counterparties.find((c) => c.id === f.counterpartyId)
+                                  : undefined;
+                                return (
+                                  <tr key={f.id} className="hover:bg-emerald-50/20 transition">
+                                    <td className="px-4 py-2.5 text-slate-500 font-medium">
+                                      {new Date(f.date).toLocaleDateString("ru-RU")}
+                                    </td>
+                                    <td className="px-4 py-2.5 font-bold text-slate-800">
+                                      {cpObj ? cpObj.name : "Площадка школы"}
+                                    </td>
+                                    <td className="px-4 py-2.5 text-slate-600 max-w-[280px] truncate">
+                                      {f.description || "Сдача площадки в аренду"}
+                                    </td>
+                                    <td className="px-4 py-2.5">
+                                      <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md">
+                                        {f.category}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-2.5 text-slate-500 font-medium">
+                                      {accObj ? accObj.name : "—"}
+                                    </td>
+                                    <td className="px-4 py-2.5 text-right font-black text-emerald-600">
+                                      +{Number(f.amount).toLocaleString("ru-RU")} ₽
+                                    </td>
+                                    <td className="px-4 py-2.5 text-center">
+                                      <button
+                                        type="button"
+                                        onClick={() => deleteFinanceRecord(f.id)}
+                                        className="text-slate-400 hover:text-red-500 transition"
+                                        title="Удалить запись дохода"
+                                      >
+                                        <Trash2 className="w-4 h-4 mx-auto" />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
 
@@ -4634,7 +5350,8 @@ export const FinanceModule: React.FC = () => {
                   <input
                     type="number"
                     step="0.1"
-                    value={crmConfig.acquiringFeePct}
+                    placeholder="0"
+                    value={crmConfig.acquiringFeePct || ""}
                     onChange={(e) =>
                       updateCRMConfig({
                         acquiringFeePct: Number(e.target.value),
@@ -4649,7 +5366,8 @@ export const FinanceModule: React.FC = () => {
                   </label>
                   <input
                     type="number"
-                    value={crmConfig.price12}
+                    placeholder="0"
+                    value={crmConfig.price12 || ""}
                     onChange={(e) =>
                       updateCRMConfig({ price12: Number(e.target.value) })
                     }
@@ -4662,7 +5380,8 @@ export const FinanceModule: React.FC = () => {
                   </label>
                   <input
                     type="number"
-                    value={crmConfig.price8}
+                    placeholder="0"
+                    value={crmConfig.price8 || ""}
                     onChange={(e) =>
                       updateCRMConfig({ price8: Number(e.target.value) })
                     }
@@ -4675,7 +5394,8 @@ export const FinanceModule: React.FC = () => {
                   </label>
                   <input
                     type="number"
-                    value={crmConfig.price4}
+                    placeholder="0"
+                    value={crmConfig.price4 || ""}
                     onChange={(e) =>
                       updateCRMConfig({ price4: Number(e.target.value) })
                     }
@@ -4688,7 +5408,8 @@ export const FinanceModule: React.FC = () => {
                   </label>
                   <input
                     type="number"
-                    value={crmConfig.price1}
+                    placeholder="0"
+                    value={crmConfig.price1 || ""}
                     onChange={(e) =>
                       updateCRMConfig({ price1: Number(e.target.value) })
                     }
@@ -4703,17 +5424,57 @@ export const FinanceModule: React.FC = () => {
             </div>
 
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 max-w-4xl mx-auto">
-              <h2 className="text-lg font-bold mb-6 border-b pb-4 text-slate-800">
-                Справочники: Аналитические статьи (БДДС / P&L)
-              </h2>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 border-b pb-4">
+                <h2 className="text-lg font-bold text-slate-800">
+                  Справочники: Аналитические статьи (БДДС / P&L)
+                </h2>
+                {missingSystemCategories.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleRestoreSystemCategories}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition self-start sm:self-auto"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Восстановить системные ({missingSystemCategories.length})</span>
+                  </button>
+                )}
+              </div>
+
+              {lastDeletedCat && (
+                <div className="mb-6 flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-slate-900 text-white text-xs font-medium shadow-sm">
+                  <span>
+                    Статья <strong className="font-bold">«{lastDeletedCat.name}»</strong> удалена
+                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleUndoDeleteCat}
+                      className="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-bold transition flex items-center gap-1"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Вернуть</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLastDeletedCat(null)}
+                      className="p-1 text-slate-400 hover:text-white transition"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="flex flex-col sm:flex-row gap-3 mb-8 bg-slate-50 p-4 rounded-xl border border-gray-100">
                 <input
                   type="text"
                   value={newCatName}
                   onChange={(e) => setNewCatName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleAddCat();
+                  }}
                   placeholder="Название новой статьи..."
-                  className="flex-1 p-3 border border-gray-200 outline-none rounded-xl text-sm font-medium focus:ring-1 focus:ring-slate-900"
+                  className="flex-1 p-3 border border-gray-200 outline-none rounded-xl text-sm font-medium focus:ring-1 focus:ring-slate-900 bg-white"
                 />
                 <select
                   value={newCatType}
@@ -4763,28 +5524,117 @@ export const FinanceModule: React.FC = () => {
                   <ul className="space-y-2.5">
                     {financeCategories
                       .filter((c) => c.type === "income")
-                      .map((c) => (
-                        <li
-                          key={c.id}
-                          className="flex justify-between items-center px-4 py-3 bg-white border border-gray-100 shadow-sm rounded-xl text-sm group hover:border-emerald-200 transition"
-                        >
-                          <span className="font-bold text-slate-700">
-                            {c.name}
-                          </span>
-                          {!c.isSystem ? (
-                            <button
-                              onClick={() => deleteFinanceCategory(c.id)}
-                              className="text-red-500 opacity-0 group-hover:opacity-100 transition p-1 hover:bg-red-50 rounded"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          ) : (
-                            <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded uppercase tracking-wider">
-                              Системная
-                            </span>
-                          )}
-                        </li>
-                      ))}
+                      .map((c) => {
+                        const isEditing = editingCatId === c.id;
+                        return (
+                          <li
+                            key={c.id}
+                            className={`px-4 py-3 bg-white border shadow-sm rounded-xl text-sm transition ${
+                              isEditing
+                                ? "border-emerald-400 ring-2 ring-emerald-500/15"
+                                : "border-gray-100 hover:border-emerald-200"
+                            }`}
+                          >
+                            {isEditing ? (
+                              <div className="space-y-2.5">
+                                <input
+                                  type="text"
+                                  value={editCatName}
+                                  onChange={(e) => setEditCatName(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") handleSaveEditCat();
+                                    if (e.key === "Escape") setEditingCatId(null);
+                                  }}
+                                  autoFocus
+                                  placeholder="Название статьи..."
+                                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-800 outline-none focus:border-emerald-600"
+                                />
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <select
+                                      value={editCatType}
+                                      onChange={(e) =>
+                                        setEditCatType(
+                                          e.target.value as "income" | "expense",
+                                        )
+                                      }
+                                      className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 bg-slate-50 outline-none"
+                                    >
+                                      <option value="income">Доходы</option>
+                                      <option value="expense">Расходы</option>
+                                    </select>
+                                    {editCatType === "expense" && (
+                                      <select
+                                        value={editCatExpenseType}
+                                        onChange={(e) =>
+                                          setEditCatExpenseType(
+                                            e.target.value as
+                                              | "fixed"
+                                              | "variable",
+                                          )
+                                        }
+                                        className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 bg-slate-50 outline-none"
+                                      >
+                                        <option value="fixed">Постоянный</option>
+                                        <option value="variable">Переменный</option>
+                                      </select>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1.5 ml-auto">
+                                    <button
+                                      type="button"
+                                      onClick={handleSaveEditCat}
+                                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition"
+                                    >
+                                      <Check className="w-3.5 h-3.5" />
+                                      <span>Сохранить</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingCatId(null)}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold transition"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                      <span>Отмена</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex justify-between items-center gap-3">
+                                <div className="flex items-center gap-2 flex-wrap min-w-0">
+                                  <span className="font-bold text-slate-700 break-words">
+                                    {c.name}
+                                  </span>
+                                  {c.isSystem && (
+                                    <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded uppercase tracking-wider shrink-0">
+                                      Системная
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEditCat(c)}
+                                    title="Редактировать статью"
+                                    className="p-2 rounded-lg text-slate-400 hover:text-slate-800 hover:bg-slate-100 active:bg-slate-200 transition"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteCat(c)}
+                                    title="Удалить статью"
+                                    className="p-2 rounded-lg text-rose-500 hover:text-rose-600 hover:bg-rose-50 active:bg-rose-100 transition"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </li>
+                        );
+                      })}
                   </ul>
                 </div>
                 <div className="space-y-3">
@@ -4794,28 +5644,122 @@ export const FinanceModule: React.FC = () => {
                   <ul className="space-y-2.5">
                     {financeCategories
                       .filter((c) => c.type === "expense")
-                      .map((c) => (
-                        <li
-                          key={c.id}
-                          className="flex justify-between items-center px-4 py-3 bg-white border border-gray-100 shadow-sm rounded-xl text-sm group hover:border-orange-200 transition"
-                        >
-                          <span className="font-bold text-slate-700">
-                            {c.name}
-                          </span>
-                          {!c.isSystem ? (
-                            <button
-                              onClick={() => deleteFinanceCategory(c.id)}
-                              className="text-red-500 opacity-0 group-hover:opacity-100 transition p-1 hover:bg-red-50 rounded"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          ) : (
-                            <span className="text-[9px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded uppercase tracking-wider">
-                              Системная
-                            </span>
-                          )}
-                        </li>
-                      ))}
+                      .map((c) => {
+                        const isEditing = editingCatId === c.id;
+                        return (
+                          <li
+                            key={c.id}
+                            className={`px-4 py-3 bg-white border shadow-sm rounded-xl text-sm transition ${
+                              isEditing
+                                ? "border-orange-400 ring-2 ring-orange-500/15"
+                                : "border-gray-100 hover:border-orange-200"
+                            }`}
+                          >
+                            {isEditing ? (
+                              <div className="space-y-2.5">
+                                <input
+                                  type="text"
+                                  value={editCatName}
+                                  onChange={(e) => setEditCatName(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") handleSaveEditCat();
+                                    if (e.key === "Escape") setEditingCatId(null);
+                                  }}
+                                  autoFocus
+                                  placeholder="Название статьи..."
+                                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-800 outline-none focus:border-orange-500"
+                                />
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <select
+                                      value={editCatType}
+                                      onChange={(e) =>
+                                        setEditCatType(
+                                          e.target.value as "income" | "expense",
+                                        )
+                                      }
+                                      className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 bg-slate-50 outline-none"
+                                    >
+                                      <option value="income">Доходы</option>
+                                      <option value="expense">Расходы</option>
+                                    </select>
+                                    {editCatType === "expense" && (
+                                      <select
+                                        value={editCatExpenseType}
+                                        onChange={(e) =>
+                                          setEditCatExpenseType(
+                                            e.target.value as
+                                              | "fixed"
+                                              | "variable",
+                                          )
+                                        }
+                                        className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 bg-slate-50 outline-none"
+                                      >
+                                        <option value="fixed">Постоянный</option>
+                                        <option value="variable">Переменный</option>
+                                      </select>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1.5 ml-auto">
+                                    <button
+                                      type="button"
+                                      onClick={handleSaveEditCat}
+                                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition"
+                                    >
+                                      <Check className="w-3.5 h-3.5" />
+                                      <span>Сохранить</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingCatId(null)}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold transition"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                      <span>Отмена</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex justify-between items-center gap-3">
+                                <div className="flex items-center gap-2 flex-wrap min-w-0">
+                                  <span className="font-bold text-slate-700 break-words">
+                                    {c.name}
+                                  </span>
+                                  <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded shrink-0">
+                                    {c.expenseType === "fixed"
+                                      ? "Постоянный"
+                                      : "Переменный"}
+                                  </span>
+                                  {c.isSystem && (
+                                    <span className="text-[9px] font-bold text-orange-600 bg-orange-50 border border-orange-100 px-2 py-0.5 rounded uppercase tracking-wider shrink-0">
+                                      Системная
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEditCat(c)}
+                                    title="Редактировать статью"
+                                    className="p-2 rounded-lg text-slate-400 hover:text-slate-800 hover:bg-slate-100 active:bg-slate-200 transition"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteCat(c)}
+                                    title="Удалить статью"
+                                    className="p-2 rounded-lg text-rose-500 hover:text-rose-600 hover:bg-rose-50 active:bg-rose-100 transition"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </li>
+                        );
+                      })}
                   </ul>
                 </div>
               </div>
@@ -5202,11 +6146,261 @@ export const FinanceModule: React.FC = () => {
           </div>
         )}
         {activeTab === "client_income" && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 max-w-4xl mx-auto space-y-6 animate-in fade-in zoom-in-95 duration-200">
-            <h2 className="text-lg font-bold mb-6 border-b pb-4 text-slate-800">
-              Доходы от клиентов
-            </h2>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 max-w-4xl mx-auto space-y-8 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800">
+                  Доходы от клиентов и ручные поступления
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Вносите доходы вручную как без привязки к конкретному игроку, так и с привязкой к ученику
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Manual Income Form (Supports Unlinked & Linked Incomes) */}
+            <div className="bg-emerald-50/40 border border-emerald-200/80 rounded-2xl p-4 sm:p-5 space-y-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-emerald-900">
+                  <Plus className="w-4 h-4 text-emerald-600" />
+                  <span>Внести доход вручную</span>
+                </div>
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2.5 py-0.5 rounded-full">
+                  {fClientId
+                    ? "С привязкой к игроку"
+                    : "Без привязки к конкретному игроку"}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3">
+                <div className="lg:col-span-3">
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                    Сумма (₽) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="0"
+                    value={fAmount}
+                    onChange={(e) => {
+                      setFType("income");
+                      setFAmount(e.target.value.replace(/^0+(?=\d)/, ""));
+                    }}
+                    className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:border-emerald-600"
+                  />
+                </div>
+
+                <div className="lg:col-span-4">
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                    Статья дохода (БДДС)
+                  </label>
+                  <select
+                    value={
+                      fCat ||
+                      financeCategories.find((c) => c.type === "income")?.id ||
+                      ""
+                    }
+                    onChange={(e) => {
+                      setFType("income");
+                      setFCat(e.target.value);
+                    }}
+                    className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-emerald-600"
+                  >
+                    {financeCategories
+                      .filter((c) => c.type === "income")
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div className="lg:col-span-5">
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                    Привязка к игроку (необязательно)
+                  </label>
+                  <select
+                    value={fClientId}
+                    onChange={(e) => {
+                      setFType("income");
+                      const id = e.target.value;
+                      setFClientId(id);
+                      const found = clients.find((c) => c.id === id);
+                      if (found?.groupName) {
+                        setFGroupName(found.groupName);
+                      }
+                    }}
+                    className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-emerald-600"
+                  >
+                    <option value="">
+                      Без привязки к конкретному игроку
+                    </option>
+                    {clients
+                      .filter((c) => c.status !== "inactive")
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.childSurname} {c.childName} (
+                          {c.groupName || "Без группы"})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div className="lg:col-span-3">
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                    Дата
+                  </label>
+                  <input
+                    type="date"
+                    value={fDate}
+                    onChange={(e) => setFDate(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-800 outline-none focus:border-emerald-600"
+                  />
+                </div>
+
+                <div className="lg:col-span-3">
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                    Счет зачисления
+                  </label>
+                  <select
+                    value={fAccount}
+                    onChange={(e) => setFAccount(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-emerald-600"
+                  >
+                    {calculatedAccounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="lg:col-span-3">
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                    Группа (необязательно)
+                  </label>
+                  <select
+                    value={fGroupName}
+                    onChange={(e) => setFGroupName(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-emerald-600"
+                  >
+                    <option value="">Без группы</option>
+                    {groups.map((g) => (
+                      <option key={g.id} value={g.name}>
+                        {g.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="lg:col-span-3 flex items-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFType("income");
+                      handleAddFinance();
+                    }}
+                    className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-sm transition flex items-center justify-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Зачислить доход</span>
+                  </button>
+                </div>
+
+                <div className="sm:col-span-2 lg:col-span-12">
+                  <input
+                    type="text"
+                    value={fDesc}
+                    onChange={(e) => setFDesc(e.target.value)}
+                    placeholder="Комментарий / основание (напр. Разовая тренировка без привязки к игроку, продажа формы, турнирный взнос)..."
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-emerald-600"
+                  />
+                </div>
+              </div>
+
+              {addSuccessMsg && (
+                <div className="text-xs font-bold text-emerald-700 bg-emerald-100/80 px-3 py-2 rounded-xl">
+                  {addSuccessMsg}
+                </div>
+              )}
+              {addErrorMsg && (
+                <div className="text-xs font-bold text-rose-700 bg-rose-100/80 px-3 py-2 rounded-xl">
+                  {addErrorMsg}
+                </div>
+              )}
+            </div>
+
+            {/* Unlinked / General Income Records */}
+            {(() => {
+              const unlinkedIncomes = finances
+                .filter((f) => f.type === "income" && !f.clientId)
+                .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+              if (unlinkedIncomes.length === 0) return null;
+              const totalUnlinked = unlinkedIncomes.reduce(
+                (sum, f) => sum + Number(f.amount || 0),
+                0,
+              );
+              return (
+                <div className="bg-emerald-50/30 border border-emerald-200/70 rounded-xl p-4 shadow-xs">
+                  <div className="flex justify-between items-center mb-3">
+                    <div>
+                      <h3 className="font-bold text-slate-900">
+                        Поступления в кассу / банк (включая доходы без привязки к игроку)
+                      </h3>
+                      <p className="text-[11px] text-slate-500">
+                        Все проведенные приходные операции по статьям БДДС
+                      </p>
+                    </div>
+                    <div className="font-black text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full text-sm">
+                      +{totalUnlinked.toLocaleString("ru-RU")} ₽
+                    </div>
+                  </div>
+                  <div className="space-y-1.5 max-h-80 overflow-y-auto pr-1">
+                    <div className="grid grid-cols-12 gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 border-b border-emerald-200/60 pb-2">
+                      <div className="col-span-2">Дата</div>
+                      <div className="col-span-3">Статья</div>
+                      <div className="col-span-4">Основание</div>
+                      <div className="col-span-2 text-right">Сумма</div>
+                      <div className="col-span-1 text-right"></div>
+                    </div>
+                    {unlinkedIncomes.map((inc) => (
+                      <div
+                        key={inc.id}
+                        className="grid grid-cols-12 gap-2 text-xs text-slate-700 items-center py-1.5 border-b border-slate-100 last:border-0"
+                      >
+                        <div className="col-span-2 font-mono">
+                          {inc.date}
+                        </div>
+                        <div className="col-span-3 font-bold text-slate-800 truncate">
+                          {inc.category}
+                        </div>
+                        <div className="col-span-4 truncate text-slate-600">
+                          {inc.description || "Без привязки к игроку"}
+                        </div>
+                        <div className="col-span-2 text-right font-bold text-emerald-600">
+                          +{Number(inc.amount || 0).toLocaleString("ru-RU")} ₽
+                        </div>
+                        <div className="col-span-1 text-right">
+                          <button
+                            type="button"
+                            onClick={() => deleteFinanceRecord(inc.id)}
+                            title="Удалить запись дохода"
+                            className="p-1 text-slate-400 hover:text-rose-600 rounded transition"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 inline" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="space-y-4">
+              <h3 className="text-sm font-black uppercase tracking-wider text-slate-500">
+                История оплат по карточкам игроков
+              </h3>
               {clients.map((client) => {
                 const paidPayments = client.payments?.filter(p => p.status === "Оплачено") || [];
                 if (paidPayments.length === 0) return null;
@@ -5242,7 +6436,7 @@ export const FinanceModule: React.FC = () => {
               })}
               {clients.every(c => (c.payments?.filter(p => p.status === "Оплачено") || []).length === 0) && (
                 <div className="text-center py-10 text-slate-500 text-sm">
-                  Нет данных об оплатах от клиентов.
+                  Нет данных об оплатах по карточкам клиентов.
                 </div>
               )}
             </div>
@@ -5278,8 +6472,13 @@ export const FinanceModule: React.FC = () => {
                 </label>
                 <input
                   type="number"
-                  value={editAccBalance}
-                  onChange={(e) => setEditAccBalance(Number(e.target.value))}
+                  placeholder="0"
+                  value={editAccBalance === 0 ? "" : editAccBalance}
+                  onChange={(e) =>
+                    setEditAccBalance(
+                      e.target.value === "" ? 0 : Number(e.target.value)
+                    )
+                  }
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                 />
               </div>
@@ -5352,7 +6551,9 @@ export const FinanceModule: React.FC = () => {
                   type="number"
                   placeholder="0.00"
                   value={transferAmount}
-                  onChange={(e) => setTransferAmount(e.target.value)}
+                  onChange={(e) =>
+                    setTransferAmount(e.target.value.replace(/^0+(?=\d)/, ""))
+                  }
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                 />
               </div>
@@ -5427,7 +6628,9 @@ export const FinanceModule: React.FC = () => {
                   type="number"
                   placeholder="0.00"
                   value={payoutAmount}
-                  onChange={(e) => setPayoutAmount(e.target.value)}
+                  onChange={(e) =>
+                    setPayoutAmount(e.target.value.replace(/^0+(?=\d)/, ""))
+                  }
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
                 />
                 {payoutType === "salary" && (() => {

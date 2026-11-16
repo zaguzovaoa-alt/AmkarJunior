@@ -2292,7 +2292,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                                   <input
                                     type="number"
                                     min={0}
-                                    value={manualPaidCount}
+                                    value={manualPaidCount === 0 ? "" : manualPaidCount}
                                     onChange={(e) => {
                                       const val = e.target.value === "" ? 0 : parseInt(e.target.value, 10);
                                       setManualPaidCount(isNaN(val) ? 0 : Math.max(0, val));
@@ -2337,7 +2337,7 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                                   <input
                                     type="number"
                                     min={0}
-                                    value={manualUnpaidCount}
+                                    value={manualUnpaidCount === 0 ? "" : manualUnpaidCount}
                                     onChange={(e) => {
                                       const val = e.target.value === "" ? 0 : parseInt(e.target.value, 10);
                                       setManualUnpaidCount(isNaN(val) ? 0 : Math.max(0, val));

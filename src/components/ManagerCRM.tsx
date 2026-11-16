@@ -229,12 +229,15 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
     (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(),
   );
   const [manualPaymentType, setManualPaymentType] = useState<
-    "12_sessions" | "8_sessions" | "4_sessions" | "1_session"
+    "12_sessions" | "8_sessions" | "4_sessions" | "1_session" | "custom"
   >("12_sessions");
   const [manualPaymentAmount, setManualPaymentAmount] = useState<number>(0);
   const [manualPaymentExpires, setManualPaymentExpires] = useState<string>("");
   const [manualPaymentAccountId, setManualPaymentAccountId] =
     useState<string>("");
+  const [manualPaymentUnlinked, setManualPaymentUnlinked] =
+    useState<boolean>(false);
+  const [manualPaymentComment, setManualPaymentComment] = useState<string>("");
   const [manualPaymentLoading, setManualPaymentLoading] = useState(false);
   const [manualPaymentError, setManualPaymentError] = useState<string | null>(
     null,
@@ -578,8 +581,8 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
 
   const handleSaveManualPayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedClient) {
-      setManualPaymentError("Клиент не выбран.");
+    if (!manualPaymentUnlinked && !selectedClient) {
+      setManualPaymentError("Клиент не выбран. Выберите клиента или включите режим «Без привязки к игроку».");
       return;
     }
     setManualPaymentLoading(true);
@@ -592,59 +595,87 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
       const paymentDate = manualPaymentDate;
       const expiresDate = manualPaymentExpires;
 
-      const sessionsMap = {
+      const sessionsMap: Record<string, number> = {
         "12_sessions": 12,
         "8_sessions": 8,
         "4_sessions": 4,
         "1_session": 1,
+        custom: 0,
       };
-      const sessions = sessionsMap[type];
-
-      // Calculate total sessions left
-      const updatedSessionsLeft =
-        (selectedClient.abonementSessionsLeft || 0) + sessions;
+      const sessions = sessionsMap[type] ?? 0;
 
       const itemLabel =
         type === "1_session"
           ? `Разовая тренировка (Вручную)`
-          : `Абонемент на ${sessions} занятий (Вручную)`;
+          : type === "custom"
+            ? manualPaymentComment.trim() || `Прочий доход (Вручную)`
+            : `Абонемент на ${sessions} занятий (Вручную)`;
 
-      const newPayment = {
-        id: `p_manual_${Date.now()}`,
-        date: paymentDate,
-        amount,
-        item: itemLabel,
-        status: "Оплачено" as const,
-      };
-
-      const updatedPayments = [newPayment, ...(selectedClient.payments || [])];
-
-      const clientUpdates = {
-        abonement: type,
-        abonementStatus: "Оплачено" as const,
-        abonementTotalSessions: updatedSessionsLeft,
-        abonementSessionsLeft: updatedSessionsLeft,
-        abonementExpirationDate: expiresDate,
-        payments: updatedPayments,
-      };
-
-      // Call context function to update client locally & in firestore db
-      await updateClient(selectedClient.id, clientUpdates);
-
-      // Save finance record automatically in backend/firestore
       const categoryName =
         type === "1_session" ? "Разовые тренировки" : "Абонементы";
-      await addFinanceRecord({
-        type: "income",
-        category: categoryName,
-        amount,
-        date: paymentDate,
-        description: `Ручное внесение: ${itemLabel} (${selectedClient.childSurname} ${selectedClient.childName})`,
-        accountId: manualPaymentAccountId || "acc_bank",
-        isFixed: false,
-      });
 
-      setManualPaymentSuccess("Платёж успешно занесён вручную и сохранён!");
+      if (!manualPaymentUnlinked && selectedClient) {
+        const updatedSessionsLeft =
+          (selectedClient.abonementSessionsLeft || 0) + sessions;
+
+        const newPayment = {
+          id: `p_manual_${Date.now()}`,
+          date: paymentDate,
+          amount,
+          item: manualPaymentComment.trim()
+            ? `${itemLabel} — ${manualPaymentComment.trim()}`
+            : itemLabel,
+          status: "Оплачено" as const,
+        };
+
+        const updatedPayments = [newPayment, ...(selectedClient.payments || [])];
+
+        const clientUpdates: Record<string, any> = {
+          payments: updatedPayments,
+        };
+        if (type !== "custom") {
+          clientUpdates.abonement = type;
+          clientUpdates.abonementStatus = "Оплачено";
+          clientUpdates.abonementTotalSessions = updatedSessionsLeft;
+          clientUpdates.abonementSessionsLeft = updatedSessionsLeft;
+          clientUpdates.abonementExpirationDate = expiresDate;
+        }
+
+        await updateClient(selectedClient.id, clientUpdates);
+
+        await addFinanceRecord({
+          type: "income",
+          category: categoryName,
+          amount,
+          date: paymentDate,
+          targetMonth: paymentDate.substring(0, 7),
+          description: `Ручное внесение: ${itemLabel} (${selectedClient.childSurname} ${selectedClient.childName})${manualPaymentComment.trim() ? ` — ${manualPaymentComment.trim()}` : ""}`,
+          accountId: manualPaymentAccountId || accounts[0]?.id || "acc_bank",
+          clientId: selectedClient.id,
+          clientName: `${selectedClient.childSurname} ${selectedClient.childName}`.trim(),
+          isFixed: false,
+        });
+
+        setManualPaymentSuccess("Платёж успешно занесён вручную и сохранён!");
+      } else {
+        await addFinanceRecord({
+          type: "income",
+          category: categoryName,
+          amount,
+          date: paymentDate,
+          targetMonth: paymentDate.substring(0, 7),
+          description:
+            manualPaymentComment.trim() ||
+            `Ручное внесение дохода (без привязки к игроку): ${itemLabel}`,
+          accountId: manualPaymentAccountId || accounts[0]?.id || "acc_bank",
+          isFixed: false,
+        });
+
+        setManualPaymentSuccess(
+          "Доход без привязки к игроку успешно занесён в финансовый учёт!",
+        );
+      }
+      setManualPaymentComment("");
     } catch (err: any) {
       console.error(err);
       setManualPaymentError(err?.message || "Не удалось занести платёж.");
@@ -1430,6 +1461,17 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                     className="flex-1 sm:flex-none bg-black hover:bg-gray-800 text-white px-3 md:px-5 py-2 rounded-full text-xs font-bold transition-all shadow-md shadow-gray-200 whitespace-nowrap text-center justify-center"
                   >
                     <span className="-ml-1 mr-1.5">+</span> Добавить клиента
+                  </button>
+                  <button
+                    onClick={() => {
+                      setPaymentModalClient(null);
+                      setIsPaymentModalOpen(true);
+                    }}
+                    className="flex-1 sm:flex-none bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 md:px-4 py-2 rounded-full text-xs font-bold transition-all whitespace-nowrap text-center justify-center inline-flex items-center space-x-1.5 cursor-pointer"
+                    title="Внести доход вручную (без привязки к игроку или с выбором игрока)"
+                  >
+                    <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>+ Внести доход</span>
                   </button>
                   <button
                     onClick={() => {
@@ -2696,11 +2738,14 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                               type="number"
                               min="3"
                               max="18"
-                              value={editChildAge}
+                              placeholder="0"
+                              value={editChildAge === 0 ? "" : editChildAge}
                               onChange={(e) => {
-                                const v = parseInt(e.target.value) || 0;
+                                const v = e.target.value === "" ? 0 : parseInt(e.target.value, 10) || 0;
                                 setEditChildAge(v);
-                                setEditChildYear(new Date().getFullYear() - v);
+                                if (v > 0) {
+                                  setEditChildYear(new Date().getFullYear() - v);
+                                }
                               }}
                               className="w-full p-2 bg-slate-50 rounded-lg outline-none focus:bg-white text-[11px] font-semibold text-slate-900 border"
                             />
@@ -2714,11 +2759,14 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                               type="number"
                               min="2000"
                               max={new Date().getFullYear()}
-                              value={editChildYear}
+                              placeholder="2018"
+                              value={editChildYear === 0 ? "" : editChildYear}
                               onChange={(e) => {
-                                const v = parseInt(e.target.value) || 2018;
+                                const v = e.target.value === "" ? 0 : parseInt(e.target.value, 10) || 0;
                                 setEditChildYear(v);
-                                setEditChildAge(new Date().getFullYear() - v);
+                                if (v >= 2000) {
+                                  setEditChildAge(new Date().getFullYear() - v);
+                                }
                               }}
                               className="w-full p-2 bg-slate-50 rounded-lg outline-none focus:bg-white text-[11px] font-semibold text-slate-800 border"
                             />
@@ -2874,10 +2922,11 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                             type="number"
                             min="0"
                             max="100"
-                            value={editAbonementSessions}
+                            placeholder="0"
+                            value={editAbonementSessions === 0 ? "" : editAbonementSessions}
                             onChange={(e) =>
                               setEditAbonementSessions(
-                                parseInt(e.target.value) || 0,
+                                e.target.value === "" ? 0 : parseInt(e.target.value, 10) || 0,
                               )
                             }
                             className="w-full p-2 bg-slate-50 rounded-lg outline-none focus:bg-white text-[11px] font-semibold text-slate-900 border"
@@ -3582,6 +3631,35 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                       </div>
                                     )}
 
+                                    <div className="grid grid-cols-2 gap-1.5 p-1 bg-white border border-slate-200 rounded-lg">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setManualPaymentUnlinked(false)
+                                        }
+                                        className={`py-1.5 px-2 rounded-md text-[10px] font-bold transition ${
+                                          !manualPaymentUnlinked
+                                            ? "bg-slate-900 text-white"
+                                            : "text-slate-600 hover:bg-slate-100"
+                                        }`}
+                                      >
+                                        Привязать к игроку
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setManualPaymentUnlinked(true)
+                                        }
+                                        className={`py-1.5 px-2 rounded-md text-[10px] font-bold transition ${
+                                          manualPaymentUnlinked
+                                            ? "bg-emerald-600 text-white"
+                                            : "text-slate-600 hover:bg-slate-100"
+                                        }`}
+                                      >
+                                        Без привязки к игроку
+                                      </button>
+                                    </div>
+
                                     <div className="grid grid-cols-2 gap-2">
                                       {/* Subscription option */}
                                       <div className="col-span-2">
@@ -3609,11 +3687,14 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                           <option value="1_session">
                                             Разовое занятие / Тренировка
                                           </option>
+                                          <option value="custom">
+                                            Произвольная сумма / Прочий доход
+                                          </option>
                                         </select>
                                       </div>
 
                                       {/* Date of Payment */}
-                                      <div>
+                                      <div className={manualPaymentUnlinked ? "col-span-2" : ""}>
                                         <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">
                                           Дата платежа
                                         </label>
@@ -3629,21 +3710,23 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                       </div>
 
                                       {/* Subscription Expiration */}
-                                      <div>
-                                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">
-                                          Срок действия до
-                                        </label>
-                                        <input
-                                          type="date"
-                                          value={manualPaymentExpires}
-                                          onChange={(e) =>
-                                            setManualPaymentExpires(
-                                              e.target.value,
-                                            )
-                                          }
-                                          className="w-full text-[11px] p-2 bg-white border border-slate-200 rounded-lg outline-none focus:border-red-500 transition font-mono"
-                                        />
-                                      </div>
+                                      {!manualPaymentUnlinked && (
+                                        <div>
+                                          <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">
+                                            Срок действия до
+                                          </label>
+                                          <input
+                                            type="date"
+                                            value={manualPaymentExpires}
+                                            onChange={(e) =>
+                                              setManualPaymentExpires(
+                                                e.target.value,
+                                              )
+                                            }
+                                            className="w-full text-[11px] p-2 bg-white border border-slate-200 rounded-lg outline-none focus:border-red-500 transition font-mono"
+                                          />
+                                        </div>
+                                      )}
 
                                       {/* Amount */}
                                       <div className="col-span-2">
@@ -3652,10 +3735,10 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                         </label>
                                         <input
                                           type="number"
-                                          value={manualPaymentAmount}
+                                          value={manualPaymentAmount === 0 ? "" : manualPaymentAmount}
                                           onChange={(e) =>
                                             setManualPaymentAmount(
-                                              Number(e.target.value),
+                                              e.target.value === "" ? 0 : Number(e.target.value),
                                             )
                                           }
                                           className="w-full text-[11px] p-2 bg-white border border-slate-200 rounded-lg outline-none focus:border-red-500 transition font-mono font-bold"
@@ -3670,18 +3753,14 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                           Счет зачисления
                                         </label>
                                         <select
-                                          value={manualPaymentAccountId}
+                                          value={manualPaymentAccountId || accounts[0]?.id || ""}
                                           onChange={(e) =>
                                             setManualPaymentAccountId(
                                               e.target.value,
                                             )
                                           }
                                           className="w-full text-[11px] p-2 bg-white border border-slate-200 rounded-lg outline-none focus:border-red-500 transition font-bold text-slate-700"
-                                          required
                                         >
-                                          <option value="" disabled>
-                                            -- Выберите счет --
-                                          </option>
                                           {accounts.map((acc) => (
                                             <option key={acc.id} value={acc.id}>
                                               {acc.name} (текущий баланс:{" "}
@@ -3693,6 +3772,23 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                           ))}
                                         </select>
                                       </div>
+                                      {/* Optional comment */}
+                                      <div className="col-span-2">
+                                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">
+                                          Комментарий / Основание (необязательно)
+                                        </label>
+                                        <input
+                                          type="text"
+                                          value={manualPaymentComment}
+                                          onChange={(e) =>
+                                            setManualPaymentComment(
+                                              e.target.value,
+                                            )
+                                          }
+                                          placeholder="Напр., разовая тренировка, наличные..."
+                                          className="w-full text-[11px] p-2 bg-white border border-slate-200 rounded-lg outline-none focus:border-red-500 transition"
+                                        />
+                                      </div>
                                     </div>
 
                                     <button
@@ -3703,7 +3799,11 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                       {manualPaymentLoading ? (
                                         <span>Сохранение...</span>
                                       ) : (
-                                        <span>Внести оплату вручную</span>
+                                        <span>
+                                          {manualPaymentUnlinked
+                                            ? "Внести доход без привязки к игроку"
+                                            : "Внести оплату вручную"}
+                                        </span>
                                       )}
                                     </button>
                                   </form>
@@ -4812,10 +4912,11 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                     type="number"
                     min="0"
                     max="100"
+                    placeholder="0"
                     className="w-full p-2.5 bg-slate-50 font-mono border rounded-xl focus:bg-white focus:ring-1 focus:ring-emerald-500 outline-none text-xs"
-                    value={editAbonementSessions}
+                    value={editAbonementSessions === 0 ? "" : editAbonementSessions}
                     onChange={(e) =>
-                      setEditAbonementSessions(parseInt(e.target.value) || 0)
+                      setEditAbonementSessions(e.target.value === "" ? 0 : parseInt(e.target.value, 10) || 0)
                     }
                   />
                 </div>
@@ -4928,9 +5029,9 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                     min="0"
                     placeholder="Например: 500"
                     className="w-full p-2.5 bg-slate-50 border rounded-xl focus:bg-white focus:ring-1 focus:ring-emerald-500 outline-none text-xs font-bold text-emerald-600"
-                    value={editManagerBonus}
+                    value={editManagerBonus === 0 ? "" : editManagerBonus}
                     onChange={(e) =>
-                      setEditManagerBonus(parseInt(e.target.value) || 0)
+                      setEditManagerBonus(e.target.value === "" ? 0 : parseInt(e.target.value, 10) || 0)
                     }
                   />
                 </div>

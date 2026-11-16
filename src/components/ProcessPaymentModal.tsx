@@ -2,17 +2,17 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   X,
-  CreditCard,
   CheckCircle,
   Copy,
   Check,
   Send,
   Users,
   DollarSign,
-  Calendar,
   Sparkles,
-  ArrowRight,
-  ShieldCheck,
+  UserX,
+  UserCheck,
+  FileText,
+  Plus,
 } from "lucide-react";
 import { useCRM } from "../context/CRMContext";
 import { Client } from "../types";
@@ -32,132 +32,232 @@ export const ProcessPaymentModal: React.FC<ProcessPaymentModalProps> = ({
 }) => {
   const {
     crmConfig,
+    clients,
     groups,
     accounts,
+    financeCategories,
     updateClient,
     addFinanceRecord,
-    schoolName,
   } = useCRM();
 
-  const [step, setStep] = useState<"form" | "invite_success">("form");
+  const [paymentMode, setPaymentMode] = useState<"client" | "unlinked">(
+    client ? "client" : "unlinked",
+  );
+  const [selectedClientId, setSelectedClientId] = useState<string>(
+    client?.id || "",
+  );
+  const [step, setStep] = useState<"form" | "invite_success" | "unlinked_success">("form");
   const [abonementType, setAbonementType] = useState<
-    "12_sessions" | "8_sessions" | "4_sessions" | "1_session"
+    "12_sessions" | "8_sessions" | "4_sessions" | "1_session" | "subrent" | "custom"
   >("8_sessions");
   const [amount, setAmount] = useState<number>(crmConfig.price8 || 4500);
   const [selectedGroup, setSelectedGroup] = useState<string>("");
   const [selectedAccount, setSelectedAccount] = useState<string>("acc_bank");
+  const [selectedCategory, setSelectedCategory] = useState<string>("Абонементы");
+  const [customDescription, setCustomDescription] = useState<string>("");
   const [paymentDate, setPaymentDate] = useState<string>(
     new Date().toISOString().split("T")[0],
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [generatedInviteUrl, setGeneratedInviteUrl] = useState("");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const incomeCategories = financeCategories.filter((c) => c.type === "income");
+
+  const activeClient =
+    paymentMode === "client"
+      ? clients.find((c) => c.id === selectedClientId) || client
+      : null;
 
   useEffect(() => {
-    if (client) {
-      setSelectedGroup(client.groupName || (groups[0]?.name || ""));
+    if (isOpen) {
+      setErrorMsg(null);
       setStep("form");
+      setCustomDescription("");
+      if (client) {
+        setPaymentMode("client");
+        setSelectedClientId(client.id);
+        setSelectedGroup(client.groupName || groups[0]?.name || "");
+      } else {
+        setPaymentMode("unlinked");
+        setSelectedClientId("");
+        setSelectedGroup("");
+      }
       setAbonementType("8_sessions");
       setAmount(crmConfig.price8 || 4500);
+      setSelectedCategory(incomeCategories[0]?.name || "Абонементы");
       if (accounts.length > 0) {
         setSelectedAccount(accounts[0].id);
       }
     }
-  }, [client, groups, accounts, crmConfig]);
+  }, [client, isOpen]);
 
   const handleAbonementChange = (
-    type: "12_sessions" | "8_sessions" | "4_sessions" | "1_session",
+    type:
+      | "12_sessions"
+      | "8_sessions"
+      | "4_sessions"
+      | "1_session"
+      | "subrent"
+      | "custom",
   ) => {
     setAbonementType(type);
-    if (type === "12_sessions") setAmount(crmConfig.price12 || 6000);
-    else if (type === "8_sessions") setAmount(crmConfig.price8 || 4500);
-    else if (type === "4_sessions") setAmount(crmConfig.price4 || 2500);
-    else if (type === "1_session") setAmount(crmConfig.price1 || 700);
+    if (type === "12_sessions") {
+      setAmount(crmConfig.price12 || 6000);
+      setSelectedCategory("Абонементы");
+    } else if (type === "8_sessions") {
+      setAmount(crmConfig.price8 || 4500);
+      setSelectedCategory("Абонементы");
+    } else if (type === "4_sessions") {
+      setAmount(crmConfig.price4 || 2500);
+      setSelectedCategory("Абонементы");
+    } else if (type === "1_session") {
+      setAmount(crmConfig.price1 || 700);
+      setSelectedCategory("Разовые тренировки");
+    } else if (type === "subrent") {
+      setPaymentMode("unlinked");
+      setAmount(0);
+      const subrentCat = incomeCategories.find(
+        (c) =>
+          c.id === "cat_in_subrent" ||
+          c.name.toLowerCase().includes("сдача площад") ||
+          c.name.toLowerCase().includes("аренд"),
+      );
+      setSelectedCategory(subrentCat?.name || "Сдача площадок в аренду");
+    }
   };
 
-  if (!isOpen || !client) return null;
+  if (!isOpen) return null;
 
   const sessionsCount =
     abonementType === "12_sessions"
       ? 12
       : abonementType === "8_sessions"
-      ? 8
-      : abonementType === "4_sessions"
-      ? 4
-      : 1;
+        ? 8
+        : abonementType === "4_sessions"
+          ? 4
+          : 1;
 
   const itemLabel =
     abonementType === "12_sessions"
       ? "Абонемент на 12 занятий"
       : abonementType === "8_sessions"
-      ? "Абонемент на 8 занятий"
-      : abonementType === "4_sessions"
-      ? "Абонемент на 4 занятия"
-      : "Разовая тренировка";
+        ? "Абонемент на 8 занятий"
+        : abonementType === "4_sessions"
+          ? "Абонемент на 4 занятия"
+          : abonementType === "1_session"
+            ? "Разовая тренировка"
+            : abonementType === "subrent"
+              ? "Сдача площадки в аренду"
+              : selectedCategory || "Ручное поступление";
 
   const handleProcessPayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!client) return;
+    setErrorMsg(null);
+
+    if (!amount || Number(amount) <= 0) {
+      setErrorMsg("Укажите сумму больше 0 ₽");
+      return;
+    }
+
+    if (paymentMode === "client" && !activeClient) {
+      setErrorMsg("Выберите игрока или переключитесь в режим «Без привязки к игроку»");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      const targetGroup = groups.find((g) => g.name === selectedGroup);
-      const updatedSessionsLeft =
-        (client.abonementSessionsLeft || 0) + sessionsCount;
+      if (paymentMode === "unlinked" || !activeClient) {
+        const categoryName =
+          selectedCategory ||
+          (abonementType === "1_session" ? "Разовые тренировки" : "Абонементы");
+        const descText =
+          customDescription.trim() ||
+          `${itemLabel} (без привязки к игроку${selectedGroup ? `, Группа: ${selectedGroup}` : ""})`;
 
-      // 1. New payment record in client profile
-      const newPayment = {
-        id: `p_${Date.now()}`,
-        date: paymentDate,
-        amount: Number(amount),
-        item: itemLabel,
-        status: "Оплачено" as const,
-      };
-      const updatedPayments = [newPayment, ...(client.payments || [])];
+        await addFinanceRecord({
+          type: "income",
+          category: categoryName,
+          amount: Number(amount),
+          date: paymentDate,
+          targetMonth: paymentDate.substring(0, 7),
+          description: descText,
+          accountId: selectedAccount || "acc_bank",
+          groupName: selectedGroup || undefined,
+          isFixed: false,
+        });
 
-      // 2. Expiration date (1 month from date)
-      const exp = new Date(paymentDate);
-      exp.setMonth(exp.getMonth() + 1);
-      const expDateStr = exp.toISOString().split("T")[0];
+        setStep("unlinked_success");
+        if (onSuccess) onSuccess();
+      } else {
+        const targetGroup = groups.find((g) => g.name === selectedGroup);
+        const updatedSessionsLeft =
+          (activeClient.abonementSessionsLeft || 0) +
+          (abonementType === "custom" || abonementType === "subrent"
+            ? 0
+            : sessionsCount);
 
-      // 3. Update Client status and group
-      await updateClient(client.id, {
-        abonement: abonementType,
-        abonementStatus: "Оплачено",
-        status: "active",
-        abonementTotalSessions: updatedSessionsLeft,
-        abonementSessionsLeft: updatedSessionsLeft,
-        abonementExpirationDate: expDateStr,
-        groupName: selectedGroup || client.groupName || null,
-        coachId: targetGroup?.coachId || client.coachId || null,
-        coachName: targetGroup?.coachName || client.coachName || null,
-        payments: updatedPayments,
-      });
+        const newPayment = {
+          id: `p_${Date.now()}`,
+          date: paymentDate,
+          amount: Number(amount),
+          item: customDescription.trim() || itemLabel,
+          status: "Оплачено" as const,
+        };
+        const updatedPayments = [newPayment, ...(activeClient.payments || [])];
 
-      // 4. Automatic Financial Accounting record
-      const categoryName =
-        abonementType === "1_session" ? "Разовые тренировки" : "Абонементы";
-      await addFinanceRecord({
-        type: "income",
-        category: categoryName,
-        amount: Number(amount),
-        date: paymentDate,
-        description: `Оплата ${itemLabel} (${client.childSurname} ${client.childName}, Группа: ${selectedGroup || "Не указана"})`,
-        accountId: selectedAccount || "acc_bank",
-        groupName: selectedGroup || undefined,
-        isFixed: false,
-      });
+        const exp = new Date(paymentDate);
+        exp.setMonth(exp.getMonth() + 1);
+        const expDateStr = exp.toISOString().split("T")[0];
 
-      // 5. Generate parent invite link
-      const inviteUrl = `${window.location.origin}/register?phone=${encodeURIComponent(client.parentPhone || "")}&parent=${encodeURIComponent(client.parentName || "")}&child=${encodeURIComponent(client.childName || "")}`;
-      setGeneratedInviteUrl(inviteUrl);
+        const clientUpdates: Record<string, any> = {
+          payments: updatedPayments,
+          groupName: selectedGroup || activeClient.groupName || null,
+          coachId: targetGroup?.coachId || activeClient.coachId || null,
+          coachName: targetGroup?.coachName || activeClient.coachName || null,
+        };
 
-      // Move to invite link prompt step
-      setStep("invite_success");
-      if (onSuccess) onSuccess();
+        if (abonementType !== "custom" && abonementType !== "subrent") {
+          clientUpdates.abonement = abonementType;
+          clientUpdates.abonementStatus = "Оплачено";
+          clientUpdates.status = "active";
+          clientUpdates.abonementTotalSessions = updatedSessionsLeft;
+          clientUpdates.abonementSessionsLeft = updatedSessionsLeft;
+          clientUpdates.abonementExpirationDate = expDateStr;
+        }
+
+        await updateClient(activeClient.id, clientUpdates);
+
+        const categoryName =
+          selectedCategory ||
+          (abonementType === "1_session" ? "Разовые тренировки" : "Абонементы");
+        await addFinanceRecord({
+          type: "income",
+          category: categoryName,
+          amount: Number(amount),
+          date: paymentDate,
+          targetMonth: paymentDate.substring(0, 7),
+          description:
+            customDescription.trim() ||
+            `Оплата ${itemLabel} (${activeClient.childSurname} ${activeClient.childName}, Группа: ${selectedGroup || "Не указана"})`,
+          accountId: selectedAccount || "acc_bank",
+          groupName: selectedGroup || undefined,
+          clientId: activeClient.id,
+          clientName: `${activeClient.childSurname} ${activeClient.childName}`.trim(),
+          isFixed: false,
+        });
+
+        const inviteUrl = `${window.location.origin}/register?phone=${encodeURIComponent(activeClient.parentPhone || "")}&parent=${encodeURIComponent(activeClient.parentName || "")}&child=${encodeURIComponent(activeClient.childName || "")}`;
+        setGeneratedInviteUrl(inviteUrl);
+
+        setStep("invite_success");
+        if (onSuccess) onSuccess();
+      }
     } catch (err) {
       console.error("Failed to process payment:", err);
-      alert("Произошла ошибка при проведении оплаты.");
+      setErrorMsg("Произошла ошибка при проведении оплаты.");
     } finally {
       setIsSubmitting(false);
     }
@@ -173,10 +273,13 @@ export const ProcessPaymentModal: React.FC<ProcessPaymentModalProps> = ({
       .catch((err) => console.error("Failed to copy:", err));
   };
 
-  const shareText = `Здравствуйте, ${client.parentName}! Оплата занятий для ${client.childName} успешно подтверждена. Пожалуйста, перейдите по персональной ссылке для создания личного кабинета и доступа к расписанию: ${generatedInviteUrl}`;
+  const shareText = activeClient
+    ? `Здравствуйте, ${activeClient.parentName}! Оплата занятий для ${activeClient.childName} успешно подтверждена. Пожалуйста, перейдите по персональной ссылке для создания личного кабинета и доступа к расписанию: ${generatedInviteUrl}`
+    : "";
 
   const handleShareWhatsApp = () => {
-    const cleanPhone = (client.parentPhone || "").replace(/\D/g, "");
+    if (!activeClient) return;
+    const cleanPhone = (activeClient.parentPhone || "").replace(/\D/g, "");
     window.open(
       `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(shareText)}`,
       "_blank",
@@ -200,24 +303,37 @@ export const ProcessPaymentModal: React.FC<ProcessPaymentModalProps> = ({
           className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden border border-slate-100 my-8"
         >
           {step === "form" ? (
-            /* FORM STEP */
-            <form onSubmit={handleProcessPayment} className="p-6 space-y-5">
+            <form onSubmit={handleProcessPayment} className="p-6 space-y-4">
               <div className="flex justify-between items-start border-b border-slate-100 pb-4">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full">
-                      Прием оплаты
+                      Прием дохода / оплаты
                     </span>
-                    <span className="bg-rose-100 text-rose-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                      Текущий статус: {client.abonementStatus || "Не оплачено"}
-                    </span>
+                    {paymentMode === "client" && activeClient && (
+                      <span className="bg-rose-100 text-rose-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                        Статус: {activeClient.abonementStatus || "Не оплачено"}
+                      </span>
+                    )}
                   </div>
                   <h2 className="text-xl font-extrabold text-slate-900 mt-1">
-                    Оформить абонемент & зачислить
+                    {paymentMode === "unlinked"
+                      ? "Внести доход без привязки к игроку"
+                      : "Оформить абонемент и зачислить доход"}
                   </h2>
-                  <p className="text-xs text-slate-500 font-medium mt-0.5">
-                    Ученик: <strong className="text-slate-800">{client.childSurname} {client.childName}</strong> (Родитель: {client.parentName})
-                  </p>
+                  {paymentMode === "client" && activeClient ? (
+                    <p className="text-xs text-slate-500 font-medium mt-0.5">
+                      Ученик:{" "}
+                      <strong className="text-slate-800">
+                        {activeClient.childSurname} {activeClient.childName}
+                      </strong>{" "}
+                      (Родитель: {activeClient.parentName})
+                    </p>
+                  ) : (
+                    <p className="text-xs text-slate-500 font-medium mt-0.5">
+                      Прямое зачисление в кассу / на расчетный счет (БДДС и P&L)
+                    </p>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -228,12 +344,75 @@ export const ProcessPaymentModal: React.FC<ProcessPaymentModalProps> = ({
                 </button>
               </div>
 
-              {/* Select Abonement Type */}
+              {/* Mode Switcher: With Player vs Without Player */}
+              <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-2xl">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMode("unlinked")}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+                    paymentMode === "unlinked"
+                      ? "bg-white text-emerald-700 shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <UserX className="w-3.5 h-3.5" />
+                  <span>Без привязки к игроку</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentMode("client");
+                    if (!selectedClientId && (client?.id || clients[0]?.id)) {
+                      setSelectedClientId(client?.id || clients[0]?.id || "");
+                    }
+                  }}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+                    paymentMode === "client"
+                      ? "bg-white text-slate-900 shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <UserCheck className="w-3.5 h-3.5" />
+                  <span>Привязать к игроку</span>
+                </button>
+              </div>
+
+              {/* Client Selector if in 'client' mode and not fixed or changeable */}
+              {paymentMode === "client" && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Выберите игрока (клиента)
+                  </label>
+                  <select
+                    value={selectedClientId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      setSelectedClientId(id);
+                      const found = clients.find((c) => c.id === id);
+                      if (found?.groupName) {
+                        setSelectedGroup(found.groupName);
+                      }
+                    }}
+                    className="w-full text-xs font-bold p-2.5 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 bg-white"
+                  >
+                    <option value="">-- Выберите игрока --</option>
+                    {clients
+                      .filter((c) => c.status !== "inactive")
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.childSurname} {c.childName} ({c.groupName || "Без группы"} — {c.parentName})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Select Abonement / Preset Type */}
               <div className="space-y-2">
                 <label className="block text-xs font-bold text-slate-700">
-                  Выберите вид абонемента / разовой оплаты:
+                  Быстрый выбор тарифа или статьи дохода:
                 </label>
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {[
                     {
                       id: "12_sessions",
@@ -257,27 +436,40 @@ export const ProcessPaymentModal: React.FC<ProcessPaymentModalProps> = ({
                       title: "1 разовая",
                       price: crmConfig.price1 || 700,
                     },
+                    {
+                      id: "subrent",
+                      title: "Сдача площадки",
+                      price: null,
+                      badge: "Аренда",
+                    },
+                    {
+                      id: "custom",
+                      title: "Своя сумма",
+                      price: null,
+                    },
                   ].map((item) => (
                     <button
                       key={item.id}
                       type="button"
                       onClick={() => handleAbonementChange(item.id as any)}
-                      className={`p-3 rounded-2xl border text-left transition-all relative flex flex-col justify-between ${
+                      className={`p-2.5 rounded-2xl border text-left transition-all relative flex flex-col justify-between ${
                         abonementType === item.id
                           ? "border-emerald-500 bg-emerald-50/50 shadow-xs ring-2 ring-emerald-500/20"
                           : "border-slate-200 hover:border-slate-300 bg-slate-50/50"
                       }`}
                     >
                       {item.badge && (
-                        <span className="absolute top-2 right-2 text-[9px] font-black bg-emerald-600 text-white px-1.5 py-0.5 rounded-md">
+                        <span className="absolute top-2 right-2 text-[8px] font-black bg-emerald-600 text-white px-1.5 py-0.5 rounded-md">
                           {item.badge}
                         </span>
                       )}
                       <div className="font-extrabold text-xs text-slate-900">
                         {item.title}
                       </div>
-                      <div className="text-sm font-black text-emerald-700 mt-1">
-                        {item.price.toLocaleString("ru-RU")} ₽
+                      <div className="text-xs font-black text-emerald-700 mt-1">
+                        {item.price !== null
+                          ? `${item.price.toLocaleString("ru-RU")} ₽`
+                          : "Любая ₽"}
                       </div>
                     </button>
                   ))}
@@ -288,15 +480,20 @@ export const ProcessPaymentModal: React.FC<ProcessPaymentModalProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Сумма к оплате (₽)
+                    Сумма дохода (₽)
                   </label>
                   <div className="relative">
                     <input
                       type="number"
                       min={0}
-                      value={amount}
-                      onChange={(e) => setAmount(Number(e.target.value))}
-                      className="w-full text-xs font-bold p-2.5 border rounded-xl outline-none focus:border-emerald-500 bg-white"
+                      placeholder="0"
+                      value={amount === 0 ? "" : amount}
+                      onChange={(e) =>
+                        setAmount(
+                          e.target.value === "" ? 0 : Number(e.target.value),
+                        )
+                      }
+                      className="w-full text-xs font-bold p-2.5 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 bg-white"
                       required
                     />
                     <DollarSign className="w-3.5 h-3.5 absolute right-3 top-3 text-slate-400 pointer-events-none" />
@@ -304,71 +501,125 @@ export const ProcessPaymentModal: React.FC<ProcessPaymentModalProps> = ({
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Дата платежа
+                    Дата поступления
                   </label>
                   <div className="relative">
                     <input
                       type="date"
                       value={paymentDate}
                       onChange={(e) => setPaymentDate(e.target.value)}
-                      className="w-full text-xs font-bold p-2.5 border rounded-xl outline-none focus:border-emerald-500 bg-white"
+                      className="w-full text-xs font-bold p-2.5 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 bg-white"
                       required
                     />
                   </div>
                 </div>
               </div>
 
-              {/* Group Assignment */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
-                  <span>Включить в группу</span>
-                  <span className="text-[10px] text-slate-400 font-normal">
-                    (Автоматическое зачисление)
-                  </span>
-                </label>
-                <div className="relative">
+              {/* Category & Group */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Статья дохода (БДДС)
+                  </label>
                   <select
-                    value={selectedGroup}
-                    onChange={(e) => setSelectedGroup(e.target.value)}
-                    className="w-full text-xs font-bold p-2.5 border rounded-xl outline-none focus:border-emerald-500 bg-white"
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="w-full text-xs font-bold p-2.5 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 bg-white"
                   >
-                    <option value="">-- Без группы --</option>
-                    {groups.map((g) => (
-                      <option key={g.id} value={g.name}>
-                        {g.name} (Тренер: {g.coachName})
+                    {incomeCategories.map((c) => (
+                      <option key={c.id} value={c.name}>
+                        {c.name}
                       </option>
                     ))}
+                    {incomeCategories.length === 0 && (
+                      <>
+                        <option value="Абонементы">Абонементы</option>
+                        <option value="Разовые тренировки">Разовые тренировки</option>
+                        <option value="Прочие доходы">Прочие доходы</option>
+                      </>
+                    )}
                   </select>
-                  <Users className="w-4 h-4 absolute right-3 top-2.5 text-slate-400 pointer-events-none" />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Группа (необязательно)
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={selectedGroup}
+                      onChange={(e) => setSelectedGroup(e.target.value)}
+                      className="w-full text-xs font-bold p-2.5 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 bg-white"
+                    >
+                      <option value="">-- Без группы --</option>
+                      {groups.map((g) => (
+                        <option key={g.id} value={g.name}>
+                          {g.name} ({g.coachName})
+                        </option>
+                      ))}
+                    </select>
+                    <Users className="w-3.5 h-3.5 absolute right-3 top-3 text-slate-400 pointer-events-none" />
+                  </div>
                 </div>
               </div>
 
-              {/* Payment Account */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Касса / Расчетный счет (Финансовый учет)
-                </label>
-                <select
-                  value={selectedAccount}
-                  onChange={(e) => setSelectedAccount(e.target.value)}
-                  className="w-full text-xs font-semibold p-2.5 border rounded-xl outline-none focus:border-emerald-500 bg-white"
-                >
-                  {accounts.map((acc) => (
-                    <option key={acc.id} value={acc.id}>
-                      {acc.name} ({acc.type === "bank" ? "Р/С Банк" : acc.type === "cash" ? "Касса" : "Эквайринг"})
-                    </option>
-                  ))}
-                  {accounts.length === 0 && (
-                    <option value="acc_bank">Расчетный счет (Банк)</option>
-                  )}
-                </select>
-                <p className="text-[10px] text-emerald-600 font-medium mt-1">
-                  ✓ Платёж будет автоматически учтен в отчете доходов клуба.
-                </p>
+              {/* Payment Account & Description */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Касса / Расчетный счет
+                  </label>
+                  <select
+                    value={selectedAccount}
+                    onChange={(e) => setSelectedAccount(e.target.value)}
+                    className="w-full text-xs font-semibold p-2.5 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 bg-white"
+                  >
+                    {accounts.map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.name} (
+                        {acc.type === "bank"
+                          ? "Р/С Банк"
+                          : acc.type === "cash"
+                            ? "Касса"
+                            : "Эквайринг"}
+                        )
+                      </option>
+                    ))}
+                    {accounts.length === 0 && (
+                      <option value="acc_bank">Расчетный счет (Банк)</option>
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Основание / Комментарий
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={customDescription}
+                      onChange={(e) => setCustomDescription(e.target.value)}
+                      placeholder={
+                        paymentMode === "unlinked"
+                          ? "Напр., разовая оплата, форма, турнир..."
+                          : "Комментарий к оплате..."
+                      }
+                      className="w-full text-xs font-medium p-2.5 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 bg-white"
+                    />
+                    <FileText className="w-3.5 h-3.5 absolute right-3 top-3 text-slate-400 pointer-events-none" />
+                  </div>
+                </div>
               </div>
 
+              {errorMsg && (
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
+                  {errorMsg}
+                </div>
+              )}
+
               {/* Submit Button */}
-              <div className="pt-3 border-t flex justify-end gap-3">
+              <div className="pt-3 border-t border-slate-100 flex justify-end gap-3">
                 <button
                   type="button"
                   onClick={onClose}
@@ -386,12 +637,55 @@ export const ProcessPaymentModal: React.FC<ProcessPaymentModalProps> = ({
                   ) : (
                     <>
                       <CheckCircle className="w-4 h-4" />
-                      <span>Провести оплату и зачислить</span>
+                      <span>
+                        {paymentMode === "unlinked"
+                          ? "Зачислить доход без привязки"
+                          : "Провести оплату и зачислить"}
+                      </span>
                     </>
                   )}
                 </button>
               </div>
             </form>
+          ) : step === "unlinked_success" ? (
+            <div className="p-6 text-center space-y-5 animate-scale-in">
+              <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-3xl mx-auto flex items-center justify-center shadow-inner">
+                <CheckCircle className="w-8 h-8" />
+              </div>
+
+              <div>
+                <span className="bg-emerald-100 text-emerald-800 font-extrabold text-[10px] uppercase px-3 py-1 rounded-full">
+                  ✓ Доход успешно зачислен
+                </span>
+                <h3 className="text-xl font-extrabold text-slate-900 mt-2">
+                  +{Number(amount).toLocaleString("ru-RU")} ₽ проведено в учет
+                </h3>
+                <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                  Поступление по статье <strong>«{selectedCategory}»</strong> без привязки к конкретному игроку успешно добавлено в БДДС и отчет P&L.
+                </p>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStep("form");
+                    setCustomDescription("");
+                  }}
+                  className="flex-1 py-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-2xl text-xs transition flex items-center justify-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Внести ещё доход</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex-1 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-2xl text-xs transition shadow-md"
+                >
+                  Готово
+                </button>
+              </div>
+            </div>
           ) : (
             /* AUTOMATIC INVITE PROMPT STEP */
             <div className="p-6 text-center space-y-5 animate-scale-in">
@@ -407,14 +701,16 @@ export const ProcessPaymentModal: React.FC<ProcessPaymentModalProps> = ({
                   Отправить ссылку родителю
                 </h3>
                 <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                  Платёж зачислен, статус клиента изменен на <strong>"Оплачено"</strong>, финансовая операция зафиксирована. Отправьте родителю ссылку для входа в персональную страницу.
+                  Платёж зачислен, статус клиента изменен на{" "}
+                  <strong>"Оплачено"</strong>, финансовая операция зафиксирована.
+                  Отправьте родителю ссылку для входа в персональную страницу.
                 </p>
               </div>
 
               {/* Invite Link Card */}
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left space-y-2">
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  Персональная ссылка для {client.parentName}
+                  Персональная ссылка для {activeClient?.parentName}
                 </div>
                 <div className="flex items-center gap-2 bg-white p-2.5 rounded-xl border border-slate-200">
                   <input
@@ -428,7 +724,11 @@ export const ProcessPaymentModal: React.FC<ProcessPaymentModalProps> = ({
                     onClick={handleCopyLink}
                     className="p-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-600 text-slate-600 rounded-lg transition shrink-0 font-bold text-xs flex items-center gap-1"
                   >
-                    {copiedLink ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                    {copiedLink ? (
+                      <Check className="w-4 h-4 text-emerald-600" />
+                    ) : (
+                      <Copy className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
               </div>

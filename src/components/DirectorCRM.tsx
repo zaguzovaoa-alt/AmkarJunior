@@ -2968,8 +2968,9 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
                       {isEditingGoals ? (
                         <input
                           type="number"
-                          value={tempChildrenGoal}
-                          onChange={(e) => setTempChildrenGoal(Number(e.target.value))}
+                          placeholder="0"
+                          value={tempChildrenGoal === 0 ? "" : tempChildrenGoal}
+                          onChange={(e) => setTempChildrenGoal(e.target.value === "" ? 0 : Number(e.target.value))}
                           className="w-20 border rounded px-2 py-0.5 text-xs text-right font-mono"
                         />
                       ) : (
@@ -3020,8 +3021,9 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
                               {isEditingGoals ? (
                                 <input
                                   type="number"
-                                  value={tempRevenueGoal}
-                                  onChange={(e) => setTempRevenueGoal(Number(e.target.value))}
+                                  placeholder="0"
+                                  value={tempRevenueGoal === 0 ? "" : tempRevenueGoal}
+                                  onChange={(e) => setTempRevenueGoal(e.target.value === "" ? 0 : Number(e.target.value))}
                                   className="w-28 border rounded px-2 py-0.5 text-xs text-right font-mono"
                                 />
                               ) : (

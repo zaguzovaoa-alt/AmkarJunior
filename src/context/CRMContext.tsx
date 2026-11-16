@@ -241,7 +241,13 @@ interface CRMContextType {
   deleteClient: (id: string) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   deleteFinanceRecord: (id: string) => Promise<void>;
-  addFinanceCategory: (category: Omit<FinanceCategory, "id">) => Promise<void>;
+  addFinanceCategory: (
+    category: Omit<FinanceCategory, "id"> & { id?: string },
+  ) => Promise<void>;
+  updateFinanceCategory: (
+    id: string,
+    updates: Partial<Omit<FinanceCategory, "id">>,
+  ) => Promise<void>;
   deleteFinanceCategory: (id: string) => Promise<void>;
   updateFinancialPlan: (plan: FinancialPlan) => Promise<void>;
   addFinanceRecord: (record: Omit<FinanceRecord, "id">) => Promise<void>;
@@ -397,6 +403,12 @@ const INITIAL_FINANCE_CATEGORIES: FinanceCategory[] = [
   { id: "cat_in_ind", type: "income", name: "Индивидуальные тренировки" },
   { id: "cat_in_eq", type: "income", name: "Форма/Экипировка" },
   {
+    id: "cat_in_subrent",
+    type: "income",
+    name: "Сдача площадок в аренду",
+    isSystem: true,
+  },
+  {
     id: "cat_ex_acq",
     type: "expense",
     name: "Эквайринг (Комиссия ЮKassa)",
@@ -487,7 +499,39 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   const [financeCategories, setFinanceCategories] = useState<FinanceCategory[]>(
     () => {
       const cached = localStorage.getItem("amkar_finance_categories");
-      return cached ? JSON.parse(cached) : INITIAL_FINANCE_CATEGORIES;
+      if (cached) {
+        try {
+          const parsed: FinanceCategory[] = JSON.parse(cached);
+          const seeded = localStorage.getItem("amkar_subrent_cat_seeded_v1");
+          if (
+            !seeded &&
+            Array.isArray(parsed) &&
+            !parsed.some(
+              (c) =>
+                c.id === "cat_in_subrent" ||
+                c.name.toLowerCase().includes("сдача площадок"),
+            )
+          ) {
+            const updated = [
+              ...parsed,
+              {
+                id: "cat_in_subrent",
+                type: "income" as const,
+                name: "Сдача площадок в аренду",
+                isSystem: true,
+              },
+            ];
+            localStorage.setItem(
+              "amkar_finance_categories",
+              JSON.stringify(updated),
+            );
+            localStorage.setItem("amkar_subrent_cat_seeded_v1", "true");
+            return updated;
+          }
+          return parsed;
+        } catch {}
+      }
+      return INITIAL_FINANCE_CATEGORIES;
     },
   );
   const [financialPlans, setFinancialPlans] = useState<FinancialPlan[]>(() => {
@@ -1355,6 +1399,75 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       },
     );
 
+    const unsubFinanceCategories = onSnapshot(
+      doc(db, "_config", "finance_categories"),
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          if (Array.isArray(data?.items)) {
+            let items = data.items as FinanceCategory[];
+            const seeded = localStorage.getItem("amkar_subrent_cat_seeded_v1");
+            if (
+              !seeded &&
+              !items.some(
+                (c) =>
+                  c.id === "cat_in_subrent" ||
+                  c.name.toLowerCase().includes("сдача площадок"),
+              )
+            ) {
+              items = [
+                ...items,
+                {
+                  id: "cat_in_subrent",
+                  type: "income",
+                  name: "Сдача площадок в аренду",
+                  isSystem: true,
+                },
+              ];
+              localStorage.setItem("amkar_subrent_cat_seeded_v1", "true");
+              setDoc(
+                doc(db, "_config", "finance_categories"),
+                {
+                  items: items.map((item) => removeUndefined(item)),
+                  updatedAt: new Date().toISOString(),
+                },
+                { merge: true },
+              ).catch(() => {});
+            } else {
+              localStorage.setItem("amkar_subrent_cat_seeded_v1", "true");
+            }
+            setFinanceCategories(items);
+            try {
+              localStorage.setItem(
+                "amkar_finance_categories",
+                JSON.stringify(items),
+              );
+            } catch {}
+          }
+        } else {
+          let initialItems = INITIAL_FINANCE_CATEGORIES;
+          try {
+            const cached = localStorage.getItem("amkar_finance_categories");
+            if (cached) {
+              const parsed = JSON.parse(cached);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                initialItems = parsed;
+              }
+            }
+          } catch {}
+          setDoc(
+            doc(db, "_config", "finance_categories"),
+            {
+              items: initialItems.map((item) => removeUndefined(item)),
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true },
+          ).catch(() => {});
+        }
+      },
+      (err) => console.warn("Finance categories listener notice:", err),
+    );
+
     return () => {
       unsubConfig();
       unsubLeads();
@@ -1373,6 +1486,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       unsubCancelledSessions();
       unsubVideoLessonsCatalog();
       unsubVideoLessonsCol();
+      unsubFinanceCategories();
     };
   }, [firebaseReady]);
 
@@ -2972,11 +3086,91 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     }, 1500);
   };
 
-  const addFinanceCategory = async (category: Omit<FinanceCategory, "id">) => {
-    const id = `cat_${Date.now()}`;
-    const newCategory = { ...category, id };
-    setFinanceCategories((prev) => [...prev, newCategory]);
-    // Would save to Firestore if needed
+  const syncFinanceCategoriesToFirestore = async (
+    items: FinanceCategory[],
+  ) => {
+    try {
+      localStorage.setItem("amkar_finance_categories", JSON.stringify(items));
+    } catch {}
+    try {
+      await setDoc(
+        doc(db, "_config", "finance_categories"),
+        {
+          items: items.map((item) => removeUndefined(item)),
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true },
+      );
+    } catch (e) {
+      console.warn("Failed to sync finance categories to Firestore:", e);
+    }
+  };
+
+  const addFinanceCategory = async (
+    category: Omit<FinanceCategory, "id"> & { id?: string },
+  ) => {
+    const id = category.id || `cat_${Date.now()}`;
+    const newCategory: FinanceCategory = { ...category, id };
+    const next = [...financeCategories.filter((c) => c.id !== id), newCategory];
+    setFinanceCategories(next);
+    await syncFinanceCategoriesToFirestore(next);
+  };
+
+  const updateFinanceCategory = async (
+    id: string,
+    updates: Partial<Omit<FinanceCategory, "id">>,
+  ) => {
+    const oldCat = financeCategories.find((c) => c.id === id);
+    const next = financeCategories.map((c) =>
+      c.id === id ? { ...c, ...updates } : c,
+    );
+    setFinanceCategories(next);
+    await syncFinanceCategoriesToFirestore(next);
+
+    if (oldCat) {
+      const nameChanged =
+        updates.name !== undefined && updates.name.trim() !== oldCat.name;
+      const typeChanged =
+        updates.type !== undefined && updates.type !== oldCat.type;
+      const expenseTypeChanged =
+        updates.expenseType !== undefined &&
+        updates.expenseType !== oldCat.expenseType;
+
+      if (nameChanged || typeChanged || expenseTypeChanged) {
+        const affectedRecords = finances.filter(
+          (f) => f.category === oldCat.name && f.type === oldCat.type,
+        );
+        if (affectedRecords.length > 0) {
+          const newCatName = updates.name ? updates.name.trim() : oldCat.name;
+          const newCatType = updates.type || oldCat.type;
+          const newIsFixed =
+            newCatType === "expense"
+              ? (updates.expenseType ?? oldCat.expenseType) === "fixed"
+              : false;
+
+          setFinances((prev) =>
+            prev.map((f) =>
+              f.category === oldCat.name && f.type === oldCat.type
+                ? {
+                    ...f,
+                    category: newCatName,
+                    type: newCatType,
+                    isFixed: newIsFixed,
+                  }
+                : f,
+            ),
+          );
+
+          for (const rec of affectedRecords) {
+            updateDoc(doc(db, "finances", rec.id), {
+              category: newCatName,
+              type: newCatType,
+              isFixed: newIsFixed,
+            }).catch(() => {});
+          }
+        }
+      }
+    }
   };
 
   useEffect(() => {
@@ -3184,7 +3378,9 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const deleteFinanceCategory = async (id: string) => {
-    setFinanceCategories((prev) => prev.filter((c) => c.id !== id));
+    const next = financeCategories.filter((c) => c.id !== id);
+    setFinanceCategories(next);
+    await syncFinanceCategoriesToFirestore(next);
   };
 
   const addAccount = async (acc: Omit<Account, "id">) => {
@@ -4512,6 +4708,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         deleteTask,
         deleteFinanceRecord,
         addFinanceCategory,
+        updateFinanceCategory,
         deleteFinanceCategory,
         addFinanceRecord,
         updateFinancialPlan,

@@ -350,6 +350,8 @@ export interface FinanceRecord {
   counterpartyId?: string; // New: link to counterparty
   paymentStatus?: 'accrued' | 'paid' | 'pending'; // 'accrued' = Начислено (долг), 'paid' = Выплачено/Списано
   coachId?: string;
+  clientId?: string;
+  clientName?: string;
 }
 
 export interface FinanceCategory {

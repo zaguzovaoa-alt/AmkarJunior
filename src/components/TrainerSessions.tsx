@@ -1244,7 +1244,8 @@ export const TrainerSessions: React.FC = () => {
                           <input
                             type="number"
                             min={0}
-                            value={editForm.presentPaidCount ?? 0}
+                            placeholder="0"
+                            value={editForm.presentPaidCount ? editForm.presentPaidCount : ""}
                             onChange={(e) => {
                               const val = Math.max(0, parseInt(e.target.value, 10) || 0);
                               const unpaid = Math.max(0, Number(editForm.presentUnpaidCount) || 0);
@@ -1300,7 +1301,8 @@ export const TrainerSessions: React.FC = () => {
                           <input
                             type="number"
                             min={0}
-                            value={editForm.presentUnpaidCount ?? 0}
+                            placeholder="0"
+                            value={editForm.presentUnpaidCount ? editForm.presentUnpaidCount : ""}
                             onChange={(e) => {
                               const val = Math.max(0, parseInt(e.target.value, 10) || 0);
                               const paid = Math.max(0, Number(editForm.presentPaidCount) || 0);

@@ -190,7 +190,7 @@ export const AdminStore: React.FC = () => {
                     min="0"
                     placeholder="0"
                     className="w-full p-2.5 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500" 
-                    value={newProduct.price ?? ''} 
+                    value={newProduct.price ? newProduct.price : ''} 
                     onChange={e => setNewProduct({...newProduct, price: e.target.value === '' ? 0 : Number(e.target.value)})} 
                   />
                 </div>
@@ -295,8 +295,9 @@ export const AdminStore: React.FC = () => {
                   <input 
                     type="number" 
                     min="0"
+                    placeholder="0"
                     className="w-full p-2.5 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500" 
-                    value={editingProduct.price ?? ''} 
+                    value={editingProduct.price ? editingProduct.price : ''} 
                     onChange={e => setEditingProduct({...editingProduct, price: e.target.value === '' ? 0 : Number(e.target.value)})} 
                   />
                 </div>

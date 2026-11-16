@@ -958,12 +958,18 @@ export const GroupsModule: React.FC = () => {
                       min="2008"
                       max="2028"
                       required
-                      value={newGroupBirthYearFrom}
+                      placeholder="2016"
+                      value={newGroupBirthYearFrom || ""}
                       onChange={(e) =>
                         setNewGroupBirthYearFrom(
-                          parseInt(e.target.value) || new Date().getFullYear() - 10,
+                          e.target.value === "" ? 0 : parseInt(e.target.value, 10) || 0,
                         )
                       }
+                      onBlur={() => {
+                        if (!newGroupBirthYearFrom) {
+                          setNewGroupBirthYearFrom(new Date().getFullYear() - 10);
+                        }
+                      }}
                       className="w-full px-2.5 py-1.5 border rounded-xl text-xs font-mono font-bold focus:outline-none bg-white"
                     />
                     <span className="text-xs font-bold text-gray-500">до</span>
@@ -972,12 +978,18 @@ export const GroupsModule: React.FC = () => {
                       min="2008"
                       max="2028"
                       required
-                      value={newGroupBirthYearTo}
+                      placeholder="2018"
+                      value={newGroupBirthYearTo || ""}
                       onChange={(e) =>
                         setNewGroupBirthYearTo(
-                          parseInt(e.target.value) || new Date().getFullYear() - 8,
+                          e.target.value === "" ? 0 : parseInt(e.target.value, 10) || 0,
                         )
                       }
+                      onBlur={() => {
+                        if (!newGroupBirthYearTo) {
+                          setNewGroupBirthYearTo(new Date().getFullYear() - 8);
+                        }
+                      }}
                       className="w-full px-2.5 py-1.5 border rounded-xl text-xs font-mono font-bold focus:outline-none bg-white"
                     />
                   </div>
@@ -1215,12 +1227,18 @@ export const GroupsModule: React.FC = () => {
                       min="2008"
                       max="2028"
                       required
-                      value={editGroupBirthYearFrom}
+                      placeholder="2016"
+                      value={editGroupBirthYearFrom || ""}
                       onChange={(e) =>
                         setEditGroupBirthYearFrom(
-                          parseInt(e.target.value) || new Date().getFullYear() - 10,
+                          e.target.value === "" ? 0 : parseInt(e.target.value, 10) || 0,
                         )
                       }
+                      onBlur={() => {
+                        if (!editGroupBirthYearFrom) {
+                          setEditGroupBirthYearFrom(new Date().getFullYear() - 10);
+                        }
+                      }}
                       className="w-full px-2.5 py-1.5 border rounded-xl text-xs font-mono font-bold focus:outline-none bg-white"
                     />
                     <span className="text-xs font-bold text-gray-500">до</span>
@@ -1229,12 +1247,18 @@ export const GroupsModule: React.FC = () => {
                       min="2008"
                       max="2028"
                       required
-                      value={editGroupBirthYearTo}
+                      placeholder="2018"
+                      value={editGroupBirthYearTo || ""}
                       onChange={(e) =>
                         setEditGroupBirthYearTo(
-                          parseInt(e.target.value) || new Date().getFullYear() - 8,
+                          e.target.value === "" ? 0 : parseInt(e.target.value, 10) || 0,
                         )
                       }
+                      onBlur={() => {
+                        if (!editGroupBirthYearTo) {
+                          setEditGroupBirthYearTo(new Date().getFullYear() - 8);
+                        }
+                      }}
                       className="w-full px-2.5 py-1.5 border rounded-xl text-xs font-mono font-bold focus:outline-none bg-white"
                     />
                   </div>

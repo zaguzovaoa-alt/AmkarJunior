@@ -751,8 +751,9 @@ export const HQSettings: React.FC = () => {
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Размер вознаграждения</label>
                   <input 
                     type="number" 
-                    value={referralBonusAmount} 
-                    onChange={e => setReferralBonusAmount(Number(e.target.value))}
+                    placeholder="0"
+                    value={referralBonusAmount === 0 ? "" : referralBonusAmount} 
+                    onChange={e => setReferralBonusAmount(e.target.value === "" ? 0 : Number(e.target.value))}
                     className="w-full text-xs p-2 border rounded-xl outline-none focus:border-emerald-500" 
                   />
                 </div>
