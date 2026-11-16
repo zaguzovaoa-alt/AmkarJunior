@@ -7041,8 +7041,22 @@ export const FinanceModule: React.FC = () => {
                                   {roleLabel}
                                 </span>
                               </td>
-                              <td className="px-4 py-3 text-center font-bold text-emerald-600">
-                                {ts.presentCount || 0} учен.
+                              <td className="px-4 py-3 text-center">
+                                <div className="font-bold text-emerald-600">
+                                  {ts.presentCount || 0} учен.
+                                </div>
+                                {ts.photoVerification && (
+                                  <div
+                                    className={`mt-0.5 text-[10px] font-bold ${
+                                      ts.photoVerification.detectedChildrenCount !== (ts.presentCount || 0)
+                                        ? "text-red-600"
+                                        : "text-emerald-600"
+                                    }`}
+                                    title={ts.photoVerification.summary}
+                                  >
+                                    На фото: {ts.photoVerification.detectedChildrenCount} дет.
+                                  </div>
+                                )}
                               </td>
                               <td className="px-4 py-3 text-right text-slate-600 font-medium">
                                 {coach.paymentType === "per_session"
@@ -7056,9 +7070,27 @@ export const FinanceModule: React.FC = () => {
                               </td>
                               <td className="px-4 py-3 text-center">
                                 {ts.photoUrl ? (
-                                  <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-bold">
-                                    С фотоотчетом
-                                  </span>
+                                  ts.photoVerification ? (
+                                    ts.photoVerification.detectedChildrenCount !== (ts.presentCount || 0) ? (
+                                      <span
+                                        className="inline-flex items-center gap-1 text-[10px] bg-red-100 text-red-700 border border-red-200 px-2 py-0.5 rounded font-bold"
+                                        title={`Расхождение: на фото ${ts.photoVerification.detectedChildrenCount} детей, в отчёте ${ts.presentCount || 0} чел.${ts.photoVerification.overrideReason ? ` Причина: ${ts.photoVerification.overrideReason}` : ""}`}
+                                      >
+                                        ⚠️ Расхождение ({ts.photoVerification.detectedChildrenCount} ≠ {ts.presentCount || 0})
+                                      </span>
+                                    ) : (
+                                      <span
+                                        className="inline-flex items-center gap-1 text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded font-bold"
+                                        title={ts.photoVerification.summary}
+                                      >
+                                        ✓ Фото = Отчёт ({ts.photoVerification.detectedChildrenCount})
+                                      </span>
+                                    )
+                                  ) : (
+                                    <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-bold">
+                                      С фотоотчетом
+                                    </span>
+                                  )
                                 ) : (
                                   <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-medium">
                                     Заполнено

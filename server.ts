@@ -3,7 +3,7 @@ import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { WebSocketServer } from "ws";
-import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
+import { GoogleGenAI, LiveServerMessage, Modality, Type } from "@google/genai";
 import webpush from "web-push";
 import {
   injectSeoIntoHtml,
@@ -963,7 +963,14 @@ async function startServer() {
 
       if (apiKey) {
         try {
-          const ai = new GoogleGenAI({ apiKey });
+          const ai = new GoogleGenAI({
+            apiKey,
+            httpOptions: {
+              headers: {
+                "User-Agent": "aistudio-build",
+              },
+            },
+          });
           const prompt = `Ты — старший методист и старший тренер детской футбольной школы «АМКАР ЮНИОР». 
 Твоя задача — сформировать глубокий, воодушевляющий, профессиональный и педагогически выверенный ежеквартальный (3-месячный) отчет о прогрессе юного футболиста.
 
@@ -1015,28 +1022,18 @@ ${coachNotes.length > 0 ? coachNotes.map((n: string) => `- ${n}`).join('\n') : '
 }
 Отвечай ТОЛЬКО валидным JSON без лишнего текста и без Markdown backticks.`;
 
-          const modelsToTry = ["gemini-2.5-flash", "gemini-3.7-flash"];
-          for (const m of modelsToTry) {
-            try {
-              const aiResponse = await ai.models.generateContent({
-                model: m,
-                contents: prompt,
-                config: {
-                  responseMimeType: "application/json",
-                },
-              });
+          const aiResponse = await ai.models.generateContent({
+            model: "gemini-4-hydrogen",
+            contents: prompt,
+            config: {
+              responseMimeType: "application/json",
+            },
+          });
 
-              const responseText = aiResponse.text?.trim() || "";
-              if (responseText) {
-                const cleanedJson = responseText.replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/```$/, "").trim();
-                generatedReport = JSON.parse(cleanedJson);
-                if (generatedReport && generatedReport.overallSummary) {
-                  break;
-                }
-              }
-            } catch (mErr: any) {
-              console.warn(`Gemini generation with ${m} unavailable or busy (${mErr?.message || mErr}), trying fallback...`);
-            }
+          const responseText = aiResponse.text?.trim() || "";
+          if (responseText) {
+            const cleanedJson = responseText.replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/```$/, "").trim();
+            generatedReport = JSON.parse(cleanedJson);
           }
         } catch (geminiError) {
           console.warn("Gemini API generation error, falling back to smart engine:", geminiError);
@@ -1135,6 +1132,205 @@ ${coachNotes.length > 0 ? coachNotes.map((n: string) => `- ${n}`).join('\n') : '
     } catch (e: any) {
       console.error("Error generating progress report:", e);
       res.status(500).json({ status: "ERROR", message: e.message || String(e) });
+    }
+  });
+
+  // Automatic Attendance Photo Analysis Endpoint (Counts children on training photo and compares with coach's report)
+  app.post("/api/gemini/analyze-attendance-photo", async (req, res) => {
+    try {
+      const { imageBase64, reportedCount, groupName } = req.body || {};
+
+      if (!imageBase64 || typeof imageBase64 !== "string") {
+        return res.status(400).json({
+          status: "ERROR",
+          message: "Фотография не передана для анализа.",
+        });
+      }
+
+      if (imageBase64.startsWith("data:image/svg+xml")) {
+        return res.status(400).json({
+          status: "ERROR",
+          message: "Прикреплена системная заглушка вместо реального снимка с тренировки. Загрузите реальную фотографию группы.",
+        });
+      }
+
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({
+          status: "ERROR",
+          message: "Ключ GEMINI_API_KEY не настроен на сервере.",
+        });
+      }
+
+      let mimeType = "image/jpeg";
+      let base64Data = imageBase64;
+
+      if (imageBase64.startsWith("data:")) {
+        const match = imageBase64.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+        if (match) {
+          mimeType = match[1];
+          base64Data = match[2];
+        } else {
+          const commaIdx = imageBase64.indexOf(",");
+          if (commaIdx !== -1) {
+            base64Data = imageBase64.slice(commaIdx + 1);
+          }
+        }
+      } else if (imageBase64.startsWith("http://") || imageBase64.startsWith("https://")) {
+        const imgResp = await fetch(imageBase64);
+        if (!imgResp.ok) {
+          return res.status(400).json({
+            status: "ERROR",
+            message: "Не удалось загрузить изображение по ссылке для анализа.",
+          });
+        }
+        const contentType = imgResp.headers.get("content-type");
+        if (contentType && contentType.startsWith("image/")) {
+          mimeType = contentType.split(";")[0];
+        }
+        const arrayBuf = await imgResp.arrayBuffer();
+        base64Data = Buffer.from(arrayBuf).toString("base64");
+      }
+
+      const ai = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          headers: {
+            "User-Agent": "aistudio-build",
+          },
+        },
+      });
+
+      const numericReported =
+        typeof reportedCount === "number" && !isNaN(reportedCount)
+          ? Math.max(0, reportedCount)
+          : 0;
+
+      const promptText = `Ты — система визуального аудита и контроля посещаемости детской футбольной школы «АМКАР ЮНИОР».
+Проанализируй прикрепленную фотографию с тренировки${groupName ? ` группы «${groupName}»` : ""}.
+
+Твоя главная задача — максимально точно пересчитать количество ДЕТЕЙ (юных футболистов / учеников) на снимке, отделив их от взрослых (тренеров, ассистентов или родителей на заднем плане).
+
+Правила подсчета:
+1. Внимательно осмотри весь кадр: первый ряд, второй ряд, стоящих, сидящих на колене, вратарей, а также детей на заднем плане площадки, если они участвуют в тренировке.
+2. Не включай взрослых тренеров (высокого роста, в тренерской экипировке или повседневной одежде) и родителей за пределами площадки в число детей (detectedChildrenCount) — посчитай взрослых отдельно в поле detectedAdultsCount.
+3. Если на фото вообще нет людей или это фото документа/пустого зала/предмета, укажи detectedChildrenCount = 0 и поясни это в summary.
+4. В отчете тренера указано присутствующих детей: ${numericReported} чел.
+
+Верни результат строго в формате JSON по заданной схеме.`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-4-hydrogen",
+        contents: {
+          parts: [
+            {
+              inlineData: {
+                mimeType,
+                data: base64Data,
+              },
+            },
+            {
+              text: promptText,
+            },
+          ],
+        },
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              detectedChildrenCount: {
+                type: Type.INTEGER,
+                description: "Точное количество детей (учеников/юных футболистов), обнаруженных на фотографии.",
+              },
+              detectedAdultsCount: {
+                type: Type.INTEGER,
+                description: "Количество взрослых (тренеров, ассистентов, родителей), видимых на фотографии.",
+              },
+              totalPeopleCount: {
+                type: Type.INTEGER,
+                description: "Общее количество всех людей на фотографии (дети + взрослые).",
+              },
+              confidence: {
+                type: Type.STRING,
+                description: "Уровень уверенности подсчета: 'high' (все лица и фигуры хорошо видны), 'medium' (часть игроков частично перекрыта или вдалеке), 'low' (размытое фото, плохое освещение).",
+              },
+              summary: {
+                type: Type.STRING,
+                description: "Краткое заключение на русском языке (1-2 предложения), сколько детей и взрослых обнаружено на снимке.",
+              },
+              details: {
+                type: Type.STRING,
+                description: "Подробности визуального подсчета на русском языке: как расположены дети (например, в шеренге, в манишках, на заднем плане), есть ли перекрытия фигур.",
+              },
+            },
+            required: [
+              "detectedChildrenCount",
+              "detectedAdultsCount",
+              "totalPeopleCount",
+              "confidence",
+              "summary",
+              "details",
+            ],
+          },
+        },
+      });
+
+      const rawText = (response.text ?? "{}").trim();
+      const cleaned = rawText
+        .replace(/^```json\s*/i, "")
+        .replace(/^```\s*/, "")
+        .replace(/```$/, "")
+        .trim();
+      const parsed = JSON.parse(cleaned);
+
+      const detectedChildrenCount = Math.max(
+        0,
+        Number(parsed.detectedChildrenCount) || 0,
+      );
+      const detectedAdultsCount = Math.max(
+        0,
+        Number(parsed.detectedAdultsCount) || 0,
+      );
+      const totalPeopleCount = Math.max(
+        detectedChildrenCount + detectedAdultsCount,
+        Number(parsed.totalPeopleCount) || 0,
+      );
+      const discrepancy = detectedChildrenCount - numericReported;
+      const hasDiscrepancy = detectedChildrenCount !== numericReported;
+      const confidence: "high" | "medium" | "low" =
+        parsed.confidence === "high" ||
+        parsed.confidence === "medium" ||
+        parsed.confidence === "low"
+          ? parsed.confidence
+          : "high";
+
+      const verification = {
+        detectedChildrenCount,
+        detectedAdultsCount,
+        totalPeopleCount,
+        reportedCount: numericReported,
+        discrepancy,
+        hasDiscrepancy,
+        confidence,
+        summary:
+          parsed.summary ||
+          `На фото обнаружено детей: ${detectedChildrenCount} чел.${detectedAdultsCount > 0 ? `, взрослых/тренеров: ${detectedAdultsCount} чел.` : ""}`,
+        details: parsed.details || "",
+        analyzedAt: new Date().toISOString(),
+      };
+
+      return res.json({
+        status: "OK",
+        verification,
+      });
+    } catch (e: any) {
+      console.error("Error in /api/gemini/analyze-attendance-photo:", e);
+      return res.status(500).json({
+        status: "ERROR",
+        message:
+          e?.message || "Не удалось выполнить анализ фотографии тренировки.",
+      });
     }
   });
 
@@ -1265,9 +1461,16 @@ ${coachNotes.length > 0 ? coachNotes.map((n: string) => `- ${n}`).join('\n') : '
           return;
         }
 
-        const ai = new GoogleGenAI({ apiKey });
+        const ai = new GoogleGenAI({
+          apiKey,
+          httpOptions: {
+            headers: {
+              "User-Agent": "aistudio-build",
+            },
+          },
+        });
         const sessionPromise = ai.live.connect({
-          model: "gemini-3.1-flash-live-preview",
+          model: "gemini-3.8-live",
           callbacks: {
             onmessage: (message: LiveServerMessage) => {
               try {

@@ -273,6 +273,20 @@ export interface Coach {
   rate?: number; // Rate per month or per session
 }
 
+export interface AttendancePhotoVerification {
+  detectedChildrenCount: number;
+  detectedAdultsCount?: number;
+  totalPeopleCount?: number;
+  reportedCount: number;
+  discrepancy: number; // detectedChildrenCount - reportedCount
+  hasDiscrepancy: boolean;
+  confidence: 'high' | 'medium' | 'low';
+  summary: string;
+  details?: string;
+  analyzedAt: string;
+  overrideReason?: string;
+}
+
 export interface TrainingSessionProtocol {
   id: string;
   groupId: string;
@@ -294,6 +308,7 @@ export interface TrainingSessionProtocol {
   absentCount: number;
   sickCount: number;
   trialCount?: number;
+  photoVerification?: AttendancePhotoVerification | null;
   records: {
     clientId: string;
     clientName: string;

@@ -89,7 +89,70 @@ export const TrainerSessions: React.FC = () => {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelModalMode, setCancelModalMode] = useState<"single" | "batch" | "unreported">("batch");
   const [confirmDeleteCancelId, setConfirmDeleteCancelId] = useState<string | null>(null);
-  const [filterLessonPlan, setFilterLessonPlan] = useState<"all" | "with_plan" | "without_plan">("all");
+  const [filterLessonPlan, setFilterLessonPlan] = useState<
+    "all" | "with_plan" | "without_plan" | "photo_discrepancy"
+  >("all");
+  const [analyzingSessionId, setAnalyzingSessionId] = useState<string | null>(null);
+  const [analysisErrorMsg, setAnalysisErrorMsg] = useState<string | null>(null);
+
+  const handleVerifySessionPhoto = async (
+    targetSession: TrainingSessionProtocol,
+    isEditMode: boolean = false,
+  ) => {
+    if (
+      !targetSession.photoUrl ||
+      targetSession.photoUrl.startsWith("data:image/svg+xml")
+    ) {
+      setAnalysisErrorMsg(
+        "К тренировке прикреплена заглушка вместо реального снимка площадки. Загрузите реальное фото.",
+      );
+      setTimeout(() => setAnalysisErrorMsg(null), 4000);
+      return;
+    }
+
+    setAnalyzingSessionId(targetSession.id);
+    setAnalysisErrorMsg(null);
+    try {
+      const response = await fetch("/api/gemini/analyze-attendance-photo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageBase64: targetSession.photoUrl,
+          reportedCount: targetSession.presentCount,
+          groupName: targetSession.groupName,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || data.status !== "OK" || !data.verification) {
+        setAnalysisErrorMsg(
+          data.message || "Не удалось проанализировать фотоотчёт.",
+        );
+        setTimeout(() => setAnalysisErrorMsg(null), 4500);
+        return;
+      }
+
+      const updated: TrainingSessionProtocol = {
+        ...targetSession,
+        photoVerification: data.verification,
+      };
+
+      if (isEditMode) {
+        setEditForm(updated);
+      } else {
+        await updateTrainingSessionProtocol(updated);
+        if (selectedSession?.id === updated.id) {
+          setSelectedSession(updated);
+        }
+      }
+    } catch (err: any) {
+      setAnalysisErrorMsg(
+        err?.message || "Ошибка соединения при анализе фотографии.",
+      );
+      setTimeout(() => setAnalysisErrorMsg(null), 4500);
+    } finally {
+      setAnalyzingSessionId(null);
+    }
+  };
 
   const myCancelledSessions = (cancelledSessions || [])
     .filter((cs) => {
@@ -139,10 +202,24 @@ export const TrainerSessions: React.FC = () => {
     (s) => !Boolean(s.hasLessonPlan || s.lessonPlanText || s.lessonPlanPhotoUrl)
   ).length;
 
+  const countPhotoDiscrepancy = mySessions.filter(
+    (s) =>
+      Boolean(
+        s.photoVerification &&
+          s.photoVerification.detectedChildrenCount !== s.presentCount,
+      ),
+  ).length;
+
   const displayedSessions = mySessions.filter((s) => {
     const hasPlan = Boolean(s.hasLessonPlan || s.lessonPlanText || s.lessonPlanPhotoUrl);
     if (filterLessonPlan === "with_plan") return hasPlan;
     if (filterLessonPlan === "without_plan") return !hasPlan;
+    if (filterLessonPlan === "photo_discrepancy") {
+      return Boolean(
+        s.photoVerification &&
+          s.photoVerification.detectedChildrenCount !== s.presentCount,
+      );
+    }
     return true;
   });
 
@@ -218,8 +295,13 @@ export const TrainerSessions: React.FC = () => {
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && editForm) {
-      compressImage(file, (base64) => {
-        setEditForm((prev) => (prev ? { ...prev, photoUrl: base64 } : null));
+      compressImage(file, 1024, 0.85).then((base64) => {
+        const nextForm: TrainingSessionProtocol = {
+          ...editForm,
+          photoUrl: base64,
+        };
+        setEditForm(nextForm);
+        handleVerifySessionPhoto(nextForm, true);
       });
     }
   };
@@ -328,7 +410,7 @@ export const TrainerSessions: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
           <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100/50">
             <div className="text-emerald-600 mb-1 font-bold text-xs uppercase tracking-wide">Всего тренировок</div>
             <div className="text-2xl sm:text-3xl font-black text-emerald-700">{totalCount}</div>
@@ -365,6 +447,46 @@ export const TrainerSessions: React.FC = () => {
             <div className="text-2xl sm:text-3xl font-black text-rose-700">{countWithoutPlan}</div>
             <div className="text-[11px] text-rose-600/70 mt-1 font-medium truncate">
               Отметка «Нет конспекта»
+            </div>
+          </div>
+          <div
+            onClick={() => {
+              setSessionTab("completed");
+              setFilterLessonPlan(
+                filterLessonPlan === "photo_discrepancy"
+                  ? "all"
+                  : "photo_discrepancy",
+              );
+            }}
+            className={`rounded-xl p-4 border cursor-pointer transition ${
+              countPhotoDiscrepancy > 0
+                ? "bg-red-50 border-red-200 hover:bg-red-100/80"
+                : "bg-slate-50 border-slate-200/80 hover:bg-slate-100"
+            }`}
+          >
+            <div
+              className={`mb-1 font-bold text-xs uppercase tracking-wide flex items-center gap-1 ${
+                countPhotoDiscrepancy > 0 ? "text-red-700" : "text-slate-600"
+              }`}
+            >
+              <Camera className="w-3.5 h-3.5" />
+              Ошибка фото
+            </div>
+            <div
+              className={`text-2xl sm:text-3xl font-black ${
+                countPhotoDiscrepancy > 0 ? "text-red-700" : "text-slate-700"
+              }`}
+            >
+              {countPhotoDiscrepancy}
+            </div>
+            <div
+              className={`text-[11px] mt-1 font-medium truncate ${
+                countPhotoDiscrepancy > 0 ? "text-red-600" : "text-slate-500"
+              }`}
+            >
+              {countPhotoDiscrepancy > 0
+                ? "Не совпадает с отчетом"
+                : "Расхождений нет"}
             </div>
           </div>
           <div
@@ -459,11 +581,38 @@ export const TrainerSessions: React.FC = () => {
                   <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
                   Без конспекта ({countWithoutPlan})
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterLessonPlan("photo_discrepancy")}
+                  className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1 ${
+                    filterLessonPlan === "photo_discrepancy"
+                      ? "bg-red-600 text-white shadow-xs"
+                      : countPhotoDiscrepancy > 0
+                        ? "text-red-600 hover:bg-red-50"
+                        : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  Расхождения по фото ({countPhotoDiscrepancy})
+                </button>
               </div>
               <span className="text-xs text-slate-400 font-medium">
                 Показано {displayedSessions.length} из {mySessions.length}
               </span>
             </div>
+
+            {analysisErrorMsg && (
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs font-bold text-amber-900 flex items-center justify-between">
+                <span>{analysisErrorMsg}</span>
+                <button
+                  type="button"
+                  onClick={() => setAnalysisErrorMsg(null)}
+                  className="text-amber-700 hover:text-amber-950"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
 
             {displayedSessions.length === 0 ? (
               <div className="text-center py-12 bg-slate-50 rounded-xl border border-dashed border-slate-200">
@@ -471,7 +620,7 @@ export const TrainerSessions: React.FC = () => {
                 <p className="text-slate-500 font-medium text-xs sm:text-sm">
                   {mySessions.length === 0
                     ? "За выбранный месяц тренировок не найдено."
-                    : "Нет тренировок, соответствующих выбранному фильтру конспекта."}
+                    : "Нет тренировок, соответствующих выбранному фильтру."}
                 </p>
               </div>
             ) : (
@@ -499,6 +648,53 @@ export const TrainerSessions: React.FC = () => {
                         Нет конспекта
                       </span>
                     )}
+
+                    {/* Photo child count verification badge */}
+                    {session.photoVerification ? (
+                      session.photoVerification.detectedChildrenCount !==
+                      session.presentCount ? (
+                        <span
+                          onClick={() => openSessionDetail(session)}
+                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-red-600 text-white shadow-xs cursor-pointer shrink-0"
+                          title={session.photoVerification.summary}
+                        >
+                          <AlertTriangle className="w-3 h-3" />
+                          <span>
+                            Ошибка сверки фото: на снимке{" "}
+                            {session.photoVerification.detectedChildrenCount}{" "}
+                            дет. ≠ в отчёте {session.presentCount} чел.
+                          </span>
+                        </span>
+                      ) : (
+                        <span
+                          onClick={() => openSessionDetail(session)}
+                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-pointer shrink-0"
+                          title={session.photoVerification.summary}
+                        >
+                          <CheckCircle className="w-3 h-3 text-emerald-600" />
+                          <span>
+                            Фото = Отчёт ({session.presentCount} чел.)
+                          </span>
+                        </span>
+                      )
+                    ) : session.photoUrl &&
+                      !session.photoUrl.startsWith("data:image/svg+xml") ? (
+                      <button
+                        type="button"
+                        disabled={analyzingSessionId === session.id}
+                        onClick={() => handleVerifySessionPhoto(session)}
+                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition shrink-0 disabled:opacity-50"
+                      >
+                        <RefreshCw
+                          className={`w-3 h-3 ${analyzingSessionId === session.id ? "animate-spin" : ""}`}
+                        />
+                        <span>
+                          {analyzingSessionId === session.id
+                            ? "Анализ фото..."
+                            : "Сверить детей на фото"}
+                        </span>
+                      </button>
+                    ) : null}
                   </div>
                   <div className="text-sm text-slate-600 flex items-center gap-1.5 flex-wrap">
                     <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -729,12 +925,171 @@ export const TrainerSessions: React.FC = () => {
                 /* READ-ONLY VIEW */
                 <>
                   {selectedSession.photoUrl ? (
-                    <div className="rounded-xl overflow-hidden border border-gray-200 bg-slate-50 flex items-center justify-center min-h-[200px]">
-                      <img
-                        src={selectedSession.photoUrl}
-                        alt="Фотоотчет"
-                        className="w-full object-contain max-h-[35vh]"
-                      />
+                    <div className="space-y-3">
+                      <div className="rounded-xl overflow-hidden border border-gray-200 bg-slate-50 flex items-center justify-center min-h-[200px]">
+                        <img
+                          src={selectedSession.photoUrl}
+                          alt="Фотоотчет"
+                          className="w-full object-contain max-h-[35vh]"
+                        />
+                      </div>
+
+                      {/* Photo Verification Comparison Block in Detail Modal */}
+                      <div
+                        className={`p-4 rounded-xl border-2 space-y-3 ${
+                          selectedSession.photoVerification
+                            ? selectedSession.photoVerification
+                                .detectedChildrenCount !==
+                              selectedSession.presentCount
+                              ? "bg-rose-50/90 border-rose-300 text-rose-950"
+                              : "bg-emerald-50/80 border-emerald-300 text-emerald-950"
+                            : "bg-slate-50 border-slate-200 text-slate-800"
+                        }`}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            {selectedSession.photoVerification ? (
+                              selectedSession.photoVerification
+                                .detectedChildrenCount !==
+                              selectedSession.presentCount ? (
+                                <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+                              ) : (
+                                <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+                              )
+                            ) : (
+                              <Camera className="w-5 h-5 text-slate-500 shrink-0" />
+                            )}
+                            <div>
+                              <div className="font-extrabold text-xs sm:text-sm">
+                                {selectedSession.photoVerification
+                                  ? selectedSession.photoVerification
+                                      .detectedChildrenCount !==
+                                    selectedSession.presentCount
+                                    ? "⚠️ ОБНАРУЖЕНО РАСХОЖДЕНИЕ (ОШИБКА СВЕРКИ ФОТО И ОТЧЁТА)!"
+                                    : "Сверка фотоотчёта подтверждена: количество детей совпадает"
+                                  : "Автоматическая сверка количества детей на фото"}
+                              </div>
+                              <div className="text-[11px] opacity-80">
+                                {selectedSession.photoVerification
+                                  ? selectedSession.photoVerification.summary
+                                  : "Нажмите «Проверить фото», чтобы автоматически подсчитать детей на снимке и сверить с отчётом тренера."}
+                              </div>
+                            </div>
+                          </div>
+
+                          {!selectedSession.photoUrl.startsWith(
+                            "data:image/svg+xml",
+                          ) && (
+                            <button
+                              type="button"
+                              disabled={
+                                analyzingSessionId === selectedSession.id
+                              }
+                              onClick={() =>
+                                handleVerifySessionPhoto(selectedSession)
+                              }
+                              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shrink-0 self-start sm:self-auto disabled:opacity-50"
+                            >
+                              <RefreshCw
+                                className={`w-3.5 h-3.5 ${
+                                  analyzingSessionId === selectedSession.id
+                                    ? "animate-spin"
+                                    : ""
+                                }`}
+                              />
+                              <span>
+                                {analyzingSessionId === selectedSession.id
+                                  ? "Анализ..."
+                                  : selectedSession.photoVerification
+                                    ? "Перепроверить фото"
+                                    : "Проверить фото"}
+                              </span>
+                            </button>
+                          )}
+                        </div>
+
+                        {selectedSession.photoVerification && (
+                          <>
+                            <div className="grid grid-cols-3 gap-2.5">
+                              <div className="bg-white/90 p-2.5 rounded-lg border border-black/5">
+                                <div className="text-[10px] font-bold text-slate-500 uppercase">
+                                  Детей на фото
+                                </div>
+                                <div className="text-base font-black text-slate-900">
+                                  {
+                                    selectedSession.photoVerification
+                                      .detectedChildrenCount
+                                  }{" "}
+                                  чел.
+                                </div>
+                              </div>
+                              <div className="bg-white/90 p-2.5 rounded-lg border border-black/5">
+                                <div className="text-[10px] font-bold text-slate-500 uppercase">
+                                  В отчёте тренера
+                                </div>
+                                <div
+                                  className={`text-base font-black ${
+                                    selectedSession.photoVerification
+                                      .detectedChildrenCount !==
+                                    selectedSession.presentCount
+                                      ? "text-rose-600"
+                                      : "text-emerald-700"
+                                  }`}
+                                >
+                                  {selectedSession.presentCount} чел.
+                                </div>
+                              </div>
+                              <div className="bg-white/90 p-2.5 rounded-lg border border-black/5">
+                                <div className="text-[10px] font-bold text-slate-500 uppercase">
+                                  Разница
+                                </div>
+                                <div
+                                  className={`text-base font-black ${
+                                    selectedSession.photoVerification
+                                      .detectedChildrenCount !==
+                                    selectedSession.presentCount
+                                      ? "text-rose-600"
+                                      : "text-emerald-700"
+                                  }`}
+                                >
+                                  {selectedSession.photoVerification
+                                    .detectedChildrenCount -
+                                    selectedSession.presentCount ===
+                                  0
+                                    ? "0 (Норма)"
+                                    : `${
+                                        selectedSession.photoVerification
+                                          .detectedChildrenCount -
+                                          selectedSession.presentCount >
+                                        0
+                                          ? "+"
+                                          : ""
+                                      }${
+                                        selectedSession.photoVerification
+                                          .detectedChildrenCount -
+                                        selectedSession.presentCount
+                                      } чел.`}
+                                </div>
+                              </div>
+                            </div>
+
+                            {selectedSession.photoVerification.details && (
+                              <div className="text-[11px] bg-white/70 p-2.5 rounded-lg border border-black/5 text-slate-700">
+                                <strong>Детали анализа снимка:</strong>{" "}
+                                {selectedSession.photoVerification.details}
+                              </div>
+                            )}
+
+                            {selectedSession.photoVerification
+                              .overrideReason && (
+                              <div className="text-[11px] bg-amber-50 p-2.5 rounded-lg border border-amber-200 text-amber-900">
+                                <strong>Пояснение тренера к расхождению:</strong>{" "}
+                                {selectedSession.photoVerification.overrideReason}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <div className="py-8 text-center text-gray-400 bg-slate-50 rounded-xl border border-dashed">

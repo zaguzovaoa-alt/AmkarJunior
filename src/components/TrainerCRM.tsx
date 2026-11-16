@@ -49,7 +49,7 @@ import { CredentialsSettings } from "./CredentialsSettings";
 import { TrainerSessions } from "./TrainerSessions";
 import { AttendanceTable } from "./AttendanceTable";
 import { parseScheduleString } from "../utils/scheduleParser";
-import { TrainingGroup } from "../types";
+import { TrainingGroup, AttendancePhotoVerification } from "../types";
 import { formatGroupNameDisplay } from "../utils/formatters";
 import {
   isGroupMatch,
@@ -233,6 +233,60 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
   const [lessonPlanMode, setLessonPlanMode] = useState<"has_plan" | "no_plan">("has_plan");
   const [lessonPlanText, setLessonPlanText] = useState<string>("");
   const [lessonPlanFile, setLessonPlanFile] = useState<string | null>(null);
+
+  // Automatic Attendance Photo Verification States
+  const [photoVerification, setPhotoVerification] =
+    useState<AttendancePhotoVerification | null>(null);
+  const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState<boolean>(false);
+  const [photoAnalysisError, setPhotoAnalysisError] = useState<string | null>(
+    null,
+  );
+  const [photoDiscrepancyReason, setPhotoDiscrepancyReason] =
+    useState<string>("");
+  const [attendanceSavedToast, setAttendanceSavedToast] = useState<
+    string | null
+  >(null);
+
+  const analyzeAttendancePhoto = async (
+    base64Image: string,
+    reportedTotal?: number,
+  ) => {
+    if (!base64Image || base64Image.startsWith("data:image/svg+xml")) return;
+    setIsAnalyzingPhoto(true);
+    setPhotoAnalysisError(null);
+    const currentReported =
+      typeof reportedTotal === "number"
+        ? reportedTotal
+        : Math.max(0, Number(manualPaidCount) || 0) +
+          Math.max(0, Number(manualUnpaidCount) || 0);
+
+    try {
+      const response = await fetch("/api/gemini/analyze-attendance-photo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageBase64: base64Image,
+          reportedCount: currentReported,
+          groupName: selectedGroupForAttendance || "",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || data.status !== "OK" || !data.verification) {
+        setPhotoAnalysisError(
+          data.message ||
+            "Не удалось автоматически определить количество детей на фото.",
+        );
+        return;
+      }
+      setPhotoVerification(data.verification);
+    } catch (err: any) {
+      setPhotoAnalysisError(
+        err?.message || "Ошибка соединения при анализе фотоотчёта.",
+      );
+    } finally {
+      setIsAnalyzingPhoto(false);
+    }
+  };
 
   // States for player rating
   const [selectedPlayerForRating, setSelectedPlayerForRating] = useState<
@@ -693,6 +747,10 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
     });
     setAttendanceRecords(initialRecs);
     setUploadedAttendancePhoto(null);
+    setPhotoVerification(null);
+    setIsAnalyzingPhoto(false);
+    setPhotoAnalysisError(null);
+    setPhotoDiscrepancyReason("");
     setSessionNotes("");
 
     // Initial counts: default to active abonement holders vs others
@@ -841,11 +899,6 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
     });
 
     if (hasUnmarked) {
-      const confirmUnmarked = window.confirm(
-        `В списке группы есть неотмеченные ученики.\n\nОтметить их как отсутствующих и зафиксировать присутствующих?\n• С оплатой: ${paidNum} чел.\n• Без оплаты: ${unpaidNum} чел.\n• Итого всего: ${totalPresent} чел.`
-      );
-      if (!confirmUnmarked) return;
-
       Object.keys(attendanceRecords).forEach((pid) => {
         if (!attendanceRecords[pid].status) {
           clientRecords.push({
@@ -861,25 +914,55 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
     const finalPlanText = lessonPlanMode === "has_plan" ? lessonPlanText.trim() : "";
     const finalPlanPhoto = lessonPlanMode === "has_plan" ? lessonPlanFile : null;
 
+    const finalPhotoVerification: AttendancePhotoVerification | null =
+      photoVerification
+        ? {
+            ...photoVerification,
+            reportedCount: totalPresent,
+            discrepancy: photoVerification.detectedChildrenCount - totalPresent,
+            hasDiscrepancy:
+              photoVerification.detectedChildrenCount !== totalPresent,
+            overrideReason: photoDiscrepancyReason.trim() || undefined,
+          }
+        : null;
+
+    const finalNotes =
+      finalPhotoVerification?.hasDiscrepancy && photoDiscrepancyReason.trim()
+        ? `${sessionNotes ? sessionNotes + " | " : ""}Пояснение по фото (${finalPhotoVerification.detectedChildrenCount} на фото / ${totalPresent} в отчете): ${photoDiscrepancyReason.trim()}`
+        : sessionNotes;
+
     markAttendance(
       selectedGroupForAttendance,
       formattedDate,
       clientRecords,
       photoToSubmit,
-      sessionNotes,
+      finalNotes,
       selectedAssistantId || undefined,
       paidNum,
       unpaidNum,
       finalHasLessonPlan,
       finalPlanText,
       finalPlanPhoto,
+      finalPhotoVerification,
     );
-    alert(
-      `Ведомость посещаемости успешно сохранена!\n• Присутствовало: ${totalPresent} чел. (С оплатой: ${paidNum}, Без оплаты: ${unpaidNum})\n• Конспект: ${finalHasLessonPlan ? "Прикреплен" : "Отметка «Нет конспекта»"}`,
+
+    const discrepancySummary = finalPhotoVerification
+      ? finalPhotoVerification.hasDiscrepancy
+        ? ` • ⚠️ Зафиксировано расхождение с фото (на снимке: ${finalPhotoVerification.detectedChildrenCount} дет., в отчёте: ${totalPresent} чел.)`
+        : ` • Сверка с фото подтверждена (${finalPhotoVerification.detectedChildrenCount} чел.)`
+      : "";
+
+    setAttendanceSavedToast(
+      `Ведомость сохранена! Присутствовало: ${totalPresent} чел. (С оплатой: ${paidNum}, Без оплаты: ${unpaidNum})${discrepancySummary}`,
     );
+    setTimeout(() => setAttendanceSavedToast(null), 6000);
+
     setSelectedGroupForAttendance(null);
     setSelectedAssistantId("");
     setUploadedAttendancePhoto(null);
+    setPhotoVerification(null);
+    setPhotoAnalysisError(null);
+    setPhotoDiscrepancyReason("");
     setSessionNotes("");
     setIsManualCountTouched(false);
     setLessonPlanMode("has_plan");
@@ -1963,6 +2046,22 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
               </div>
             </div>
 
+            {attendanceSavedToast && (
+              <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-900 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{attendanceSavedToast}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAttendanceSavedToast(null)}
+                  className="text-emerald-700 hover:text-emerald-900"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
             {!selectedGroupForAttendance ? (
               <div className="space-y-4">
                 <p className="text-xs text-gray-500">
@@ -2088,22 +2187,44 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                         <Camera className="w-5 h-5 text-slate-400 mr-2" />
                         <div className="flex flex-col">
                           <span className="text-sm font-semibold text-slate-700">
-                            Фотоотчет присутствия
+                            Фотоотчет присутствия (с автоподсчетом детей)
                           </span>
                           <span className="text-[10px] text-slate-400">
-                            {uploadedAttendancePhoto ? "Фото добавлено к ведомости" : "Необходимо загрузить фото площадки"}
+                            {uploadedAttendancePhoto
+                              ? "Фото загружено • автоматическая сверка с отчетом активна"
+                              : "При загрузке снимка система автоматически посчитает количество детей"}
                           </span>
                         </div>
                       </div>
                     </div>
                     {uploadedAttendancePhoto ? (
-                      <button
-                        type="button"
-                        onClick={() => setUploadedAttendancePhoto(null)}
-                        className="px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-semibold text-sm rounded-lg transition shrink-0 flex items-center justify-center sm:h-[66px]"
-                      >
-                        Удалить фото
-                      </button>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          disabled={isAnalyzingPhoto}
+                          onClick={() =>
+                            analyzeAttendancePhoto(uploadedAttendancePhoto)
+                          }
+                          className="px-3.5 py-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold text-xs rounded-lg transition flex items-center gap-1.5 sm:h-[66px] disabled:opacity-50"
+                        >
+                          <RefreshCw
+                            className={`w-4 h-4 ${isAnalyzingPhoto ? "animate-spin" : ""}`}
+                          />
+                          <span>Перепроверить фото</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUploadedAttendancePhoto(null);
+                            setPhotoVerification(null);
+                            setPhotoAnalysisError(null);
+                            setPhotoDiscrepancyReason("");
+                          }}
+                          className="px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-semibold text-sm rounded-lg transition shrink-0 flex items-center justify-center sm:h-[66px]"
+                        >
+                          Удалить фото
+                        </button>
+                      </div>
                     ) : (
                       <label className="px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm rounded-lg transition shrink-0 cursor-pointer flex items-center justify-center relative overflow-hidden sm:h-[66px]">
                         <span>Прикрепить фото</span>
@@ -2114,9 +2235,10 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                           onChange={(e) => {
                             const file = e.target.files?.[0];
                             if (file) {
-                              compressImage(file, (base64) =>
-                                setUploadedAttendancePhoto(base64)
-                              );
+                              compressImage(file, 1024, 0.85).then((base64) => {
+                                setUploadedAttendancePhoto(base64);
+                                analyzeAttendancePhoto(base64);
+                              });
                             }
                           }}
                         />
@@ -2126,17 +2248,206 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
 
                   {uploadedAttendancePhoto &&
                     uploadedAttendancePhoto.startsWith("data:image") && (
-                      <div className="mt-3 relative w-full h-48 bg-gray-50 rounded-lg overflow-hidden border border-slate-200 flex items-center justify-center">
+                      <div className="mt-3 relative w-full h-56 bg-gray-50 rounded-xl overflow-hidden border border-slate-200 flex items-center justify-center">
                         <img
                           src={uploadedAttendancePhoto}
                           alt="Preview"
                           className="w-full h-full object-contain"
                         />
-                        <div className="absolute top-2 right-2 bg-emerald-500 text-white px-2 py-1 rounded text-[10px] font-bold shadow-sm">
+                        <div className="absolute top-2 right-2 bg-emerald-500 text-white px-2.5 py-1 rounded-md text-[10px] font-bold shadow-sm">
                           ФОТО ЗАГРУЖЕНО
                         </div>
                       </div>
                     )}
+
+                  {/* AUTOMATIC PHOTO ANALYSIS & COMPARISON BLOCK */}
+                  {isAnalyzingPhoto && (
+                    <div className="p-4 bg-blue-50/80 border border-blue-200 rounded-xl flex items-center gap-3 text-xs text-blue-900">
+                      <RefreshCw className="w-5 h-5 text-blue-600 animate-spin shrink-0" />
+                      <div>
+                        <div className="font-extrabold">
+                          Выполняется автоматический анализ фотографии тренировки...
+                        </div>
+                        <div className="text-[11px] text-blue-700 mt-0.5">
+                          Определяем количество детей на снимке и сопоставляем с данными отчёта тренера
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {photoAnalysisError && !isAnalyzingPhoto && (
+                    <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between gap-3 text-xs text-amber-900">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span>{photoAnalysisError}</span>
+                      </div>
+                      {uploadedAttendancePhoto && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            analyzeAttendancePhoto(uploadedAttendancePhoto)
+                          }
+                          className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-[11px] shrink-0"
+                        >
+                          Повторить
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {photoVerification &&
+                    !isAnalyzingPhoto &&
+                    (() => {
+                      const currentReportedTotal =
+                        Math.max(0, Number(manualPaidCount) || 0) +
+                        Math.max(0, Number(manualUnpaidCount) || 0);
+                      const detectedKids =
+                        photoVerification.detectedChildrenCount;
+                      const diff = detectedKids - currentReportedTotal;
+                      const isMismatch = detectedKids !== currentReportedTotal;
+
+                      return (
+                        <div
+                          className={`p-4 rounded-2xl border-2 space-y-3 transition ${
+                            isMismatch
+                              ? "bg-rose-50/90 border-rose-300 text-rose-950"
+                              : "bg-emerald-50/80 border-emerald-300 text-emerald-950"
+                          }`}
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              {isMismatch ? (
+                                <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+                              ) : (
+                                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                              )}
+                              <div>
+                                <div className="font-extrabold text-xs sm:text-sm">
+                                  {isMismatch
+                                    ? "⚠️ ОБНАРУЖЕНО РАСХОЖДЕНИЕ (ОШИБКА СВЕРКИ ФОТО И ОТЧЁТА)!"
+                                    : "Сверка фотоотчёта пройдена: количество детей совпадает"}
+                                </div>
+                                <div className="text-[11px] opacity-80">
+                                  {photoVerification.summary}
+                                </div>
+                              </div>
+                            </div>
+
+                            <span
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider self-start sm:self-auto shrink-0 ${
+                                isMismatch
+                                  ? "bg-rose-600 text-white"
+                                  : "bg-emerald-600 text-white"
+                              }`}
+                            >
+                              {isMismatch
+                                ? `Расхождение: ${diff > 0 ? `+${diff}` : diff} чел.`
+                                : "Точное совпадение"}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                            <div className="bg-white/90 p-2.5 rounded-xl border border-black/5">
+                              <div className="text-[10px] font-bold text-slate-500 uppercase">
+                                Детей на фото
+                              </div>
+                              <div className="text-lg font-black text-slate-900">
+                                {detectedKids} чел.
+                              </div>
+                            </div>
+                            <div className="bg-white/90 p-2.5 rounded-xl border border-black/5">
+                              <div className="text-[10px] font-bold text-slate-500 uppercase">
+                                Указано в отчёте
+                              </div>
+                              <div
+                                className={`text-lg font-black ${
+                                  isMismatch ? "text-rose-600" : "text-emerald-700"
+                                }`}
+                              >
+                                {currentReportedTotal} чел.
+                              </div>
+                            </div>
+                            <div className="bg-white/90 p-2.5 rounded-xl border border-black/5">
+                              <div className="text-[10px] font-bold text-slate-500 uppercase">
+                                Взрослых / тренеров
+                              </div>
+                              <div className="text-lg font-black text-slate-700">
+                                {photoVerification.detectedAdultsCount ?? 0} чел.
+                              </div>
+                            </div>
+                            <div className="bg-white/90 p-2.5 rounded-xl border border-black/5">
+                              <div className="text-[10px] font-bold text-slate-500 uppercase">
+                                Точность кадра
+                              </div>
+                              <div className="text-xs font-extrabold text-slate-800 mt-1">
+                                {photoVerification.confidence === "high"
+                                  ? "Высокая"
+                                  : photoVerification.confidence === "medium"
+                                    ? "Средняя"
+                                    : "Низкая (проверьте кадр)"}
+                              </div>
+                            </div>
+                          </div>
+
+                          {photoVerification.details && (
+                            <div className="text-[11px] bg-white/70 p-2.5 rounded-xl border border-black/5 text-slate-700">
+                              <strong className="text-slate-900">
+                                Детали распознавания:
+                              </strong>{" "}
+                              {photoVerification.details}
+                            </div>
+                          )}
+
+                          {isMismatch && (
+                            <div className="pt-2 border-t border-rose-200/80 space-y-2.5">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <p className="text-xs font-bold text-rose-800">
+                                  На фотографии распознано{" "}
+                                  <span className="underline">
+                                    {detectedKids} детей
+                                  </span>
+                                  , а в графе «Итого всего человек» указано{" "}
+                                  <span className="underline">
+                                    {currentReportedTotal} чел.
+                                  </span>
+                                  . Исправьте количество в отчёте или укажите причину расхождения:
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const currentPaid = Math.max(
+                                      0,
+                                      Number(manualPaidCount) || 0,
+                                    );
+                                    if (detectedKids >= currentPaid) {
+                                      setManualUnpaidCount(
+                                        detectedKids - currentPaid,
+                                      );
+                                    } else {
+                                      setManualPaidCount(detectedKids);
+                                      setManualUnpaidCount(0);
+                                    }
+                                    setIsManualCountTouched(true);
+                                  }}
+                                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs shrink-0 transition shadow-xs"
+                                >
+                                  Принять количество с фото ({detectedKids} чел.)
+                                </button>
+                              </div>
+                              <input
+                                type="text"
+                                value={photoDiscrepancyReason}
+                                onChange={(e) =>
+                                  setPhotoDiscrepancyReason(e.target.value)
+                                }
+                                placeholder="Причина расхождения (напр.: 1 ученик отошёл за водой / не попал в кадр)..."
+                                className="w-full p-2.5 bg-white border border-rose-300 rounded-xl text-xs text-slate-800 outline-none focus:border-rose-500"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                   <div className="text-xs font-mono text-gray-500 py-1 flex items-center justify-between">
                     <span>

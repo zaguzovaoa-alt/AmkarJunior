@@ -23,6 +23,7 @@ import {
   Client,
   CRMTask,
   TrainingGroup,
+  AttendancePhotoVerification,
   Coach,
   FinanceRecord,
   ChatMessage,
@@ -185,6 +186,7 @@ interface CRMContextType {
     hasLessonPlan?: boolean,
     lessonPlanText?: string,
     lessonPlanPhotoUrl?: string | null,
+    photoVerification?: AttendancePhotoVerification | null,
   ) => void;
   deleteTrainingSession: (sessionId: string) => Promise<void>;
   updateTrainingSessionProtocol: (session: TrainingSessionProtocol) => Promise<void>;
@@ -2238,6 +2240,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     hasLessonPlan?: boolean,
     lessonPlanText?: string,
     lessonPlanPhotoUrl?: string | null,
+    photoVerification?: AttendancePhotoVerification | null,
   ) => {
     const rawClients = clients; // avoid stale state issues in loops
     const groupObj = groups.find((g) => isGroupMatch(g.id, g.name, groupId, groupId));
@@ -2288,6 +2291,17 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     })();
 
+    const normalizedPhotoVerification: AttendancePhotoVerification | null =
+      photoVerification
+        ? {
+            ...photoVerification,
+            reportedCount: presentCount,
+            discrepancy: photoVerification.detectedChildrenCount - presentCount,
+            hasDiscrepancy:
+              photoVerification.detectedChildrenCount !== presentCount,
+          }
+        : null;
+
     const newProtocol: TrainingSessionProtocol = {
       id: `ts_${Date.now()}`,
       groupId: resolvedGroupId,
@@ -2311,6 +2325,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       absentCount,
       sickCount,
       trialCount,
+      photoVerification: normalizedPhotoVerification,
       records: records.map((r) => {
         const clientObj = rawClients.find((c) => c.id === r.clientId);
         const leadObj = leads.find((l) => l.id === r.clientId);
@@ -2334,6 +2349,16 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     setDoc(doc(db, "training_sessions", newProtocol.id), removeUndefined(newProtocol) as any).catch((err) => {
       handleFirestoreError(err, OperationType.WRITE, "training_sessions_direct");
     });
+
+    if (normalizedPhotoVerification?.hasDiscrepancy) {
+      addNotification({
+        title: `⚠️ Расхождение по фотоотчёту: ${resolvedGroupName}`,
+        body: `Тренер ${coachName} (${date}): на фото обнаружено ${normalizedPhotoVerification.detectedChildrenCount} дет., а в отчёте указано ${presentCount} чел.${normalizedPhotoVerification.overrideReason ? ` Комментарий: ${normalizedPhotoVerification.overrideReason}` : ""}`,
+        type: "system",
+        targetRole: ["director", "admin", "manager"],
+        relatedTab: "hq_sessions",
+      });
+    }
 
     // Auto-remove any conflicting cancellation for this group and date, since the training officially took place
     const matchingCancellations = cancelledSessions.filter((cs) => {
@@ -2649,6 +2674,17 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       const hasManualCounts = typeof updatedSession.presentPaidCount === "number" || typeof updatedSession.presentUnpaidCount === "number";
       const presentCount = hasManualCounts ? (paid + unpaid) : recordsPresent;
 
+      const syncedPhotoVerification = updatedSession.photoVerification
+        ? {
+            ...updatedSession.photoVerification,
+            reportedCount: presentCount,
+            discrepancy:
+              updatedSession.photoVerification.detectedChildrenCount - presentCount,
+            hasDiscrepancy:
+              updatedSession.photoVerification.detectedChildrenCount !== presentCount,
+          }
+        : updatedSession.photoVerification;
+
       const sessionToSave: TrainingSessionProtocol = {
         ...updatedSession,
         hasLessonPlan: updatedSession.hasLessonPlan !== undefined
@@ -2662,6 +2698,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         sickCount,
         absentCount,
         trialCount,
+        photoVerification: syncedPhotoVerification,
       };
 
       setTrainingSessions((prev) =>
