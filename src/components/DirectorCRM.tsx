@@ -425,9 +425,14 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
     }
   };
 
-  // Today Income Records & Sum
+  // Today Income Records & Sum (excluding internal transfers between own accounts)
   const todayIncomeRecords = useMemo(() => {
-    return finances.filter((f) => f.type === "income" && f.date === todayISO);
+    return finances.filter(
+      (f) =>
+        f.type === "income" &&
+        f.date === todayISO &&
+        f.category !== "Перевод между счетами",
+    );
   }, [finances, todayISO]);
 
   const todayIncomeSum = useMemo(() => {
@@ -979,7 +984,12 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
 
   const monthRevenue = useMemo(() => {
     return finances
-      .filter((f) => f.type === "income" && f.date.substring(0, 7) === currentMonthStr)
+      .filter(
+        (f) =>
+          f.type === "income" &&
+          f.category !== "Перевод между счетами" &&
+          f.date.substring(0, 7) === currentMonthStr,
+      )
       .reduce((sum, item) => sum + Number(item.amount || 0), 0);
   }, [finances, currentMonthStr]);
 
@@ -1027,19 +1037,34 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
     }
     const targetMonth = financePeriod === "month" ? currentMonthStr : financePeriod;
     return finances
-      .filter((f) => f.type === "income" && f.date.substring(0, 7) === targetMonth)
+      .filter(
+        (f) =>
+          f.type === "income" &&
+          f.category !== "Перевод между счетами" &&
+          f.date.substring(0, 7) === targetMonth,
+      )
       .reduce((sum, item) => sum + Number(item.amount || 0), 0);
   }, [financePeriod, todayIncomeSum, finances, currentMonthStr]);
 
   const expenseVal = useMemo(() => {
     if (financePeriod === "today") {
       return finances
-        .filter((f) => f.type === "expense" && f.date === todayISO)
+        .filter(
+          (f) =>
+            f.type === "expense" &&
+            f.category !== "Перевод между счетами" &&
+            f.date === todayISO,
+        )
         .reduce((sum, item) => sum + Number(item.amount || 0), 0);
     }
     const targetMonth = financePeriod === "month" ? currentMonthStr : financePeriod;
     return finances
-      .filter((f) => f.type === "expense" && f.date.substring(0, 7) === targetMonth)
+      .filter(
+        (f) =>
+          f.type === "expense" &&
+          f.category !== "Перевод между счетами" &&
+          f.date.substring(0, 7) === targetMonth,
+      )
       .reduce((sum, item) => sum + Number(item.amount || 0), 0);
   }, [financePeriod, finances, todayISO, currentMonthStr]);
 
@@ -2301,7 +2326,10 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3.5 md:gap-4">
               {/* 1. Деньги на счетах */}
-              <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs text-left relative overflow-hidden flex flex-col justify-between min-h-[150px] hover:shadow-md transition">
+              <div
+                onClick={() => setActiveTab && setActiveTab("hq_finances")}
+                className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs text-left relative overflow-hidden flex flex-col justify-between min-h-[150px] hover:border-emerald-300 hover:shadow-md transition cursor-pointer"
+              >
                 <div>
                   <div className="flex items-start justify-between gap-1.5 mb-1.5 flex-wrap">
                     <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">

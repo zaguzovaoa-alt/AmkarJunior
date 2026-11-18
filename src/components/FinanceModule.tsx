@@ -129,17 +129,21 @@ export const FinanceModule: React.FC = () => {
   const [dashStartDate, setDashStartDate] = useState(defaultStartDate);
   const [dashEndDate, setDashEndDate] = useState(defaultEndDate);
 
-  // Dashboard Logic
+  // Dashboard Logic (excluding internal account-to-account transfers from external revenue/expenses)
   const totalIncomes = finances
     .filter(
       (f) =>
-        f.type === "income" && f.date >= dashStartDate && f.date <= dashEndDate,
+        f.type === "income" &&
+        f.category !== "Перевод между счетами" &&
+        f.date >= dashStartDate &&
+        f.date <= dashEndDate,
     )
     .reduce((acc, f) => acc + Number(f.amount || 0), 0);
   const totalExpenses = finances
     .filter(
       (f) =>
         f.type === "expense" &&
+        f.category !== "Перевод между счетами" &&
         f.paymentStatus !== "accrued" &&
         f.date >= dashStartDate &&
         f.date <= dashEndDate,
@@ -154,11 +158,12 @@ export const FinanceModule: React.FC = () => {
   const totalDebts = unpaidClients.length * 4500;
 
   // States for input form
-  const [fType, setFType] = useState<"income" | "expense">("income");
+  const [fType, setFType] = useState<"income" | "expense" | "transfer">("income");
   const [fAmount, setFAmount] = useState("");
   const [fDate, setFDate] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; });
   const [fCat, setFCat] = useState("");
   const [fAccount, setFAccount] = useState<string>("acc_cash");
+  const [fToAccount, setFToAccount] = useState<string>("acc_bank");
   const [fIsFixed, setFIsFixed] = useState(false);
   const [fTargetMonth, setFTargetMonth] = useState(currentMonthStr);
   const [fDesc, setFDesc] = useState("");
@@ -173,10 +178,16 @@ export const FinanceModule: React.FC = () => {
   const [editingAccount, setEditingAccount] = useState<string | null>(null);
   const [editAccName, setEditAccName] = useState("");
   const [editAccBalance, setEditAccBalance] = useState<number>(0);
+  const [deletingAccountId, setDeletingAccountId] = useState<string | null>(null);
 
   const [transferFromAcc, setTransferFromAcc] = useState<string | null>(null);
   const [transferToAcc, setTransferToAcc] = useState<string>("");
   const [transferAmount, setTransferAmount] = useState<string>("");
+  const [transferDate, setTransferDate] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
+  const [transferComment, setTransferComment] = useState<string>("");
 
   // Payout Modal state (Salary / Rent)
   const [payoutModalOpen, setPayoutModalOpen] = useState(false);
@@ -225,6 +236,59 @@ export const FinanceModule: React.FC = () => {
     if (!fAmount || Number(fAmount) <= 0) {
       setAddErrorMsg("Введите сумму операции больше 0 ₽");
       setTimeout(() => setAddErrorMsg(""), 3000);
+      return;
+    }
+
+    if (fType === "transfer") {
+      const fromId = fAccount || accounts[0]?.id || "acc_cash";
+      const toId =
+        fToAccount && fToAccount !== fromId
+          ? fToAccount
+          : accounts.find((a) => a.id !== fromId)?.id || "";
+      if (!toId || fromId === toId) {
+        setAddErrorMsg("Выберите два разных счета (откуда и куда переводим)");
+        setTimeout(() => setAddErrorMsg(""), 3000);
+        return;
+      }
+      const fromAccObj = accounts.find((a) => a.id === fromId);
+      const toAccObj = accounts.find((a) => a.id === toId);
+      const fromName = fromAccObj?.name || "Счет списания";
+      const toName = toAccObj?.name || "Счет зачисления";
+      const amount = Number(fAmount);
+      const commentPart = fDesc.trim() ? ` • ${fDesc.trim()}` : "";
+      const targetM = fDate ? fDate.substring(0, 7) : currentMonthStr;
+
+      await addFinanceRecord({
+        type: "expense",
+        amount,
+        category: "Перевод между счетами",
+        date: fDate,
+        description: `Перевод: ${fromName} → ${toName}${commentPart}`,
+        targetMonth: targetM,
+        accountId: fromId,
+        isFixed: false,
+      });
+
+      await addFinanceRecord({
+        type: "income",
+        amount,
+        category: "Перевод между счетами",
+        date: fDate,
+        description: `Перевод: ${fromName} → ${toName}${commentPart}`,
+        targetMonth: targetM,
+        accountId: toId,
+        isFixed: false,
+      });
+
+      setFAmount("");
+      setFDesc("");
+      setAddSuccessMsg(
+        `Перевод ${amount.toLocaleString("ru-RU")} ₽ со счета «${fromName}» на счет «${toName}» успешно выполнен!`,
+      );
+      setTimeout(() => setAddSuccessMsg(""), 4000);
+      showNotification(
+        `Переведено ${amount.toLocaleString("ru-RU")} ₽ (${fromName} → ${toName})`,
+      );
       return;
     }
 
@@ -634,10 +698,25 @@ export const FinanceModule: React.FC = () => {
     setEditingAccount(null);
   };
 
+  const openTransferModal = (initialFromId?: string) => {
+    const defaultFrom =
+      initialFromId || accounts[0]?.id || "acc_cash";
+    const defaultTo =
+      accounts.find((a) => a.id !== defaultFrom)?.id || "";
+    const d = new Date();
+    const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    setTransferFromAcc(defaultFrom);
+    setTransferToAcc(defaultTo);
+    setTransferAmount("");
+    setTransferDate(todayStr);
+    setTransferComment("");
+  };
+
   const handleTransferSubmit = async () => {
     if (
       !transferFromAcc ||
       !transferToAcc ||
+      transferFromAcc === transferToAcc ||
       !transferAmount ||
       isNaN(Number(transferAmount)) ||
       Number(transferAmount) <= 0
@@ -645,14 +724,27 @@ export const FinanceModule: React.FC = () => {
       return;
 
     const amount = Number(transferAmount);
+    const fromAccObj = accounts.find((a) => a.id === transferFromAcc);
+    const toAccObj = accounts.find((a) => a.id === transferToAcc);
+    const fromName = fromAccObj?.name || "Счет списания";
+    const toName = toAccObj?.name || "Счет зачисления";
+    const commentSuffix = transferComment.trim()
+      ? ` • ${transferComment.trim()}`
+      : "";
+    const opDate =
+      transferDate ||
+      (() => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      })();
 
     await addFinanceRecord({
       type: "expense",
       amount: amount,
       category: "Перевод между счетами",
-      date: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(),
-      description: "Исходящий перевод средств",
-      targetMonth: currentMonthStr,
+      date: opDate,
+      description: `Перевод: ${fromName} → ${toName}${commentSuffix}`,
+      targetMonth: opDate.substring(0, 7),
       accountId: transferFromAcc,
       isFixed: false,
     });
@@ -661,14 +753,30 @@ export const FinanceModule: React.FC = () => {
       type: "income",
       amount: amount,
       category: "Перевод между счетами",
-      date: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })(),
-      description: "Входящий перевод средств",
-      targetMonth: currentMonthStr,
+      date: opDate,
+      description: `Перевод: ${fromName} → ${toName}${commentSuffix}`,
+      targetMonth: opDate.substring(0, 7),
       accountId: transferToAcc,
       isFixed: false,
     });
 
     setTransferFromAcc(null);
+    setTransferAmount("");
+    setTransferComment("");
+    showNotification(
+      `Переведено ${amount.toLocaleString("ru-RU")} ₽: «${fromName}» → «${toName}»`,
+    );
+  };
+
+  const handleDeleteTransferPair = async (
+    expenseRecordId: string,
+    incomeRecordId?: string,
+  ) => {
+    await deleteFinanceRecord(expenseRecordId);
+    if (incomeRecordId && incomeRecordId !== expenseRecordId) {
+      await deleteFinanceRecord(incomeRecordId);
+    }
+    showNotification("Перевод между счетами отменен, балансы восстановлены");
   };
 
   // Plan State
@@ -771,9 +879,12 @@ export const FinanceModule: React.FC = () => {
         ][index % 6],
       }));
 
-    // Top Stats metrics
+    // Top Stats metrics (excluding internal transfers between own accounts)
     const periodData = finances.filter(
-      (f) => f.date >= dashStartDate && f.date <= dashEndDate,
+      (f) =>
+        f.date >= dashStartDate &&
+        f.date <= dashEndDate &&
+        f.category !== "Перевод между счетами",
     );
     const mIncomes = periodData
       .filter((f) => f.type === "income")
@@ -789,6 +900,7 @@ export const FinanceModule: React.FC = () => {
       { name: string; Доходы: number; Расходы: number }
     >();
     finances.forEach((f) => {
+      if (f.category === "Перевод между счетами") return;
       const tm = f.targetMonth || f.date.substring(0, 7);
       if (!monthsMap.has(tm))
         monthsMap.set(tm, { name: tm, Доходы: 0, Расходы: 0 });
@@ -927,6 +1039,16 @@ export const FinanceModule: React.FC = () => {
                   }`}
                 >
                   Аренда площадок
+                </button>
+                <button
+                  onClick={() => setActiveTab("accounts")}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                    activeTab === "accounts"
+                      ? "bg-white shadow-sm text-emerald-600"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  Счета и переводы
                 </button>
               </>
             ) : (
@@ -1651,10 +1773,18 @@ export const FinanceModule: React.FC = () => {
 
               {/* Account Balances */}
               <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between">
-                <div className="flex justify-between items-center mb-6">
+                <div className="flex justify-between items-center mb-6 gap-2">
                   <h3 className="font-bold text-slate-900 text-sm">
                     Остатки на счетах
                   </h3>
+                  <button
+                    type="button"
+                    onClick={() => openTransferModal()}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 text-xs font-bold transition"
+                  >
+                    <ArrowRightLeft className="w-3.5 h-3.5" />
+                    <span>Перевод между счетами</span>
+                  </button>
                 </div>
                 <div className="space-y-4 flex-1">
                   {dashboardData.calculatedAccounts.map((acc) => (
@@ -1921,251 +2051,506 @@ export const FinanceModule: React.FC = () => {
         {activeTab === "input" && (
           <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm max-w-xl mx-auto">
             <h2 className="text-lg font-bold mb-6 text-slate-800 border-b pb-4">
-              Ручной ввод операций (касса)
+              Ручной ввод операций (касса и переводы)
             </h2>
             <div className="space-y-4">
-              <div className="flex space-x-2 bg-slate-100 p-1 rounded-xl w-64">
+              <div className="grid grid-cols-3 gap-1.5 bg-slate-100 p-1 rounded-xl">
                 <button
-                  onClick={() => { setFType("income"); setFCat(""); }}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${fType === "income" ? "bg-emerald-500 text-white shadow-sm" : "text-gray-500"}`}
+                  type="button"
+                  onClick={() => {
+                    setFType("income");
+                    setFCat("");
+                  }}
+                  className={`py-2 text-xs font-bold rounded-lg transition ${
+                    fType === "income"
+                      ? "bg-emerald-500 text-white shadow-sm"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
                 >
                   + Доход
                 </button>
                 <button
-                  onClick={() => { setFType("expense"); setFCat(""); }}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${fType === "expense" ? "bg-orange-500 text-white shadow-sm" : "text-gray-500"}`}
+                  type="button"
+                  onClick={() => {
+                    setFType("expense");
+                    setFCat("");
+                  }}
+                  className={`py-2 text-xs font-bold rounded-lg transition ${
+                    fType === "expense"
+                      ? "bg-orange-500 text-white shadow-sm"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
                 >
                   - Расход
                 </button>
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
-                  Дата операции
-                </label>
-                <input
-                  type="date"
-                  value={fDate}
-                  onChange={(e) => setFDate(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-gray-200 focus:ring-1 focus:ring-emerald-500 outline-none rounded-xl font-mono text-sm"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
-                    Сумма (₽)
-                  </label>
-                  <input
-                    type="number"
-                    value={fAmount}
-                    onChange={(e) =>
-                      setFAmount(e.target.value.replace(/^0+(?=\d)/, ""))
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFType("transfer");
+                    const fromId = fAccount || accounts[0]?.id || "acc_cash";
+                    setFAccount(fromId);
+                    if (!fToAccount || fToAccount === fromId) {
+                      const other = accounts.find((a) => a.id !== fromId);
+                      if (other) setFToAccount(other.id);
                     }
-                    className="w-full p-2.5 bg-slate-50 border border-gray-200 focus:ring-1 focus:ring-emerald-500 outline-none rounded-xl font-mono text-sm"
-                    placeholder="0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
-                    Месяц учета (P&L)
-                  </label>
-                  <input
-                    type="month"
-                    value={fTargetMonth}
-                    onChange={(e) => setFTargetMonth(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-gray-200 focus:ring-1 focus:ring-emerald-500 outline-none rounded-xl font-mono text-sm"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
-                    Счет списания/зачисления
-                  </label>
-                  <select
-                    value={fAccount}
-                    onChange={(e) => setFAccount(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-gray-200 outline-none rounded-xl text-sm font-semibold text-slate-800"
-                  >
-                    {calculatedAccounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name} (Баланс: {a.actualBalance.toLocaleString("ru-RU")} ₽)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
-                    Тип расхода
-                  </label>
-                  <select
-                    disabled={fType === "income"}
-                    value={fIsFixed ? "fixed" : "variable"}
-                    onChange={(e) => setFIsFixed(e.target.value === "fixed")}
-                    className="w-full p-2.5 bg-slate-50 border border-gray-200 outline-none rounded-xl text-sm font-semibold text-slate-800 disabled:opacity-50"
-                  >
-                    <option value="variable">Переменный расход</option>
-                    <option value="fixed">Постоянный расход</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
-                  Статья БДДС
-                </label>
-                <select
-                  value={
-                    fCat ||
-                    financeCategories.find((c) => c.type === fType)?.id ||
-                    ""
-                  }
-                  onChange={(e) => setFCat(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-gray-200 outline-none rounded-xl text-sm font-semibold text-slate-800"
+                  }}
+                  className={`py-2 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1 ${
+                    fType === "transfer"
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
                 >
-                  {financeCategories
-                    .filter((c) => c.type === fType)
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                </select>
+                  <ArrowRightLeft className="w-3.5 h-3.5" />
+                  <span>Перевод</span>
+                </button>
               </div>
-              {fType === "income" && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3.5 bg-emerald-50/40 border border-emerald-100 rounded-xl">
+
+              {fType === "transfer" ? (
+                (() => {
+                  const sourceAcc =
+                    calculatedAccounts.find((a) => a.id === fAccount) ||
+                    calculatedAccounts[0];
+                  const destAcc =
+                    calculatedAccounts.find((a) => a.id === fToAccount) ||
+                    calculatedAccounts.find((a) => a.id !== sourceAcc?.id);
+                  const numericAmt = Number(fAmount) || 0;
+                  const sourceAfter =
+                    (sourceAcc?.actualBalance || 0) - numericAmt;
+                  const destAfter =
+                    (destAcc?.actualBalance || 0) + numericAmt;
+
+                  return (
+                    <div className="space-y-4 animate-in fade-in duration-200">
+                      <div className="p-4 bg-blue-50/60 border border-blue-100 rounded-2xl space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-extrabold text-blue-900 uppercase tracking-wider flex items-center gap-1.5">
+                            <ArrowRightLeft className="w-4 h-4 text-blue-600" />
+                            Перенос средств между счетами
+                          </span>
+                          <span className="text-[11px] font-semibold text-blue-600">
+                            Не влияет на выручку и расходы (ОПУ)
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] gap-2.5 items-end">
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                              Откуда (Счет списания)
+                            </label>
+                            <select
+                              value={sourceAcc?.id || ""}
+                              onChange={(e) => {
+                                const newFrom = e.target.value;
+                                setFAccount(newFrom);
+                                if (fToAccount === newFrom) {
+                                  const other = calculatedAccounts.find(
+                                    (a) => a.id !== newFrom,
+                                  );
+                                  if (other) setFToAccount(other.id);
+                                }
+                              }}
+                              className="w-full p-2.5 bg-white border border-blue-200 outline-none rounded-xl text-xs font-bold text-slate-900"
+                            >
+                              {calculatedAccounts.map((a) => (
+                                <option key={a.id} value={a.id}>
+                                  {a.name} ({a.actualBalance.toLocaleString("ru-RU")} ₽)
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (sourceAcc && destAcc) {
+                                setFAccount(destAcc.id);
+                                setFToAccount(sourceAcc.id);
+                              }
+                            }}
+                            title="Поменять счета местами"
+                            className="p-2.5 bg-white hover:bg-blue-100 text-blue-600 border border-blue-200 rounded-xl transition flex items-center justify-center self-center sm:mb-0.5 shadow-2xs"
+                          >
+                            <ArrowRightLeft className="w-4 h-4" />
+                          </button>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                              Куда (Счет зачисления)
+                            </label>
+                            <select
+                              value={destAcc?.id || ""}
+                              onChange={(e) => {
+                                const newTo = e.target.value;
+                                setFToAccount(newTo);
+                                if (fAccount === newTo) {
+                                  const other = calculatedAccounts.find(
+                                    (a) => a.id !== newTo,
+                                  );
+                                  if (other) setFAccount(other.id);
+                                }
+                              }}
+                              className="w-full p-2.5 bg-white border border-emerald-200 outline-none rounded-xl text-xs font-bold text-slate-900"
+                            >
+                              {calculatedAccounts
+                                .filter((a) => a.id !== sourceAcc?.id)
+                                .map((a) => (
+                                  <option key={a.id} value={a.id}>
+                                    {a.name} ({a.actualBalance.toLocaleString("ru-RU")} ₽)
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {sourceAcc && destAcc && (
+                          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-blue-100 text-xs">
+                            <div className="bg-white/80 rounded-xl p-2.5 border border-slate-200/70">
+                              <div className="text-[10px] font-bold text-slate-400 uppercase">
+                                Останется на «{sourceAcc.name}»
+                              </div>
+                              <div
+                                className={`text-sm font-black font-mono mt-0.5 ${
+                                  sourceAfter < 0
+                                    ? "text-rose-600"
+                                    : "text-slate-800"
+                                }`}
+                              >
+                                {sourceAfter.toLocaleString("ru-RU")} ₽
+                              </div>
+                            </div>
+                            <div className="bg-white/80 rounded-xl p-2.5 border border-emerald-200/70">
+                              <div className="text-[10px] font-bold text-slate-400 uppercase">
+                                Станет на «{destAcc.name}»
+                              </div>
+                              <div className="text-sm font-black font-mono text-emerald-600 mt-0.5">
+                                {destAfter.toLocaleString("ru-RU")} ₽
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                            Сумма перевода (₽)
+                          </label>
+                          <input
+                            type="number"
+                            value={fAmount}
+                            onChange={(e) =>
+                              setFAmount(e.target.value.replace(/^0+(?=\d)/, ""))
+                            }
+                            className="w-full p-2.5 bg-slate-50 border border-gray-200 focus:ring-1 focus:ring-blue-500 outline-none rounded-xl font-mono text-sm font-bold"
+                            placeholder="0"
+                          />
+                          {sourceAcc && sourceAcc.actualBalance > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mt-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setFAmount(String(sourceAcc.actualBalance))
+                                }
+                                className="px-2 py-1 text-[10px] font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg border border-blue-200 transition"
+                              >
+                                Весь остаток ({sourceAcc.actualBalance.toLocaleString("ru-RU")} ₽)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setFAmount(
+                                    String(
+                                      Math.round(sourceAcc.actualBalance / 2),
+                                    ),
+                                  )
+                                }
+                                className="px-2 py-1 text-[10px] font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg transition"
+                              >
+                                50%
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                            Дата перевода
+                          </label>
+                          <input
+                            type="date"
+                            value={fDate}
+                            onChange={(e) => setFDate(e.target.value)}
+                            className="w-full p-2.5 bg-slate-50 border border-gray-200 focus:ring-1 focus:ring-blue-500 outline-none rounded-xl font-mono text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                          Комментарий к переводу (необязательно)
+                        </label>
+                        <input
+                          type="text"
+                          value={fDesc}
+                          onChange={(e) => setFDesc(e.target.value)}
+                          className="w-full p-2.5 bg-slate-50 border border-gray-200 outline-none rounded-xl text-sm"
+                          placeholder="Напр.: Инкассация наличных на расчетный счет / Снятие в кассу..."
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleAddFinance}
+                        className="w-full py-3 bg-blue-600 text-white font-bold tracking-wide rounded-xl mt-2 hover:bg-blue-700 transition flex items-center justify-center gap-2 shadow-md shadow-blue-500/15"
+                      >
+                        <ArrowRightLeft className="w-4 h-4" />
+                        <span>Выполнить перевод между счетами</span>
+                      </button>
+                      {addSuccessMsg && (
+                        <p className="text-center text-sm font-bold text-emerald-600 mt-2">
+                          {addSuccessMsg}
+                        </p>
+                      )}
+                      {addErrorMsg && (
+                        <p className="text-center text-sm font-bold text-red-600 mt-2">
+                          {addErrorMsg}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()
+              ) : (
+                <>
                   <div>
-                    <label className="block text-[11px] font-bold text-emerald-800 uppercase tracking-widest mb-1.5">
-                      Привязка к игроку
+                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                      Дата операции
+                    </label>
+                    <input
+                      type="date"
+                      value={fDate}
+                      onChange={(e) => setFDate(e.target.value)}
+                      className="w-full p-2.5 bg-slate-50 border border-gray-200 focus:ring-1 focus:ring-emerald-500 outline-none rounded-xl font-mono text-sm"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                        Сумма (₽)
+                      </label>
+                      <input
+                        type="number"
+                        value={fAmount}
+                        onChange={(e) =>
+                          setFAmount(e.target.value.replace(/^0+(?=\d)/, ""))
+                        }
+                        className="w-full p-2.5 bg-slate-50 border border-gray-200 focus:ring-1 focus:ring-emerald-500 outline-none rounded-xl font-mono text-sm"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                        Месяц учета (P&L)
+                      </label>
+                      <input
+                        type="month"
+                        value={fTargetMonth}
+                        onChange={(e) => setFTargetMonth(e.target.value)}
+                        className="w-full p-2.5 bg-slate-50 border border-gray-200 focus:ring-1 focus:ring-emerald-500 outline-none rounded-xl font-mono text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                        Счет списания/зачисления
+                      </label>
+                      <select
+                        value={fAccount}
+                        onChange={(e) => setFAccount(e.target.value)}
+                        className="w-full p-2.5 bg-slate-50 border border-gray-200 outline-none rounded-xl text-sm font-semibold text-slate-800"
+                      >
+                        {calculatedAccounts.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name} (Баланс: {a.actualBalance.toLocaleString("ru-RU")} ₽)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                        Тип расхода
+                      </label>
+                      <select
+                        disabled={fType === "income"}
+                        value={fIsFixed ? "fixed" : "variable"}
+                        onChange={(e) => setFIsFixed(e.target.value === "fixed")}
+                        className="w-full p-2.5 bg-slate-50 border border-gray-200 outline-none rounded-xl text-sm font-semibold text-slate-800 disabled:opacity-50"
+                      >
+                        <option value="variable">Переменный расход</option>
+                        <option value="fixed">Постоянный расход</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                      Статья БДДС
                     </label>
                     <select
-                      value={fClientId}
-                      onChange={(e) => {
-                        const id = e.target.value;
-                        setFClientId(id);
-                        const found = clients.find((c) => c.id === id);
-                        if (found?.groupName) {
-                          setFGroupName(found.groupName);
-                        }
-                      }}
-                      className="w-full p-2.5 bg-white border border-emerald-200 outline-none rounded-xl text-xs font-bold text-slate-800"
+                      value={
+                        fCat ||
+                        financeCategories.find((c) => c.type === fType)?.id ||
+                        ""
+                      }
+                      onChange={(e) => setFCat(e.target.value)}
+                      className="w-full p-2.5 bg-slate-50 border border-gray-200 outline-none rounded-xl text-sm font-semibold text-slate-800"
                     >
-                      <option value="">
-                        Без привязки к игроку (общий доход)
-                      </option>
-                      {clients
-                        .filter((c) => c.status !== "inactive")
+                      {financeCategories
+                        .filter((c) => c.type === fType)
                         .map((c) => (
                           <option key={c.id} value={c.id}>
-                            {c.childSurname} {c.childName} (
-                            {c.groupName || "Без группы"})
+                            {c.name}
                           </option>
                         ))}
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-emerald-800 uppercase tracking-widest mb-1.5">
-                      Группа (необязательно)
-                    </label>
-                    <select
-                      value={fGroupName}
-                      onChange={(e) => setFGroupName(e.target.value)}
-                      className="w-full p-2.5 bg-white border border-emerald-200 outline-none rounded-xl text-xs font-bold text-slate-800"
-                    >
-                      <option value="">Без привязки к группе</option>
-                      {groups.map((g) => (
-                        <option key={g.id} value={g.name}>
-                          {g.name} ({g.coachName})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  {(fCat === "cat_in_subrent" ||
-                    financeCategories
-                      .find((c) => c.id === fCat)
-                      ?.name.toLowerCase()
-                      .includes("аренд")) && (
-                    <div className="sm:col-span-2 pt-2 border-t border-emerald-100">
-                      <label className="block text-[11px] font-bold text-emerald-800 uppercase tracking-widest mb-1.5">
-                        Площадка / Объект сдачи в аренду
+                  {fType === "income" && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3.5 bg-emerald-50/40 border border-emerald-100 rounded-xl">
+                      <div>
+                        <label className="block text-[11px] font-bold text-emerald-800 uppercase tracking-widest mb-1.5">
+                          Привязка к игроку
+                        </label>
+                        <select
+                          value={fClientId}
+                          onChange={(e) => {
+                            const id = e.target.value;
+                            setFClientId(id);
+                            const found = clients.find((c) => c.id === id);
+                            if (found?.groupName) {
+                              setFGroupName(found.groupName);
+                            }
+                          }}
+                          className="w-full p-2.5 bg-white border border-emerald-200 outline-none rounded-xl text-xs font-bold text-slate-800"
+                        >
+                          <option value="">
+                            Без привязки к игроку (общий доход)
+                          </option>
+                          {clients
+                            .filter((c) => c.status !== "inactive")
+                            .map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.childSurname} {c.childName} (
+                                {c.groupName || "Без группы"})
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-emerald-800 uppercase tracking-widest mb-1.5">
+                          Группа (необязательно)
+                        </label>
+                        <select
+                          value={fGroupName}
+                          onChange={(e) => setFGroupName(e.target.value)}
+                          className="w-full p-2.5 bg-white border border-emerald-200 outline-none rounded-xl text-xs font-bold text-slate-800"
+                        >
+                          <option value="">Без привязки к группе</option>
+                          {groups.map((g) => (
+                            <option key={g.id} value={g.name}>
+                              {g.name} ({g.coachName})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {(fCat === "cat_in_subrent" ||
+                        financeCategories
+                          .find((c) => c.id === fCat)
+                          ?.name.toLowerCase()
+                          .includes("аренд")) && (
+                        <div className="sm:col-span-2 pt-2 border-t border-emerald-100">
+                          <label className="block text-[11px] font-bold text-emerald-800 uppercase tracking-widest mb-1.5">
+                            Площадка / Объект сдачи в аренду
+                          </label>
+                          <select
+                            value={fCounterparty}
+                            onChange={(e) => setFCounterparty(e.target.value)}
+                            className="w-full p-2.5 bg-white border border-emerald-200 outline-none rounded-xl text-xs font-bold text-slate-800"
+                          >
+                            <option value="">
+                              Общая сдача в аренду (или укажите площадку в примечании)
+                            </option>
+                            {counterparties
+                              .filter(
+                                (cp) =>
+                                  cp.type === "school_rent" ||
+                                  cp.type === "hall_rent" ||
+                                  cp.type === "other",
+                              )
+                              .map((cp) => (
+                                <option key={cp.id} value={cp.id}>
+                                  {cp.name}
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {fType === "expense" && (
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                        Контрагент (кому платим)
                       </label>
                       <select
                         value={fCounterparty}
                         onChange={(e) => setFCounterparty(e.target.value)}
-                        className="w-full p-2.5 bg-white border border-emerald-200 outline-none rounded-xl text-xs font-bold text-slate-800"
+                        className="w-full p-2.5 bg-slate-50 border border-gray-200 outline-none rounded-xl text-sm font-medium text-slate-800"
                       >
-                        <option value="">
-                          Общая сдача в аренду (или укажите площадку в примечании)
-                        </option>
-                        {counterparties
-                          .filter(
-                            (cp) =>
-                              cp.type === "school_rent" ||
-                              cp.type === "hall_rent" ||
-                              cp.type === "other",
-                          )
-                          .map((cp) => (
-                            <option key={cp.id} value={cp.id}>
-                              {cp.name}
-                            </option>
-                          ))}
+                        <option value="">Без контрагента</option>
+                        {counterparties.map((cp) => (
+                          <option key={cp.id} value={cp.id}>
+                            {cp.name} ({cp.type === 'school_rent' ? 'Аренда школы' : cp.type === 'hall_rent' ? 'Аренда зала' : cp.type === 'coach' ? 'Тренер' : 'Другое'})
+                          </option>
+                        ))}
                       </select>
                     </div>
                   )}
-                </div>
-              )}
-              {fType === "expense" && (
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
-                    Контрагент (кому платим)
-                  </label>
-                  <select
-                    value={fCounterparty}
-                    onChange={(e) => setFCounterparty(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-gray-200 outline-none rounded-xl text-sm font-medium text-slate-800"
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                      Основание / Примечание
+                    </label>
+                    <input
+                      type="text"
+                      value={fDesc}
+                      onChange={(e) => setFDesc(e.target.value)}
+                      className="w-full p-2.5 bg-slate-50 border border-gray-200 outline-none rounded-xl text-sm"
+                      placeholder={
+                        fType === "income"
+                          ? "Напр., оплата разовой тренировки, экипировка, взнос..."
+                          : "За что произведена оплата?"
+                      }
+                    />
+                  </div>
+                  <button
+                    onClick={handleAddFinance}
+                    className="w-full py-3 bg-slate-900 text-white font-bold tracking-wide rounded-xl mt-4 hover:bg-slate-800 transition"
                   >
-                    <option value="">Без контрагента</option>
-                    {counterparties.map((cp) => (
-                      <option key={cp.id} value={cp.id}>
-                        {cp.name} ({cp.type === 'school_rent' ? 'Аренда школы' : cp.type === 'hall_rent' ? 'Аренда зала' : cp.type === 'coach' ? 'Тренер' : 'Другое'})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <div>
-                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
-                  Основание / Примечание
-                </label>
-                <input
-                  type="text"
-                  value={fDesc}
-                  onChange={(e) => setFDesc(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-gray-200 outline-none rounded-xl text-sm"
-                  placeholder={
-                    fType === "income"
-                      ? "Напр., оплата разовой тренировки, экипировка, взнос..."
-                      : "За что произведена оплата?"
-                  }
-                />
-              </div>
-              <button
-                onClick={handleAddFinance}
-                className="w-full py-3 bg-slate-900 text-white font-bold tracking-wide rounded-xl mt-4 hover:bg-slate-800 transition"
-              >
-                {fType === "income"
-                  ? fClientId
-                    ? "Провести доход с привязкой к игроку"
-                    : "Провести доход без привязки к игроку"
-                  : "Провести финансовую операцию"}
-              </button>
-              {addSuccessMsg && (
-                <p className="text-center text-sm font-bold text-emerald-600 mt-2">
-                  {addSuccessMsg}
-                </p>
-              )}
-              {addErrorMsg && (
-                <p className="text-center text-sm font-bold text-red-600 mt-2">
-                  {addErrorMsg}
-                </p>
+                    {fType === "income"
+                      ? fClientId
+                        ? "Провести доход с привязкой к игроку"
+                        : "Провести доход без привязки к игроку"
+                      : "Провести финансовую операцию"}
+                  </button>
+                  {addSuccessMsg && (
+                    <p className="text-center text-sm font-bold text-emerald-600 mt-2">
+                      {addSuccessMsg}
+                    </p>
+                  )}
+                  {addErrorMsg && (
+                    <p className="text-center text-sm font-bold text-red-600 mt-2">
+                      {addErrorMsg}
+                    </p>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -2179,15 +2564,28 @@ export const FinanceModule: React.FC = () => {
             periodFinances.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 
             const incomes = periodFinances
-              .filter((f) => f.type === "income")
+              .filter(
+                (f) =>
+                  f.type === "income" &&
+                  f.category !== "Перевод между счетами",
+              )
               .reduce((acc, f) => acc + Number(f.amount || 0), 0);
             const expenses = periodFinances
-              .filter((f) => f.type === "expense")
+              .filter(
+                (f) =>
+                  f.type === "expense" &&
+                  f.category !== "Перевод между счетами",
+              )
               .reduce((acc, f) => acc + Number(f.amount || 0), 0);
             const netFlow = incomes - expenses;
 
             const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
-            const todayFinances = finances.filter((f) => f.date === today && f.paymentStatus !== "accrued");
+            const todayFinances = finances.filter(
+              (f) =>
+                f.date === today &&
+                f.paymentStatus !== "accrued" &&
+                f.category !== "Перевод между счетами",
+            );
             const todayIncomesList = todayFinances.filter(
               (f) => f.type === "income",
             );
@@ -2261,8 +2659,18 @@ export const FinanceModule: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   {/* Остатки на счетах */}
                   <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm relative">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                      Остатки на счетах
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        Остатки на счетах
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => openTransferModal()}
+                        className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-md transition"
+                      >
+                        <ArrowRightLeft className="w-3 h-3" />
+                        <span>Перевод</span>
+                      </button>
                     </div>
                     <div className="flex justify-between items-end mb-4">
                       <span className="text-xs font-bold text-slate-500 mb-1">
@@ -2631,7 +3039,9 @@ export const FinanceModule: React.FC = () => {
 
             const getMonthData = (monthStr: string) => {
               const mFinances = finances.filter(
-                (f) => (f.targetMonth || f.date.substring(0, 7)) === monthStr,
+                (f) =>
+                  (f.targetMonth || f.date.substring(0, 7)) === monthStr &&
+                  f.category !== "Перевод между счетами",
               );
               const incomeTransactions = mFinances.filter(
                 (f) => f.type === "income",
@@ -5158,186 +5568,340 @@ export const FinanceModule: React.FC = () => {
               0,
             );
 
-            return (
-              <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4">
-                <div className="flex flex-col sm:flex-row justify-between sm:items-end border-b pb-6 mb-6 gap-4">
-                  <div>
-                    <h2 className="text-xl font-black text-slate-800">
-                      Внутренние Счета
-                    </h2>
-                    <p className="text-sm text-slate-500 font-medium">
-                      Мониторинг всех касс, расчетных счетов и эквайринга
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">
-                      Общий баланс
-                    </p>
-                    <p className="text-4xl font-black text-emerald-600 tracking-tight">
-                      {isFinanceSynced
-                        ? `${totalBalance.toLocaleString("ru-RU")} ₽`
-                        : "Синхронизация..."}
-                    </p>
-                  </div>
-                </div>
+            // Build paired transfer records for the history table
+            const transferExpenseRecords = finances
+              .filter(
+                (f) =>
+                  f.category === "Перевод между счетами" &&
+                  f.type === "expense",
+              )
+              .sort((a, b) => b.date.localeCompare(a.date));
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                  {processedAccounts.map((acc) => (
-                    <div
-                      key={acc.id}
-                      className="bg-white p-5 rounded-2xl border border-slate-200 flex flex-col justify-between min-h-[175px] shadow-xs hover:shadow-md hover:border-slate-300 transition-all relative"
-                    >
-                      {/* Top bar: Icon, Name, Badge, Actions */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                          <div
-                            className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                              acc.type === "cash"
-                                ? "bg-emerald-100 text-emerald-700"
-                                : acc.type === "bank"
-                                  ? "bg-blue-100 text-blue-700"
-                                  : acc.type === "acquiring"
-                                    ? "bg-violet-100 text-violet-700"
-                                    : "bg-slate-100 text-slate-700"
-                            }`}
-                          >
-                            {acc.type === "cash" ? (
-                              <Wallet className="w-4.5 h-4.5" />
-                            ) : acc.type === "bank" ? (
-                              <Building2 className="w-4.5 h-4.5" />
-                            ) : (
-                              <CreditCard className="w-4.5 h-4.5" />
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <h3
-                              className="font-bold text-slate-900 text-sm truncate"
-                              title={acc.name}
-                            >
-                              {acc.name}
-                            </h3>
-                            <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                              <span
-                                className={`inline-flex items-center text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase tracking-wider border ${
-                                  acc.type === "cash"
-                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                    : acc.type === "bank"
-                                      ? "bg-blue-50 text-blue-700 border-blue-200"
-                                      : acc.type === "acquiring"
-                                        ? "bg-violet-50 text-violet-700 border-violet-200"
-                                        : "bg-slate-100 text-slate-700 border-slate-200"
-                                }`}
-                              >
-                                {acc.type === "cash"
-                                  ? "Наличные"
+            const transferIncomeRecords = finances.filter(
+              (f) =>
+                f.category === "Перевод между счетами" && f.type === "income",
+            );
+
+            const pairedTransfers = transferExpenseRecords.map((exp) => {
+              const matchedInc = transferIncomeRecords.find(
+                (inc) =>
+                  inc.date === exp.date &&
+                  inc.amount === exp.amount &&
+                  inc.id !== exp.id &&
+                  (Math.abs(Number(inc.id) - Number(exp.id)) <= 5 ||
+                    inc.description === exp.description),
+              );
+              const fromAccObj = processedAccounts.find(
+                (a) => a.id === exp.accountId,
+              );
+              const toAccObj = matchedInc
+                ? processedAccounts.find((a) => a.id === matchedInc.accountId)
+                : undefined;
+
+              return {
+                id: exp.id,
+                incomeId: matchedInc?.id,
+                date: exp.date,
+                amount: exp.amount,
+                fromName: fromAccObj?.name || "Счет списания",
+                toName: toAccObj?.name || "Счет зачисления",
+                description: exp.description,
+              };
+            });
+
+            return (
+              <div className="space-y-6 max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4">
+                <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-end border-b pb-6 mb-6 gap-4">
+                    <div>
+                      <h2 className="text-xl font-black text-slate-800">
+                        Внутренние Счета
+                      </h2>
+                      <p className="text-sm text-slate-500 font-medium">
+                        Мониторинг всех касс, расчетных счетов и переводы между
+                        ними
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-4 justify-between sm:justify-end">
+                      {processedAccounts.length >= 2 && (
+                        <button
+                          onClick={() => openTransferModal()}
+                          className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md shadow-blue-500/20 transition flex items-center gap-2 cursor-pointer active:scale-95"
+                        >
+                          <ArrowRightLeft className="w-4 h-4" />
+                          Перевести между счетами
+                        </button>
+                      )}
+                      <div className="text-right">
+                        <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">
+                          Общий баланс
+                        </p>
+                        <p className="text-3xl sm:text-4xl font-black text-emerald-600 tracking-tight">
+                          {isFinanceSynced
+                            ? `${totalBalance.toLocaleString("ru-RU")} ₽`
+                            : "Синхронизация..."}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                    {processedAccounts.map((acc) => (
+                      <div
+                        key={acc.id}
+                        className="bg-white p-5 rounded-2xl border border-slate-200 flex flex-col justify-between min-h-[175px] shadow-xs hover:shadow-md hover:border-slate-300 transition-all relative"
+                      >
+                        {/* Top bar: Icon, Name, Badge, Actions */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <div
+                              className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                                acc.type === "cash"
+                                  ? "bg-emerald-100 text-emerald-700"
                                   : acc.type === "bank"
-                                    ? "Расч. счет"
+                                    ? "bg-blue-100 text-blue-700"
                                     : acc.type === "acquiring"
-                                      ? "Эквайринг"
-                                      : "Счет"}
-                              </span>
+                                      ? "bg-violet-100 text-violet-700"
+                                      : "bg-slate-100 text-slate-700"
+                              }`}
+                            >
+                              {acc.type === "cash" ? (
+                                <Wallet className="w-4.5 h-4.5" />
+                              ) : acc.type === "bank" ? (
+                                <Building2 className="w-4.5 h-4.5" />
+                              ) : (
+                                <CreditCard className="w-4.5 h-4.5" />
+                              )}
                             </div>
+                            <div className="min-w-0 flex-1">
+                              <h3
+                                className="font-bold text-slate-900 text-sm truncate"
+                                title={acc.name}
+                              >
+                                {acc.name}
+                              </h3>
+                              <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                                <span
+                                  className={`inline-flex items-center text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase tracking-wider border ${
+                                    acc.type === "cash"
+                                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                      : acc.type === "bank"
+                                        ? "bg-blue-50 text-blue-700 border-blue-200"
+                                        : acc.type === "acquiring"
+                                          ? "bg-violet-50 text-violet-700 border-violet-200"
+                                          : "bg-slate-100 text-slate-700 border-slate-200"
+                                  }`}
+                                >
+                                  {acc.type === "cash"
+                                    ? "Наличные"
+                                    : acc.type === "bank"
+                                      ? "Расч. счет"
+                                      : acc.type === "acquiring"
+                                        ? "Эквайринг"
+                                        : "Счет"}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Action buttons */}
+                          <div className="flex items-center gap-1 shrink-0 bg-slate-50 p-1 rounded-xl border border-slate-100">
+                            <button
+                              onClick={() => openTransferModal(acc.id)}
+                              className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Перевод средств"
+                            >
+                              <ArrowRightLeft className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingAccount(acc.id);
+                                setEditAccName(acc.name);
+                                setEditAccBalance(acc.actualBalance);
+                              }}
+                              className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                              title="Редактировать"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            {deletingAccountId === acc.id ? (
+                              <div className="flex items-center gap-1 bg-rose-50 px-1.5 py-0.5 rounded-lg border border-rose-200">
+                                <button
+                                  onClick={() => {
+                                    deleteAccount(acc.id);
+                                    setDeletingAccountId(null);
+                                  }}
+                                  className="text-[10px] font-black text-rose-600 hover:text-rose-800 px-1"
+                                  title="Подтвердить удаление"
+                                >
+                                  Да
+                                </button>
+                                <button
+                                  onClick={() => setDeletingAccountId(null)}
+                                  className="text-[10px] font-bold text-slate-500 hover:text-slate-700 px-1"
+                                  title="Отмена"
+                                >
+                                  Нет
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setDeletingAccountId(acc.id)}
+                                className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                title="Удалить"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </div>
 
-                        {/* Action buttons */}
-                        <div className="flex items-center gap-1 shrink-0 bg-slate-50 p-1 rounded-xl border border-slate-100">
+                        {/* Balance & Subtitle */}
+                        <div className="mt-4 pt-3 border-t border-slate-100 flex items-end justify-between gap-2">
+                          <div className="min-w-0">
+                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+                              Текущий остаток
+                            </span>
+                            <div className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight truncate">
+                              {acc.actualBalance.toLocaleString("ru-RU")}&nbsp;₽
+                            </div>
+                          </div>
                           <button
-                            onClick={() => {
-                              setTransferFromAcc(acc.id);
-                              setTransferToAcc("");
-                              setTransferAmount("");
-                            }}
-                            className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Перевод средств"
+                            onClick={() => openTransferModal(acc.id)}
+                            className="px-2.5 py-1 text-[11px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors shrink-0 flex items-center gap-1 cursor-pointer"
                           >
-                            <ArrowRightLeft className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              setEditingAccount(acc.id);
-                              setEditAccName(acc.name);
-                              setEditAccBalance(acc.actualBalance);
-                            }}
-                            className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-                            title="Редактировать"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              if (
-                                window.confirm(
-                                  "Удалить этот счет? Операции по нему не будут удалены, но могут перестать отображаться корректно.",
-                                )
-                              )
-                                deleteAccount(acc.id);
-                            }}
-                            className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                            title="Удалить"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <ArrowRightLeft className="w-3 h-3" /> Перевод
                           </button>
                         </div>
                       </div>
+                    ))}
 
-                      {/* Balance & Subtitle */}
-                      <div className="mt-4 pt-3 border-t border-slate-100 flex items-end justify-between gap-2">
-                        <div className="min-w-0">
-                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
-                            Текущий остаток
-                          </span>
-                          <div className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight truncate">
-                            {acc.actualBalance.toLocaleString("ru-RU")}&nbsp;₽
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => {
-                            setTransferFromAcc(acc.id);
-                            setTransferToAcc("");
-                            setTransferAmount("");
-                          }}
-                          className="px-2.5 py-1 text-[11px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors shrink-0 flex items-center gap-1"
+                    {/* Create New Account Form */}
+                    <div className="bg-slate-50/70 p-5 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col justify-between min-h-[175px] hover:bg-slate-50 transition">
+                      <div>
+                        <span className="text-xs font-bold text-slate-600 uppercase tracking-wider block mb-2">
+                          + Новый счет
+                        </span>
+                        <input
+                          type="text"
+                          placeholder="Название счета"
+                          value={newAccName}
+                          onChange={(e) => setNewAccName(e.target.value)}
+                          className="w-full text-xs p-2.5 rounded-xl border border-slate-200 font-bold outline-none focus:border-emerald-500 bg-white"
+                        />
+                      </div>
+                      <div className="flex gap-2 mt-3">
+                        <select
+                          value={newAccType}
+                          onChange={(e) => setNewAccType(e.target.value as any)}
+                          className="w-1/2 text-xs p-2 rounded-xl border border-slate-200 font-bold outline-none focus:border-emerald-500 bg-white cursor-pointer"
                         >
-                          <ArrowRightLeft className="w-3 h-3" /> Перевод
+                          <option value="cash">Наличные</option>
+                          <option value="bank">Расч. счет</option>
+                          <option value="acquiring">Эквайринг</option>
+                          <option value="other">Другое</option>
+                        </select>
+                        <button
+                          onClick={handleAddAccount}
+                          className="w-1/2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition active:scale-95 flex items-center justify-center gap-1 py-2"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Добавить
                         </button>
                       </div>
                     </div>
-                  ))}
-
-                  {/* Create New Account Form */}
-                  <div className="bg-slate-50/70 p-5 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col justify-between min-h-[175px] hover:bg-slate-50 transition">
-                    <div>
-                      <span className="text-xs font-bold text-slate-600 uppercase tracking-wider block mb-2">
-                        + Новый счет
-                      </span>
-                      <input
-                        type="text"
-                        placeholder="Название счета"
-                        value={newAccName}
-                        onChange={(e) => setNewAccName(e.target.value)}
-                        className="w-full text-xs p-2.5 rounded-xl border border-slate-200 font-bold outline-none focus:border-emerald-500 bg-white"
-                      />
-                    </div>
-                    <div className="flex gap-2 mt-3">
-                      <select
-                        value={newAccType}
-                        onChange={(e) => setNewAccType(e.target.value as any)}
-                        className="w-1/2 text-xs p-2 rounded-xl border border-slate-200 font-bold outline-none focus:border-emerald-500 bg-white cursor-pointer"
-                      >
-                        <option value="cash">Наличные</option>
-                        <option value="bank">Расч. счет</option>
-                        <option value="acquiring">Эквайринг</option>
-                        <option value="other">Другое</option>
-                      </select>
-                      <button
-                        onClick={handleAddAccount}
-                        className="w-1/2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition active:scale-95 flex items-center justify-center gap-1 py-2"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Добавить
-                      </button>
-                    </div>
                   </div>
+                </div>
+
+                {/* История переводов между счетами */}
+                <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-4">
+                    <div>
+                      <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
+                        <ArrowRightLeft className="w-4 h-4 text-blue-600" />
+                        История переводов между счетами
+                      </h3>
+                      <p className="text-xs text-slate-500 font-medium">
+                        Внутренние перемещения средств меняют остатки на счетах,
+                        но не задваивают внешнюю выручку и расходы школы
+                      </p>
+                    </div>
+                    <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-lg self-start sm:self-auto">
+                      Всего операций: {pairedTransfers.length}
+                    </span>
+                  </div>
+
+                  {pairedTransfers.length === 0 ? (
+                    <div className="text-center py-8 bg-slate-50/60 rounded-xl border border-dashed border-slate-200">
+                      <ArrowRightLeft className="w-7 h-7 text-slate-300 mx-auto mb-2" />
+                      <p className="text-xs font-bold text-slate-500">
+                        Переводов между счетами пока не было
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Нажмите «Перевести между счетами», чтобы переместить
+                        средства (например, инкассация наличных на расчетный
+                        счет)
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                            <th className="py-2.5 px-3">Дата</th>
+                            <th className="py-2.5 px-3">Направление перевода</th>
+                            <th className="py-2.5 px-3">Комментарий</th>
+                            <th className="py-2.5 px-3 text-right">Сумма</th>
+                            <th className="py-2.5 px-3 text-right">Действие</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-xs">
+                          {pairedTransfers.map((tr) => (
+                            <tr
+                              key={tr.id}
+                              className="hover:bg-slate-50/80 transition-colors"
+                            >
+                              <td className="py-3 px-3 font-bold text-slate-600 whitespace-nowrap">
+                                {tr.date.split("-").reverse().join(".")}
+                              </td>
+                              <td className="py-3 px-3">
+                                <div className="flex items-center gap-2 font-bold text-slate-800 flex-wrap">
+                                  <span className="px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-100 text-[11px]">
+                                    {tr.fromName}
+                                  </span>
+                                  <span className="text-blue-500 font-black">
+                                    →
+                                  </span>
+                                  <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100 text-[11px]">
+                                    {tr.toName}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="py-3 px-3 text-slate-500 font-medium max-w-xs truncate">
+                                {tr.description}
+                              </td>
+                              <td className="py-3 px-3 text-right font-black text-blue-600 whitespace-nowrap">
+                                {tr.amount.toLocaleString("ru-RU")} ₽
+                              </td>
+                              <td className="py-3 px-3 text-right whitespace-nowrap">
+                                <button
+                                  onClick={() =>
+                                    handleDeleteTransferPair(
+                                      tr.id,
+                                      tr.incomeId,
+                                    )
+                                  }
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                  title="Отменить перевод (вернуть балансы)"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -6510,84 +7074,243 @@ export const FinanceModule: React.FC = () => {
       )}
 
       {/* Transfer Funds Modal */}
-      {transferFromAcc && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 md:p-8 w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-200">
-            <h3 className="text-xl font-black text-slate-900 mb-6">
-              Перевод средств
-            </h3>
+      {transferFromAcc &&
+        (() => {
+          const fromAccObj = calculatedAccounts.find(
+            (a) => a.id === transferFromAcc,
+          );
+          const toAccObj = calculatedAccounts.find(
+            (a) => a.id === transferToAcc,
+          );
+          const parsedAmt = Number(transferAmount) || 0;
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                  Счет списания
-                </label>
-                <div className="w-full bg-slate-100 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-600">
-                  {accounts.find((a) => a.id === transferFromAcc)?.name ||
-                    "Неизвестный счет"}
+          return (
+            <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl p-6 md:p-8 w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-200">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                      <ArrowRightLeft className="w-5 h-5 text-blue-600" />
+                      Перевод между счетами
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium mt-0.5">
+                      Перемещение средств без задвоения выручки и расходов
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setTransferFromAcc(null)}
+                    className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Счет списания */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                      Откуда (Счет списания)
+                    </label>
+                    <select
+                      value={transferFromAcc}
+                      onChange={(e) => {
+                        const newFrom = e.target.value;
+                        setTransferFromAcc(newFrom);
+                        if (newFrom === transferToAcc) {
+                          const alt = calculatedAccounts.find(
+                            (a) => a.id !== newFrom,
+                          );
+                          setTransferToAcc(alt ? alt.id : "");
+                        }
+                      }}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    >
+                      {calculatedAccounts.map((acc) => (
+                        <option key={acc.id} value={acc.id}>
+                          {acc.name} (Доступно:{" "}
+                          {acc.actualBalance.toLocaleString("ru-RU")} ₽)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Кнопка рокировки счетов */}
+                  <div className="flex justify-center -my-2 relative z-10">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (transferFromAcc && transferToAcc) {
+                          const prevFrom = transferFromAcc;
+                          setTransferFromAcc(transferToAcc);
+                          setTransferToAcc(prevFrom);
+                        }
+                      }}
+                      title="Поменять счета местами"
+                      className="p-2 rounded-full bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 transition shadow-xs cursor-pointer active:scale-95"
+                    >
+                      <ArrowRightLeft className="w-4 h-4 rotate-90" />
+                    </button>
+                  </div>
+
+                  {/* Счет зачисления */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                      Куда (Счет зачисления)
+                    </label>
+                    <select
+                      value={transferToAcc}
+                      onChange={(e) => setTransferToAcc(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                    >
+                      <option value="" disabled>
+                        Выберите счет зачисления
+                      </option>
+                      {calculatedAccounts
+                        .filter((a) => a.id !== transferFromAcc)
+                        .map((acc) => (
+                          <option key={acc.id} value={acc.id}>
+                            {acc.name} (Баланс:{" "}
+                            {acc.actualBalance.toLocaleString("ru-RU")} ₽)
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  {/* Сумма перевода + быстрые чипсы */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        Сумма перевода (₽)
+                      </label>
+                      {fromAccObj && fromAccObj.actualBalance > 0 && (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setTransferAmount(
+                                String(Math.round(fromAccObj.actualBalance / 2)),
+                              )
+                            }
+                            className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 transition"
+                          >
+                            50%
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setTransferAmount(
+                                String(fromAccObj.actualBalance),
+                              )
+                            }
+                            className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 transition"
+                          >
+                            Весь остаток (
+                            {fromAccObj.actualBalance.toLocaleString("ru-RU")} ₽)
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <input
+                      type="number"
+                      placeholder="Введите сумму..."
+                      value={transferAmount}
+                      onChange={(e) =>
+                        setTransferAmount(
+                          e.target.value.replace(/^0+(?=\d)/, ""),
+                        )
+                      }
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-base font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    />
+                  </div>
+
+                  {/* Предпросмотр остатков после перевода */}
+                  {fromAccObj && toAccObj && parsedAmt > 0 && (
+                    <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-200/80 grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block">
+                          Останется на «{fromAccObj.name}»
+                        </span>
+                        <span
+                          className={`font-black text-sm ${
+                            fromAccObj.actualBalance - parsedAmt < 0
+                              ? "text-rose-600"
+                              : "text-slate-800"
+                          }`}
+                        >
+                          {(
+                            fromAccObj.actualBalance - parsedAmt
+                          ).toLocaleString("ru-RU")}{" "}
+                          ₽
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block">
+                          Станет на «{toAccObj.name}»
+                        </span>
+                        <span className="font-black text-sm text-emerald-600">
+                          {(
+                            toAccObj.actualBalance + parsedAmt
+                          ).toLocaleString("ru-RU")}{" "}
+                          ₽
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Дата и Комментарий */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Дата
+                      </label>
+                      <input
+                        type="date"
+                        value={transferDate}
+                        onChange={(e) => setTransferDate(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Комментарий
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Инкассация / пополнение..."
+                        value={transferComment}
+                        onChange={(e) => setTransferComment(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-7 flex gap-3 justify-end">
+                  <button
+                    onClick={() => setTransferFromAcc(null)}
+                    className="px-5 py-2.5 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    onClick={handleTransferSubmit}
+                    disabled={
+                      !transferFromAcc ||
+                      !transferToAcc ||
+                      transferFromAcc === transferToAcc ||
+                      !transferAmount ||
+                      parsedAmt <= 0
+                    }
+                    className="px-5 py-2.5 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <ArrowRightLeft className="w-4 h-4" />
+                    Перевести
+                  </button>
                 </div>
               </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                  Счет зачисления
-                </label>
-                <select
-                  value={transferToAcc}
-                  onChange={(e) => setTransferToAcc(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
-                >
-                  <option value="" disabled>
-                    Выберите счет
-                  </option>
-                  {calculatedAccounts
-                    .filter((a) => a.id !== transferFromAcc)
-                    .map((acc) => (
-                      <option key={acc.id} value={acc.id}>
-                        {acc.name} (Баланс: {acc.actualBalance.toLocaleString("ru-RU")} ₽)
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                  Сумма перевода
-                </label>
-                <input
-                  type="number"
-                  placeholder="0.00"
-                  value={transferAmount}
-                  onChange={(e) =>
-                    setTransferAmount(e.target.value.replace(/^0+(?=\d)/, ""))
-                  }
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                />
-              </div>
             </div>
-
-            <div className="mt-8 flex gap-3 justify-end">
-              <button
-                onClick={() => setTransferFromAcc(null)}
-                className="px-5 py-2.5 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
-              >
-                Отмена
-              </button>
-              <button
-                onClick={handleTransferSubmit}
-                disabled={
-                  !transferToAcc ||
-                  !transferAmount ||
-                  Number(transferAmount) <= 0
-                }
-                className="px-5 py-2.5 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Перевести
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          );
+        })()}
 
       {/* Payout Modal (Salary / Venue Rent) */}
       {payoutModalOpen && (
