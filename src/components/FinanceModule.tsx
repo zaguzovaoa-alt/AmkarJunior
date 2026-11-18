@@ -68,6 +68,7 @@ export const FinanceModule: React.FC = () => {
     clients,
     groups,
     accounts,
+    isFinanceSynced,
     overwriteFinances,
     financeCategories,
     addFinanceCategory,
@@ -1689,7 +1690,9 @@ export const FinanceModule: React.FC = () => {
                     Всего
                   </span>
                   <span className="text-lg font-black font-mono text-slate-900">
-                    {dashboardData.totalBalance.toLocaleString()} ₽
+                    {isFinanceSynced
+                      ? `${dashboardData.totalBalance.toLocaleString("ru-RU")} ₽`
+                      : "Синхронизация..."}
                   </span>
                 </div>
               </div>
@@ -2266,7 +2269,9 @@ export const FinanceModule: React.FC = () => {
                         Всего
                       </span>
                       <span className="text-xl font-black text-slate-900">
-                        {dashboardData.totalBalance.toLocaleString("ru-RU")} ₽
+                        {isFinanceSynced
+                          ? `${dashboardData.totalBalance.toLocaleString("ru-RU")} ₽`
+                          : "Синхронизация..."}
                       </span>
                     </div>
                     <div className="space-y-2">
@@ -5169,7 +5174,9 @@ export const FinanceModule: React.FC = () => {
                       Общий баланс
                     </p>
                     <p className="text-4xl font-black text-emerald-600 tracking-tight">
-                      {totalBalance.toLocaleString("ru-RU")} ₽
+                      {isFinanceSynced
+                        ? `${totalBalance.toLocaleString("ru-RU")} ₽`
+                        : "Синхронизация..."}
                     </p>
                   </div>
                 </div>

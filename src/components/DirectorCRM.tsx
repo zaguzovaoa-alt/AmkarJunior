@@ -328,6 +328,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
     appendCoaches,
     currentRole,
     accounts,
+    isFinanceSynced,
     counterparties,
     cancelledSessions,
     addCancelledSession,
@@ -2311,7 +2312,13 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
                     </span>
                   </div>
                   <div className="text-xl sm:text-2xl font-black text-slate-900 mt-1 tracking-tight">
-                    {totalBalance.toLocaleString("ru-RU")} ₽
+                    {isFinanceSynced ? (
+                      `${totalBalance.toLocaleString("ru-RU")} ₽`
+                    ) : (
+                      <span className="text-sm font-bold text-slate-400 animate-pulse">
+                        Синхронизация...
+                      </span>
+                    )}
                   </div>
                 </div>
                 <MiniSparklineChart
@@ -3628,7 +3635,13 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
                       <div className="pt-2 border-t border-slate-100">
                         <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Остаток на счетах</div>
                         <div className="text-base font-black text-slate-800 font-mono tracking-tight mt-0.5">
-                          {totalBalance.toLocaleString("ru-RU")} ₽
+                          {isFinanceSynced ? (
+                            `${totalBalance.toLocaleString("ru-RU")} ₽`
+                          ) : (
+                            <span className="text-xs font-bold text-slate-400 animate-pulse">
+                              Синхронизация...
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>

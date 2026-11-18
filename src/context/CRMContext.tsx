@@ -88,6 +88,7 @@ interface CRMContextType {
   updateCounterparty: (id: string, updates: Partial<Counterparty>) => Promise<void>;
   deleteCounterparty: (id: string) => Promise<void>;
   accounts: Account[];
+  isFinanceSynced: boolean;
   addAccount: (acc: Omit<Account, "id">) => Promise<void>;
   updateAccount: (
     id: string,
@@ -487,17 +488,91 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       const rawNotified = localStorage.getItem("amkar_notified_leads");
       if (rawNotified) notifiedMap = JSON.parse(rawNotified);
     } catch {}
+    try {
+      const cachedLeads = localStorage.getItem("amkar_leads_cache");
+      if (cachedLeads) {
+        const parsed = JSON.parse(cachedLeads);
+        if (Array.isArray(parsed)) {
+          return parsed.map((l: Lead) => ({
+            ...l,
+            telegramNotified: Boolean(l.telegramNotified || notifiedMap[l.id]),
+          }));
+        }
+      }
+    } catch {}
     return INITIAL_LEADS.map((l) => ({
       ...l,
       telegramNotified: Boolean(l.telegramNotified || notifiedMap[l.id]),
     }));
   });
-  const [clients, setClients] = useState<Client[]>(INITIAL_CLIENTS);
-  const [tasks, setTasks] = useState<CRMTask[]>(INITIAL_TASKS);
-  const [coaches, setCoaches] = useState<Coach[]>(INITIAL_COACHES);
-  const [groups, setGroups] = useState<TrainingGroup[]>(INITIAL_GROUPS);
-  const [finances, setFinances] = useState<FinanceRecord[]>(INITIAL_FINANCES);
-  const [accounts, setAccounts] = useState<Account[]>(INITIAL_ACCOUNTS);
+  const [clients, setClients] = useState<Client[]>(() => {
+    try {
+      const cached = localStorage.getItem("amkar_clients_cache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return INITIAL_CLIENTS;
+  });
+  const [tasks, setTasks] = useState<CRMTask[]>(() => {
+    try {
+      const cached = localStorage.getItem("amkar_tasks_cache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return INITIAL_TASKS;
+  });
+  const [coaches, setCoaches] = useState<Coach[]>(() => {
+    try {
+      const cached = localStorage.getItem("amkar_coaches_cache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return INITIAL_COACHES;
+  });
+  const [groups, setGroups] = useState<TrainingGroup[]>(() => {
+    try {
+      const cached = localStorage.getItem("amkar_groups_cache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return INITIAL_GROUPS;
+  });
+
+  // Read accounts & finances as a mutually consistent cached pair so totalBalance never jumps through intermediate values
+  const initialFinanceCache = (() => {
+    try {
+      const rawAcc = localStorage.getItem("amkar_accounts_cache");
+      const rawFin = localStorage.getItem("amkar_finances_cache");
+      if (rawAcc && rawFin) {
+        const parsedAcc = JSON.parse(rawAcc);
+        const parsedFin = JSON.parse(rawFin);
+        if (Array.isArray(parsedAcc) && parsedAcc.length > 0 && Array.isArray(parsedFin)) {
+          return {
+            accounts: parsedAcc as Account[],
+            finances: parsedFin as FinanceRecord[],
+            synced: true,
+          };
+        }
+      }
+    } catch {}
+    return {
+      accounts: INITIAL_ACCOUNTS,
+      finances: INITIAL_FINANCES,
+      synced: false,
+    };
+  })();
+
+  const [finances, setFinances] = useState<FinanceRecord[]>(initialFinanceCache.finances);
+  const [accounts, setAccounts] = useState<Account[]>(initialFinanceCache.accounts);
+  const [isFinanceSynced, setIsFinanceSynced] = useState<boolean>(initialFinanceCache.synced);
   const [financeCategories, setFinanceCategories] = useState<FinanceCategory[]>(
     () => {
       const cached = localStorage.getItem("amkar_finance_categories");
@@ -581,7 +656,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     return cached ? JSON.parse(cached) : INITIAL_CANCELLED_SESSIONS;
   });
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [firebaseReady, setFirebaseReady] = useState(false);
+  const [firebaseReady, setFirebaseReady] = useState(true);
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
 
   const dismissFirestoreError = () => {
@@ -834,14 +909,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         const configDocRef = doc(db, "_config", "initialized");
         const configDoc = await getDoc(configDocRef);
 
-        // Retrieve groups to verify if seeding is needed (e.g., if collections got cleared but config remained)
-        let shouldSeed = !configDoc.exists();
-        if (!shouldSeed) {
-          const testGroups = await getDocs(collection(db, "groups"));
-          if (testGroups.empty) {
-            shouldSeed = true;
-          }
-        }
+        const shouldSeed = !configDoc.exists();
 
         if (shouldSeed) {
           console.log(
@@ -1017,6 +1085,67 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     };
 
+    // Synchronize accounts and finances snapshots so totalBalance never renders a half-loaded state (e.g. 6300 before 79533)
+    let accountsSnapshotReceived = false;
+    let financesSnapshotReceived = false;
+    let pendingAccounts: Account[] = [];
+    let pendingFinances: FinanceRecord[] = [];
+
+    const flushSynchronizedFinance = () => {
+      if (accountsSnapshotReceived && financesSnapshotReceived) {
+        setAccounts(pendingAccounts);
+        setFinances(pendingFinances);
+        setIsFinanceSynced(true);
+        try {
+          localStorage.setItem(
+            "amkar_accounts_cache",
+            JSON.stringify(pendingAccounts),
+          );
+          localStorage.setItem(
+            "amkar_finances_cache",
+            JSON.stringify(pendingFinances),
+          );
+        } catch {}
+      }
+    };
+
+    const unsubAccounts = onSnapshot(
+      collection(db, "accounts"),
+      (snapshot) => {
+        const list: Account[] = [];
+        snapshot.forEach((docSnap) => {
+          list.push(docSnap.data() as Account);
+        });
+        list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+        if (list.length === 0) {
+          INITIAL_ACCOUNTS.forEach((acc) => {
+            setDoc(doc(db, "accounts", acc.id), acc).catch(() => {});
+          });
+          pendingAccounts = INITIAL_ACCOUNTS;
+        } else {
+          pendingAccounts = list;
+        }
+        accountsSnapshotReceived = true;
+        flushSynchronizedFinance();
+      },
+      (err) => handleSnapshotErr(err, "accounts"),
+    );
+
+    const unsubFinances = onSnapshot(
+      collection(db, "finances"),
+      (snapshot) => {
+        const list: FinanceRecord[] = [];
+        snapshot.forEach((docSnap) => {
+          list.push(docSnap.data() as FinanceRecord);
+        });
+        list.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+        pendingFinances = list;
+        financesSnapshotReceived = true;
+        flushSynchronizedFinance();
+      },
+      (err) => handleSnapshotErr(err, "finances"),
+    );
+
     const unsubLeads = onSnapshot(
       collection(db, "leads"),
       (snapshot) => {
@@ -1036,6 +1165,9 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         });
 
         setLeads(list);
+        try {
+          localStorage.setItem("amkar_leads_cache", JSON.stringify(list));
+        } catch {}
       },
       (err) => handleSnapshotErr(err, "leads"),
     );
@@ -1048,6 +1180,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
           list.push(doc.data() as Client);
         });
         setClients(list);
+        try {
+          // Cache lightweight client summaries without large embedded base64 strings if any
+          localStorage.setItem("amkar_clients_cache", JSON.stringify(list));
+        } catch {}
       },
       (err) => handleSnapshotErr(err, "clients"),
     );
@@ -1060,6 +1196,9 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
           list.push(doc.data() as CRMTask);
         });
         setTasks(list);
+        try {
+          localStorage.setItem("amkar_tasks_cache", JSON.stringify(list));
+        } catch {}
       },
       (err) => handleSnapshotErr(err, "tasks"),
     );
@@ -1121,6 +1260,9 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         });
 
         setCoaches(deduped);
+        try {
+          localStorage.setItem("amkar_coaches_cache", JSON.stringify(deduped));
+        } catch {}
       },
       (err) => handleSnapshotErr(err, "coaches"),
     );
@@ -1193,21 +1335,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
           list.push(doc.data() as TrainingGroup);
         });
         setGroups(list);
+        try {
+          localStorage.setItem("amkar_groups_cache", JSON.stringify(list));
+        } catch {}
       },
       (err) => handleSnapshotErr(err, "groups"),
-    );
-
-    const unsubFinances = onSnapshot(
-      collection(db, "finances"),
-      (snapshot) => {
-        const list: FinanceRecord[] = [];
-        snapshot.forEach((doc) => {
-          list.push(doc.data() as FinanceRecord);
-        });
-        list.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-        setFinances(list);
-      },
-      (err) => handleSnapshotErr(err, "finances"),
     );
 
     const unsubTrainingSessions = onSnapshot(
@@ -1248,26 +1380,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         setNotifications(list);
       },
       (err) => handleSnapshotErr(err, "notifications"),
-    );
-
-    const unsubAccounts = onSnapshot(
-      collection(db, "accounts"),
-      (snapshot) => {
-        const list: Account[] = [];
-        snapshot.forEach((doc) => {
-          list.push(doc.data() as Account);
-        });
-        list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-        if (list.length === 0) {
-          // Init default if entirely empty empty
-          INITIAL_ACCOUNTS.forEach((acc) => {
-            setDoc(doc(db, "accounts", acc.id), acc).catch(() => {});
-          });
-        } else {
-          setAccounts(list);
-        }
-      },
-      (err) => handleSnapshotErr(err, "accounts"),
     );
 
     const unsubCounterparties = onSnapshot(
@@ -1517,11 +1629,35 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [financialPlans]);
 
   useEffect(() => {
-    localStorage.setItem(
-      "amkar_training_sessions",
-      JSON.stringify(trainingSessions),
-    );
+    try {
+      // Avoid quota overflow by stripping heavy base64 payloads only in localStorage fallback cache
+      const lightweightSessions = trainingSessions.map((s) => ({
+        ...s,
+        photoUrl:
+          s.photoUrl && s.photoUrl.startsWith("data:") && s.photoUrl.length > 2000
+            ? undefined
+            : s.photoUrl,
+        lessonPlanPhotoUrl:
+          s.lessonPlanPhotoUrl &&
+          s.lessonPlanPhotoUrl.startsWith("data:") &&
+          s.lessonPlanPhotoUrl.length > 2000
+            ? undefined
+            : s.lessonPlanPhotoUrl,
+      }));
+      localStorage.setItem(
+        "amkar_training_sessions",
+        JSON.stringify(lightweightSessions),
+      );
+    } catch {}
   }, [trainingSessions]);
+
+  useEffect(() => {
+    if (!isFinanceSynced) return;
+    try {
+      localStorage.setItem("amkar_accounts_cache", JSON.stringify(accounts));
+      localStorage.setItem("amkar_finances_cache", JSON.stringify(finances));
+    } catch {}
+  }, [accounts, finances, isFinanceSynced]);
 
   // Hook to poll webhooks periodically
   useEffect(() => {
@@ -4720,6 +4856,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         appendFinances,
         appendCoaches,
         accounts,
+        isFinanceSynced,
         addAccount,
         updateAccount,
         deleteAccount,
