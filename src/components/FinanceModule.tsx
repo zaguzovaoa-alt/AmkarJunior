@@ -3,7 +3,7 @@ import { HeaderDescription } from "./HeaderDescription";
 import { toYearMonthString, formatSessionDateDisplay } from "../utils/dateUtils";
 import { db } from "../firebase";
 import { setDoc, doc, updateDoc } from "firebase/firestore";
-import { useCRM } from "../context/CRMContext";
+import { useCRM, INITIAL_FINANCE_CATEGORIES } from "../context/CRMContext";
 import { Counterparty } from "../types";
 import {
   TrendingUp,
@@ -470,40 +470,7 @@ export const FinanceModule: React.FC = () => {
     setLastDeletedCat(null);
   };
 
-  const defaultSystemCategories: Array<{
-    id: string;
-    type: "income" | "expense";
-    name: string;
-    isSystem: boolean;
-    expenseType?: "variable" | "fixed";
-  }> = [
-    { id: "cat_in_ab", type: "income", name: "Абонементы", isSystem: true },
-    {
-      id: "cat_in_ab12",
-      type: "income",
-      name: "Абонементы 12 занятий",
-      isSystem: true,
-    },
-    {
-      id: "cat_in_1tr",
-      type: "income",
-      name: "Разовые тренировки",
-      isSystem: true,
-    },
-    {
-      id: "cat_in_subrent",
-      type: "income",
-      name: "Сдача площадок в аренду",
-      isSystem: true,
-    },
-    {
-      id: "cat_ex_acq",
-      type: "expense",
-      name: "Эквайринг (Комиссия ЮKassa)",
-      isSystem: true,
-      expenseType: "variable",
-    },
-  ];
+  const defaultSystemCategories = INITIAL_FINANCE_CATEGORIES;
 
   // Sublease / Venue Rental Income states
   const [subrentVenueId, setSubrentVenueId] = useState<string>("");
@@ -574,15 +541,45 @@ export const FinanceModule: React.FC = () => {
   const missingSystemCategories = defaultSystemCategories.filter(
     (sys) =>
       !financeCategories.some(
-        (c) => c.id === sys.id || (c.name === sys.name && c.type === sys.type),
+        (c) =>
+          c.id === sys.id ||
+          (c.name.trim().toLowerCase() === sys.name.trim().toLowerCase() &&
+            c.type === sys.type),
       ),
   );
 
   const handleRestoreSystemCategories = async () => {
-    for (const sys of missingSystemCategories) {
-      await addFinanceCategory(sys);
+    if (missingSystemCategories.length === 0) return;
+    const merged = [...financeCategories, ...missingSystemCategories];
+    try {
+      localStorage.setItem("amkar_finance_categories", JSON.stringify(merged));
+      localStorage.setItem("amkar_deleted_finance_categories", "[]");
+      await setDoc(
+        doc(db, "_config", "finance_categories"),
+        {
+          items: merged.map((item) => {
+            const clean: Record<string, any> = {
+              id: item.id,
+              name: item.name,
+              type: item.type,
+            };
+            if (item.isSystem !== undefined) clean.isSystem = item.isSystem;
+            if (item.expenseType !== undefined)
+              clean.expenseType = item.expenseType;
+            return clean;
+          }),
+          deletedIds: [],
+          restoredVersion: 2,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true },
+      );
+      showNotification(
+        `Восстановлено статей: ${missingSystemCategories.length}`,
+      );
+    } catch (e) {
+      console.error("Failed to restore categories:", e);
     }
-    showNotification("Системные статьи восстановлены");
   };
 
   // Accounts Form State

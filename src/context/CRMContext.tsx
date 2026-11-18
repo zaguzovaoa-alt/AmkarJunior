@@ -389,13 +389,33 @@ const INITIAL_CANCELLED_SESSIONS: CancelledSession[] = [
   }
 ];
 
-const INITIAL_FINANCE_CATEGORIES: FinanceCategory[] = [
+export const INITIAL_FINANCE_CATEGORIES: FinanceCategory[] = [
+  // Доходы (Поступления)
   { id: "cat_in_ab", type: "income", name: "Абонементы", isSystem: true },
   {
-    id: "cat_in_ab12",
+    id: "cat_in_ab12_new",
     type: "income",
-    name: "Абонементы 12 занятий",
-    isSystem: true,
+    name: "Абонемент 12 занятий новый",
+  },
+  {
+    id: "cat_in_ab12_ext",
+    type: "income",
+    name: "Абонемент 12 занятий продление",
+  },
+  {
+    id: "cat_in_ab8_new",
+    type: "income",
+    name: "Абонемент 8 занятий новый",
+  },
+  {
+    id: "cat_in_ab8_ext",
+    type: "income",
+    name: "Абонемент 8 занятий продление",
+  },
+  {
+    id: "cat_in_ab4",
+    type: "income",
+    name: "Абонемент 4 занятия",
   },
   {
     id: "cat_in_1tr",
@@ -404,6 +424,8 @@ const INITIAL_FINANCE_CATEGORIES: FinanceCategory[] = [
     isSystem: true,
   },
   { id: "cat_in_ind", type: "income", name: "Индивидуальные тренировки" },
+  { id: "cat_in_uniform", type: "income", name: "Форма" },
+  { id: "cat_in_equip", type: "income", name: "Экипировка" },
   { id: "cat_in_eq", type: "income", name: "Форма/Экипировка" },
   {
     id: "cat_in_subrent",
@@ -412,18 +434,45 @@ const INITIAL_FINANCE_CATEGORIES: FinanceCategory[] = [
     isSystem: true,
   },
   {
-    id: "cat_ex_acq",
+    id: "cat_in_tourn",
+    type: "income",
+    name: "Турниры и соревнования",
+  },
+  {
+    id: "cat_in_camp",
+    type: "income",
+    name: "Футбольный лагерь / Сборы",
+  },
+  {
+    id: "cat_in_other",
+    type: "income",
+    name: "Прочие доходы",
+  },
+
+  // Расходы (Списания) — Переменные и Постоянные
+  {
+    id: "cat_ex_rent",
     type: "expense",
-    name: "Эквайринг (Комиссия ЮKassa)",
-    isSystem: true,
+    name: "Аренда",
+    expenseType: "fixed",
+  },
+  {
+    id: "cat_ex_rent_var",
+    type: "expense",
+    name: "Аренда залов (почасовая)",
     expenseType: "variable",
   },
-  { id: "cat_ex_rent", type: "expense", name: "Аренда", expenseType: "fixed" },
   {
     id: "cat_ex_sal",
     type: "expense",
     name: "Зарплата",
     expenseType: "variable",
+  },
+  {
+    id: "cat_ex_sal_admin",
+    type: "expense",
+    name: "Зарплата администрации (оклад)",
+    expenseType: "fixed",
   },
   {
     id: "cat_ex_mar",
@@ -435,6 +484,79 @@ const INITIAL_FINANCE_CATEGORIES: FinanceCategory[] = [
     id: "cat_ex_inv",
     type: "expense",
     name: "Инвентарь/Оборудование",
+    expenseType: "variable",
+  },
+  {
+    id: "cat_ex_uniform_buy",
+    type: "expense",
+    name: "Закупка формы и экипировки",
+    expenseType: "variable",
+  },
+  {
+    id: "cat_ex_tourn",
+    type: "expense",
+    name: "Турниры и судейство",
+    expenseType: "variable",
+  },
+  {
+    id: "cat_ex_awards",
+    type: "expense",
+    name: "Наградная продукция (медали, кубки, призы)",
+    expenseType: "variable",
+  },
+  {
+    id: "cat_ex_media",
+    type: "expense",
+    name: "Фото и видеосъемка",
+    expenseType: "variable",
+  },
+  {
+    id: "cat_ex_water_hoz",
+    type: "expense",
+    name: "Вода и хозрасходы",
+    expenseType: "variable",
+  },
+  {
+    id: "cat_ex_med",
+    type: "expense",
+    name: "Медицина / Аптечка",
+    expenseType: "variable",
+  },
+  {
+    id: "cat_ex_transport",
+    type: "expense",
+    name: "Транспорт / Логистика",
+    expenseType: "variable",
+  },
+  {
+    id: "cat_ex_acq",
+    type: "expense",
+    name: "Эквайринг (Комиссия ЮKassa)",
+    isSystem: true,
+    expenseType: "variable",
+  },
+  {
+    id: "cat_ex_bank",
+    type: "expense",
+    name: "Комиссия банка / РКО",
+    expenseType: "variable",
+  },
+  {
+    id: "cat_ex_tax",
+    type: "expense",
+    name: "Налоги и взносы",
+    expenseType: "fixed",
+  },
+  {
+    id: "cat_ex_acc",
+    type: "expense",
+    name: "Бухгалтерия и сервисы (CRM, связь)",
+    expenseType: "fixed",
+  },
+  {
+    id: "cat_ex_other",
+    type: "expense",
+    name: "Прочие переменные расходы",
     expenseType: "variable",
   },
 ];
@@ -1519,37 +1641,80 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         if (snapshot.exists()) {
           const data = snapshot.data();
           if (Array.isArray(data?.items)) {
-            let items = data.items as FinanceCategory[];
-            const seeded = localStorage.getItem("amkar_subrent_cat_seeded_v1");
-            if (
-              !seeded &&
-              !items.some(
-                (c) =>
-                  c.id === "cat_in_subrent" ||
-                  c.name.toLowerCase().includes("сдача площадок"),
-              )
-            ) {
-              items = [
-                ...items,
-                {
-                  id: "cat_in_subrent",
-                  type: "income",
-                  name: "Сдача площадок в аренду",
-                  isSystem: true,
-                },
-              ];
-              localStorage.setItem("amkar_subrent_cat_seeded_v1", "true");
+            let items = [...(data.items as FinanceCategory[])];
+            const deletedIds: string[] = Array.isArray(data?.deletedIds)
+              ? data.deletedIds
+              : [];
+            let needsCloudUpdate = false;
+
+            // 1. Preserve any custom categories that existed in this device's localStorage
+            // and were not explicitly deleted by the user
+            try {
+              const localRaw = localStorage.getItem("amkar_finance_categories");
+              if (localRaw) {
+                const localItems: FinanceCategory[] = JSON.parse(localRaw);
+                if (Array.isArray(localItems)) {
+                  for (const loc of localItems) {
+                    if (!loc || !loc.name || deletedIds.includes(loc.id))
+                      continue;
+                    const exists = items.some(
+                      (rem) =>
+                        rem.id === loc.id ||
+                        (rem.type === loc.type &&
+                          rem.name.trim().toLowerCase() ===
+                            loc.name.trim().toLowerCase()),
+                    );
+                    if (!exists) {
+                      items.push(loc);
+                      needsCloudUpdate = true;
+                    }
+                  }
+                }
+              }
+            } catch {}
+
+            // 2. Ensure restored v2 catalog is seeded if not yet applied
+            if ((data?.restoredVersion || 0) < 2) {
+              for (const defCat of INITIAL_FINANCE_CATEGORIES) {
+                if (deletedIds.includes(defCat.id)) continue;
+                const existingIdx = items.findIndex(
+                  (rem) =>
+                    rem.id === defCat.id ||
+                    (rem.type === defCat.type &&
+                      rem.name.trim().toLowerCase() ===
+                        defCat.name.trim().toLowerCase()),
+                );
+                if (existingIdx === -1) {
+                  items.push(defCat);
+                  needsCloudUpdate = true;
+                } else if (
+                  defCat.type === "expense" &&
+                  defCat.expenseType &&
+                  !items[existingIdx].expenseType
+                ) {
+                  items[existingIdx] = {
+                    ...items[existingIdx],
+                    expenseType: defCat.expenseType,
+                  };
+                  needsCloudUpdate = true;
+                }
+              }
+              needsCloudUpdate = true;
+            }
+
+            if (needsCloudUpdate) {
               setDoc(
                 doc(db, "_config", "finance_categories"),
                 {
                   items: items.map((item) => removeUndefined(item)),
+                  deletedIds,
+                  restoredVersion: 2,
                   updatedAt: new Date().toISOString(),
                 },
                 { merge: true },
               ).catch(() => {});
-            } else {
-              localStorage.setItem("amkar_subrent_cat_seeded_v1", "true");
             }
+
             setFinanceCategories(items);
             try {
               localStorage.setItem(
@@ -1559,13 +1724,27 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
             } catch {}
           }
         } else {
-          let initialItems = INITIAL_FINANCE_CATEGORIES;
+          let initialItems = [...INITIAL_FINANCE_CATEGORIES];
           try {
             const cached = localStorage.getItem("amkar_finance_categories");
             if (cached) {
-              const parsed = JSON.parse(cached);
+              const parsed: FinanceCategory[] = JSON.parse(cached);
               if (Array.isArray(parsed) && parsed.length > 0) {
-                initialItems = parsed;
+                for (const loc of parsed) {
+                  if (
+                    loc &&
+                    loc.name &&
+                    !initialItems.some(
+                      (c) =>
+                        c.id === loc.id ||
+                        (c.type === loc.type &&
+                          c.name.trim().toLowerCase() ===
+                            loc.name.trim().toLowerCase()),
+                    )
+                  ) {
+                    initialItems.push(loc);
+                  }
+                }
               }
             }
           } catch {}
@@ -1573,6 +1752,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
             doc(db, "_config", "finance_categories"),
             {
               items: initialItems.map((item) => removeUndefined(item)),
+              deletedIds: [],
+              restoredVersion: 2,
               updatedAt: new Date().toISOString(),
             },
             { merge: true },
@@ -3261,15 +3442,37 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const syncFinanceCategoriesToFirestore = async (
     items: FinanceCategory[],
+    deletedIdToAdd?: string,
+    restoredIdToRemove?: string,
   ) => {
     try {
       localStorage.setItem("amkar_finance_categories", JSON.stringify(items));
     } catch {}
     try {
+      let deletedIds: string[] = [];
+      try {
+        const rawDel = localStorage.getItem("amkar_deleted_finance_categories");
+        if (rawDel) deletedIds = JSON.parse(rawDel);
+      } catch {}
+      if (deletedIdToAdd && !deletedIds.includes(deletedIdToAdd)) {
+        deletedIds.push(deletedIdToAdd);
+      }
+      if (restoredIdToRemove) {
+        deletedIds = deletedIds.filter((id) => id !== restoredIdToRemove);
+      }
+      try {
+        localStorage.setItem(
+          "amkar_deleted_finance_categories",
+          JSON.stringify(deletedIds),
+        );
+      } catch {}
+
       await setDoc(
         doc(db, "_config", "finance_categories"),
         {
           items: items.map((item) => removeUndefined(item)),
+          deletedIds,
+          restoredVersion: 2,
           updatedAt: new Date().toISOString(),
         },
         { merge: true },
@@ -3286,7 +3489,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     const newCategory: FinanceCategory = { ...category, id };
     const next = [...financeCategories.filter((c) => c.id !== id), newCategory];
     setFinanceCategories(next);
-    await syncFinanceCategoriesToFirestore(next);
+    await syncFinanceCategoriesToFirestore(next, undefined, id);
   };
 
   const updateFinanceCategory = async (
@@ -3553,7 +3756,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   const deleteFinanceCategory = async (id: string) => {
     const next = financeCategories.filter((c) => c.id !== id);
     setFinanceCategories(next);
-    await syncFinanceCategoriesToFirestore(next);
+    await syncFinanceCategoriesToFirestore(next, id);
   };
 
   const addAccount = async (acc: Omit<Account, "id">) => {
