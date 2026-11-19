@@ -651,9 +651,9 @@ export const GroupsModule: React.FC = () => {
                             <strong>{group.coachName || "Не назначен"}</strong>
                           </span>
                         </div>
-                        <div className="flex items-center space-x-2 text-slate-800">
-                          <Calendar className="w-3.5 h-3.5 text-neutral-400" />
-                          <span className="truncate">
+                        <div className="flex items-start space-x-2 text-slate-800">
+                          <Calendar className="w-3.5 h-3.5 text-neutral-400 shrink-0 mt-0.5" />
+                          <span className="leading-snug break-words">
                             Расписание:{" "}
                             <strong className="text-slate-800 font-mono text-[11px]">
                               {(group.scheduleDays || []).join(", ") || "Гибкое"}

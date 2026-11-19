@@ -330,7 +330,9 @@ export const FinanceModule: React.FC = () => {
       accountId: resolvedAccountId,
       isFixed:
         fType === "expense"
-          ? selectedCatObj?.expenseType === "fixed" || fIsFixed
+          ? selectedCatObj?.expenseType
+            ? selectedCatObj.expenseType === "fixed"
+            : fIsFixed
           : false,
       counterpartyId: fCounterparty || undefined,
       groupName:
@@ -408,6 +410,13 @@ export const FinanceModule: React.FC = () => {
   const [pnlExpandedVariable, setPnlExpandedVariable] = useState(false);
   const [pnlExpandedFixed, setPnlExpandedFixed] = useState(false);
 
+  const [bulkCatOpen, setBulkCatOpen] = useState(false);
+  const [bulkCatText, setBulkCatText] = useState("");
+  const [bulkCatType, setBulkCatType] = useState<"income" | "expense">("expense");
+  const [bulkCatExpenseType, setBulkCatExpenseType] = useState<
+    "variable" | "fixed"
+  >("variable");
+
   const handleAddCat = () => {
     if (!newCatName.trim()) return;
     addFinanceCategory({
@@ -416,6 +425,75 @@ export const FinanceModule: React.FC = () => {
       expenseType: newCatType === "expense" ? newCatExpenseType : undefined,
     });
     setNewCatName("");
+  };
+
+  const handleBulkAddCats = async () => {
+    const lines = bulkCatText
+      .split(/\r?\n/)
+      .map((l) => l.replace(/^[\s\-•*\d.)]+/, "").trim())
+      .filter(Boolean);
+    if (lines.length === 0) return;
+
+    const existingKeys = new Set(
+      financeCategories.map(
+        (c) => `${c.type}|${c.name.trim().toLowerCase()}`,
+      ),
+    );
+    const now = Date.now();
+    const toAdd: Array<{
+      id: string;
+      name: string;
+      type: "income" | "expense";
+      expenseType?: "variable" | "fixed";
+    }> = [];
+
+    lines.forEach((name, idx) => {
+      const key = `${bulkCatType}|${name.toLowerCase()}`;
+      if (existingKeys.has(key)) return;
+      existingKeys.add(key);
+      toAdd.push({
+        id: `cat_${now}_${idx}`,
+        name,
+        type: bulkCatType,
+        ...(bulkCatType === "expense"
+          ? { expenseType: bulkCatExpenseType }
+          : {}),
+      });
+    });
+
+    if (toAdd.length === 0) {
+      showNotification("Все указанные статьи уже есть в справочнике");
+      return;
+    }
+
+    const merged = [...financeCategories, ...toAdd];
+    try {
+      localStorage.setItem("amkar_finance_categories", JSON.stringify(merged));
+      await setDoc(
+        doc(db, "_config", "finance_categories"),
+        {
+          items: merged.map((item) => {
+            const clean: Record<string, any> = {
+              id: item.id,
+              name: item.name,
+              type: item.type,
+            };
+            if (item.isSystem !== undefined) clean.isSystem = item.isSystem;
+            if (item.expenseType !== undefined)
+              clean.expenseType = item.expenseType;
+            return clean;
+          }),
+          restoredVersion: 2,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true },
+      );
+      setBulkCatText("");
+      setBulkCatOpen(false);
+      showNotification(`Добавлено статей: ${toAdd.length}`);
+    } catch (e) {
+      console.error("Failed to bulk add categories:", e);
+    }
   };
 
   const handleStartEditCat = (cat: {
@@ -2398,7 +2476,18 @@ export const FinanceModule: React.FC = () => {
                         financeCategories.find((c) => c.type === fType)?.id ||
                         ""
                       }
-                      onChange={(e) => setFCat(e.target.value)}
+                      onChange={(e) => {
+                        const nextId = e.target.value;
+                        setFCat(nextId);
+                        if (fType === "expense") {
+                          const cat = financeCategories.find(
+                            (c) => c.id === nextId,
+                          );
+                          if (cat?.expenseType) {
+                            setFIsFixed(cat.expenseType === "fixed");
+                          }
+                        }
+                      }}
                       className="w-full p-2.5 bg-slate-50 border border-gray-200 outline-none rounded-xl text-sm font-semibold text-slate-800"
                     >
                       {financeCategories
@@ -5996,17 +6085,98 @@ export const FinanceModule: React.FC = () => {
                 <h2 className="text-lg font-bold text-slate-800">
                   Справочники: Аналитические статьи (БДДС / P&L)
                 </h2>
-                {missingSystemCategories.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
                   <button
                     type="button"
-                    onClick={handleRestoreSystemCategories}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition self-start sm:self-auto"
+                    onClick={() => setBulkCatOpen((v) => !v)}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                      bulkCatOpen
+                        ? "bg-slate-900 text-white"
+                        : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                    }`}
                   >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>Восстановить системные ({missingSystemCategories.length})</span>
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Добавить списком</span>
                   </button>
-                )}
+                  {missingSystemCategories.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleRestoreSystemCategories}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>
+                        Восстановить стандартные ({missingSystemCategories.length})
+                      </span>
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {bulkCatOpen && (
+                <div className="mb-6 bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                        Массовое добавление статей (каждая с новой строки)
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        Вставьте список ваших статей расходов или доходов — дубликаты пропустятся автоматически
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        value={bulkCatType}
+                        onChange={(e) =>
+                          setBulkCatType(e.target.value as "income" | "expense")
+                        }
+                        className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 bg-white outline-none"
+                      >
+                        <option value="expense">Статьи расходов</option>
+                        <option value="income">Статьи доходов</option>
+                      </select>
+                      {bulkCatType === "expense" && (
+                        <select
+                          value={bulkCatExpenseType}
+                          onChange={(e) =>
+                            setBulkCatExpenseType(
+                              e.target.value as "variable" | "fixed",
+                            )
+                          }
+                          className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 bg-white outline-none"
+                        >
+                          <option value="variable">Переменные</option>
+                          <option value="fixed">Постоянные</option>
+                        </select>
+                      )}
+                    </div>
+                  </div>
+                  <textarea
+                    rows={5}
+                    value={bulkCatText}
+                    onChange={(e) => setBulkCatText(e.target.value)}
+                    placeholder={"Например:\nАренда манежа\nЗП тренеров\nМячи и фишки\nПолиграфия / печать"}
+                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 outline-none focus:border-slate-900"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setBulkCatOpen(false)}
+                      className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold transition"
+                    >
+                      Отмена
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleBulkAddCats}
+                      disabled={!bulkCatText.trim()}
+                      className="px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition disabled:opacity-40"
+                    >
+                      Сохранить все статьи в облако
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {lastDeletedCat && (
                 <div className="mb-6 flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-slate-900 text-white text-xs font-medium shadow-sm">

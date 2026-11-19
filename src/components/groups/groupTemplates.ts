@@ -212,6 +212,11 @@ export const DEFAULT_SCHEDULE_TEMPLATES: ScheduleTemplate[] = [
     rawSchedule: "Пн 19:00 - 20:00, Ср 19:00 - 20:00, Пт 19:00 - 20:00",
   },
   {
+    id: "st_mon_wed_19_fri_17",
+    label: "Пн, Ср 19:00-20:00 • Пт 17:00-18:00",
+    rawSchedule: "Пн 19:00 - 20:00, Ср 19:00 - 20:00, Пт 17:00 - 18:00",
+  },
+  {
     id: "st_sat_sun_10",
     label: "Сб, Вс 10:00-11:30 (Выходные)",
     rawSchedule: "Сб 10:00 - 11:30, Вс 10:00 - 11:30",
