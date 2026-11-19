@@ -38,11 +38,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveTab,
   messageCount,
 }) => {
-  const { schoolName, leads, messages } = useCRM();
+  const { schoolName, leads, messages, groups } = useCRM();
   const { appUser } = useAuth();
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
 
   const newLeadsCount = leads.filter((l) => l.status === "new").length;
+  const selectTeamsCount = groups.filter(
+    (g) => g.isSelectTeam && g.selectTeamStatus !== "completed",
+  ).length;
 
   const currentUserId = appUser?.uid || currentRole;
   const currentUserName = appUser?.fullName?.trim().toLowerCase();
@@ -120,6 +123,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           { id: "trainer_schedule", label: "Мое расписание", icon: Calendar },
           { id: "trainer_sessions", label: "Учет тренировок", icon: CheckSquare },
           { id: "trainer_groups", label: "Мои группы", icon: Users },
+          {
+            id: "trainer_select_teams",
+            label: "Сборные команды",
+            icon: Trophy,
+            badge: selectTeamsCount || undefined,
+          },
           { id: "trainer_attendance", label: "Посещения", icon: CheckSquare },
           { id: "trainer_progress", label: "Успеваемость", icon: Award },
           { id: "trainer_homeworks", label: "Домашнее задание", icon: FileText },
@@ -144,6 +153,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           },
           { id: "hq_coaches", label: "Тренеры", icon: GraduationCap },
           { id: "hq_groups", label: "Группы", icon: FolderPlus },
+          {
+            id: "hq_select_teams",
+            label: "Сборные команды",
+            icon: Trophy,
+            badge: selectTeamsCount || undefined,
+          },
           {
             id: "director_users",
             label: "Пользователи (Доступы)",
@@ -181,6 +196,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           },
           { id: "hq_coaches", label: "Тренеры", icon: GraduationCap },
           { id: "hq_groups", label: "Группы", icon: FolderPlus },
+          {
+            id: "hq_select_teams",
+            label: "Сборные команды",
+            icon: Trophy,
+            badge: selectTeamsCount || undefined,
+          },
           { id: "hq_finances", label: "Абонементы и Долги", icon: DollarSign },
           { id: "hq_tasks", label: "Задачи", icon: CheckSquare },
           {

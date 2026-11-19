@@ -44,6 +44,7 @@ export const GroupsModule: React.FC = () => {
     assignClientToSelectTeam,
     removeClientFromSelectTeam,
     counterparties,
+    setCurrentTab,
   } = useCRM();
 
   // 1. Search and Filtering States
@@ -610,6 +611,16 @@ export const GroupsModule: React.FC = () => {
                         </div>
 
                         <div className="flex items-center space-x-1.5 shrink-0">
+                          {group.isSelectTeam && (
+                            <button
+                              onClick={() => setCurrentTab("hq_select_teams")}
+                              className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition flex items-center space-x-1 cursor-pointer shadow-xs"
+                              title="Открыть управление сборной, роли и взносы"
+                            >
+                              <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                              <span>Сборная</span>
+                            </button>
+                          )}
                           <button
                             onClick={() => {
                               setAnalyticsGroup(group);

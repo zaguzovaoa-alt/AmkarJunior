@@ -211,6 +211,58 @@ export interface Client {
   riskResolution?: 'none' | 'left' | 'thinking' | 'renewed' | 'refused' | 'resolved' | 'reconciled';
   riskComment?: string;
   progressReports?: AIProgressReport[];
+  // Football profile for Select Teams
+  preferredPosition?: PlayerPosition;
+  secondaryPosition?: PlayerPosition;
+  dominantFoot?: 'right' | 'left' | 'both';
+  jerseyNumber?: number;
+}
+
+export type PlayerPosition = 'GK' | 'DEF' | 'MID' | 'FWD' | 'UNI';
+
+export type SelectTeamParticipationStatus = 'confirmed' | 'pending' | 'declined' | 'reserve';
+
+export type SelectTeamPaymentStatus = 'paid' | 'partial' | 'unpaid' | 'exempt';
+
+export type MatchFormat = '5x5' | '6x6' | '7x7' | '8x8' | '11x11';
+
+export interface SelectTeamMember {
+  clientId: string;
+  participationStatus: SelectTeamParticipationStatus;
+  paymentStatus: SelectTeamPaymentStatus;
+  paidAmount?: number;
+  paidAt?: string;
+  paymentAccountId?: string;
+  financeRecordId?: string;
+  position?: PlayerPosition;
+  subRole?: string;
+  lineupStatus?: 'starter' | 'bench';
+  pitchSlotId?: string;
+  jerseyNumber?: number;
+  isCaptain?: boolean;
+  note?: string;
+  attendedCompetition?: boolean; // Post-competition factual attendance: was the player actually there
+  updatedAt?: string;
+  updatedBy?: string;
+  updatedByRole?: 'admin' | 'director' | 'manager' | 'trainer';
+}
+
+export type MatchOutcome = 'win' | 'draw' | 'loss';
+
+export interface SelectTeamMatch {
+  id: string;
+  date?: string; // YYYY-MM-DD
+  stage?: string; // e.g., 'Групповой этап', '1/2 финала', 'Финал'
+  opponent: string;
+  ourScore: number;
+  opponentScore: number;
+  outcome: MatchOutcome;
+  decidedByPenalties?: boolean;
+  participantClientIds: string[];
+  goalsByClientId?: Record<string, number>;
+  notes?: string;
+  createdAt?: string;
+  updatedBy?: string;
 }
 
 export interface CRMTask {
@@ -247,6 +299,23 @@ export interface TrainingGroup {
   isSelectTeam?: boolean;
   targetCompetition?: string;
   selectedClientIds?: string[];
+  competitionDate?: string; // YYYY-MM-DD
+  competitionEndDate?: string; // YYYY-MM-DD
+  competitionLocation?: string;
+  competitionFee?: number; // Default fee per player in RUB
+  matchFormat?: MatchFormat;
+  formationId?: string;
+  selectTeamStatus?: 'forming' | 'ready' | 'completed';
+  selectTeamNotes?: string;
+  assistantCoachId?: string;
+  assistantCoachName?: string;
+  selectTeamRoster?: Record<string, SelectTeamMember>;
+  // Post-competition results & matches
+  competitionPlace?: number;
+  competitionTotalTeams?: number;
+  competitionResultLabel?: string;
+  competitionResultNotes?: string;
+  competitionMatches?: SelectTeamMatch[];
 }
 
 export interface Coach {

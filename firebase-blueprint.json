@@ -54,7 +54,11 @@
             "physical": { "type": "number" },
             "discipline": { "type": "number" }
           }
-        }
+        },
+        "preferredPosition": { "type": "string", "description": "Primary football position: GK, DEF, MID, FWD, UNI" },
+        "secondaryPosition": { "type": "string", "description": "Secondary football position" },
+        "dominantFoot": { "type": "string", "description": "right, left, or both" },
+        "jerseyNumber": { "type": "number", "description": "Preferred jersey number" }
       },
       "required": ["id", "parentName", "parentPhone", "childName", "childSurname", "status", "abonement", "abonementStatus"]
     },
@@ -76,17 +80,36 @@
     },
     "TrainingGroup": {
       "title": "TrainingGroup",
-      "description": "Football training squad categorized by age and branch",
+      "description": "Football training squad or cross-branch select team categorized by age and competition",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "name": { "type": "string" },
+        "name": { "type": "string", "maxLength": 100 },
         "year": { "type": "number" },
+        "birthYearFrom": { "type": "number" },
+        "birthYearTo": { "type": "number" },
         "coachId": { "type": "string" },
         "coachName": { "type": "string" },
         "playersCount": { "type": "number" },
         "attendanceRate": { "type": "number" },
-        "scheduleDays": { "type": "array" }
+        "scheduleDays": { "type": "array" },
+        "isSelectTeam": { "type": "boolean" },
+        "targetCompetition": { "type": "string" },
+        "selectedClientIds": { "type": "array" },
+        "competitionDate": { "type": "string" },
+        "competitionEndDate": { "type": "string" },
+        "competitionLocation": { "type": "string" },
+        "competitionFee": { "type": "number" },
+        "matchFormat": { "type": "string" },
+        "formationId": { "type": "string" },
+        "selectTeamStatus": { "type": "string" },
+        "selectTeamNotes": { "type": "string" },
+        "selectTeamRoster": { "type": "object", "description": "Map of clientId to SelectTeamMember participation, payment, factual attendance, and role metadata" },
+        "competitionPlace": { "type": "number", "description": "Final tournament placement (e.g. 1, 2, 3)" },
+        "competitionTotalTeams": { "type": "number", "description": "Total number of teams in the tournament" },
+        "competitionResultLabel": { "type": "string", "description": "Human-readable tournament placement or result label" },
+        "competitionResultNotes": { "type": "string", "description": "Coach summary of the tournament" },
+        "competitionMatches": { "type": "array", "description": "List of competition matches with scores, outcomes, and participating player IDs" }
       },
       "required": ["id", "name", "year", "coachId", "coachName"]
     },

@@ -62,6 +62,8 @@ import {
 } from "../data/parentKnowledgeBase";
 import { VideoLessonsModule } from "./VideoLessonsModule";
 import { Film, Play } from "lucide-react";
+import { ParentCompetitionHistoryCard } from "./select-teams/ParentCompetitionHistoryCard";
+import { formatCompetitionPlaceLabel } from "../utils/selectTeamIntelligence";
 
 interface ParentPortalProps {
   activeTab: string;
@@ -900,23 +902,48 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                 </div>
               )}
             </div>
-            {mySelectTeams.map((st) => (
-              <div
-                key={st.id}
-                className="flex items-center space-x-2.5 bg-red-50 text-red-700 px-3.5 py-1.5 rounded-xl border border-red-200 w-full"
-                title={st.targetCompetition || undefined}
-              >
-                <Trophy className="w-3 h-3 text-red-500 shrink-0" />
-                <div className="text-xs text-left">
-                  <div className="font-semibold text-red-800">
-                    Сборная команда
-                  </div>
-                  <div className="text-red-600 font-mono text-[10px] truncate">
-                    {st.name}
+            {mySelectTeams.map((st) => {
+              const memberEntry = st.selectTeamRoster?.[myClient.id];
+              const posLabels: Record<string, string> = {
+                GK: "Вратарь",
+                DEF: "Защитник",
+                MID: "Полузащитник",
+                FWD: "Нападающий",
+                UNI: "Универсал",
+              };
+              const roleStr = memberEntry?.position
+                ? memberEntry.subRole || posLabels[memberEntry.position]
+                : "";
+              const placeStr = memberEntry?.attendedCompetition
+                ? formatCompetitionPlaceLabel(
+                    st.competitionPlace,
+                    st.competitionTotalTeams,
+                    st.competitionResultLabel,
+                  )
+                : "";
+              return (
+                <div
+                  key={st.id}
+                  className="flex items-center space-x-2.5 bg-red-50 text-red-700 px-3.5 py-1.5 rounded-xl border border-red-200 w-full"
+                  title={st.targetCompetition || undefined}
+                >
+                  <Trophy className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                  <div className="text-xs text-left min-w-0">
+                    <div className="font-semibold text-red-800 truncate">
+                      {st.name}
+                      {roleStr ? ` · ${roleStr}` : ""}
+                      {placeStr ? ` · ${placeStr}` : ""}
+                    </div>
+                    <div className="text-red-600 font-mono text-[10px] truncate">
+                      {st.targetCompetition || "Сборная команда"}
+                      {st.competitionDate
+                        ? ` · ${st.competitionDate.split("-").reverse().join(".")}`
+                        : ""}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
           <div className="flex items-center space-x-2">
             <div className="h-9 w-9 rounded-full bg-emerald-100 border border-emerald-200 flex items-center justify-center font-bold text-emerald-600">
@@ -1071,6 +1098,13 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                       />
                     </div>
                   </div>
+
+                  {/* Automatic Competition Results & Match Stats (shown only for participated players) */}
+                  <ParentCompetitionHistoryCard
+                    clientId={myClient.id}
+                    childName={myClient.childName}
+                    groups={groups}
+                  />
 
                   {/* Payment & Abonement widget */}
                   <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-4">
@@ -2613,6 +2647,13 @@ export const ParentPortal: React.FC<ParentPortalProps> = ({
                   </>
                 );
               })()}
+
+              {/* Automatic Competition Results & Match Stats inside Awards & Goals */}
+              <ParentCompetitionHistoryCard
+                clientId={myClient.id}
+                childName={myClient.childName}
+                groups={groups}
+              />
             </motion.div>
           )}
 

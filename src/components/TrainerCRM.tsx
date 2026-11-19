@@ -3868,6 +3868,14 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                       </div>
 
                       <div className="mt-5 pt-4 border-t flex flex-col sm:flex-row gap-2">
+                        {grp.isSelectTeam && (
+                          <button
+                            onClick={() => setActiveTab("trainer_select_teams")}
+                            className="flex-1 bg-red-600 text-white text-xs font-bold py-2 px-2 rounded-xl hover:bg-red-700 transition text-center"
+                          >
+                            Роли и сборы
+                          </button>
+                        )}
                         <button
                           onClick={() => setSelectedGroupId(grp.id)}
                           className="flex-1 bg-slate-100 text-slate-700 text-xs font-bold py-2 px-1 rounded-xl hover:bg-slate-200 transition text-center"

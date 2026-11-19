@@ -43,6 +43,8 @@ import {
   CancelledSession,
   AIProgressReport,
   VideoLesson,
+  SelectTeamMember,
+  MatchFormat,
 } from "../types";
 import { INITIAL_VIDEO_LESSONS } from "../data/initialVideoLessons";
 
@@ -293,6 +295,48 @@ interface CRMContextType {
     clientId: string,
     groupId: string,
   ) => Promise<void>;
+  createSelectTeam: (payload: {
+    name: string;
+    birthYearFrom: number;
+    birthYearTo: number;
+    coachId: string;
+    coachName: string;
+    assistantCoachId?: string;
+    assistantCoachName?: string;
+    targetCompetition?: string;
+    competitionDate?: string;
+    competitionEndDate?: string;
+    competitionLocation?: string;
+    competitionFee?: number;
+    matchFormat?: MatchFormat;
+    formationId?: string;
+    selectTeamStatus?: "forming" | "ready" | "completed";
+    selectTeamNotes?: string;
+    scheduleDays?: string[];
+    selectedClientIds?: string[];
+    selectTeamRoster?: Record<string, SelectTeamMember>;
+  }) => Promise<TrainingGroup>;
+  updateSelectTeamMember: (
+    groupId: string,
+    clientId: string,
+    updates: Partial<SelectTeamMember>,
+    options?: { syncPreferredPosition?: boolean },
+  ) => Promise<void>;
+  batchUpdateSelectTeamRoster: (
+    groupId: string,
+    nextRoster: Record<string, SelectTeamMember>,
+    nextSelectedClientIds?: string[],
+  ) => Promise<void>;
+  recordSelectTeamFeePayment: (params: {
+    groupId: string;
+    clientId: string;
+    amount: number;
+    accountId: string;
+    postToFinance: boolean;
+    paymentStatus?: "paid" | "partial";
+    actorName?: string;
+    actorRole?: "admin" | "director" | "manager" | "trainer";
+  }) => Promise<void>;
   createCoach: (
     name: string,
     role: string,
@@ -4455,13 +4499,13 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     }
 
-    const newGroup: TrainingGroup = {
+    const newGroup: TrainingGroup = removeUndefined({
       id: `g_${Date.now()}`,
-      name,
+      name: name.trim().slice(0, 100),
       year,
       birthYearFrom,
       birthYearTo,
-      coachId,
+      coachId: coachId || "",
       coachName,
       playersCount: selectedClientIds ? selectedClientIds.length : 0,
       attendanceRate: 100,
@@ -4474,7 +4518,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       venueId,
       scheduleStartDate,
       scheduleEndDate,
-    };
+    });
     setGroups((prev) => [...prev, newGroup]);
     setDoc(doc(db, "groups", newGroup.id), newGroup).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(`Failed to create group in Firestore:`, err);
@@ -4519,10 +4563,15 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     }
 
-    setGroups((prev) =>
-      prev.map((g) => (g.id === id ? { ...g, ...updates } : g)),
+    const cleanUpdates = removeUndefined(
+      updates.name
+        ? { ...updates, name: updates.name.trim().slice(0, 100) }
+        : updates,
     );
-    updateDoc(doc(db, "groups", id), updates).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
+    setGroups((prev) =>
+      prev.map((g) => (g.id === id ? { ...g, ...cleanUpdates } : g)),
+    );
+    updateDoc(doc(db, "groups", id), cleanUpdates as any).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(`Failed to update group ${id} on Firestore:`, err);
     });
 
@@ -4613,6 +4662,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     if (!selectedClientIds.includes(clientId)) return;
 
     const newSelectedIds = selectedClientIds.filter((id) => id !== clientId);
+    const nextRoster = { ...(group.selectTeamRoster || {}) };
+    delete nextRoster[clientId];
 
     setGroups((prev) =>
       prev.map((g) =>
@@ -4620,20 +4671,274 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
           ? {
               ...g,
               selectedClientIds: newSelectedIds,
+              selectTeamRoster: nextRoster,
               playersCount: newSelectedIds.length,
             }
           : g,
       ),
     );
 
-    updateDoc(doc(db, "groups", groupId), {
-      selectedClientIds: newSelectedIds,
-      playersCount: newSelectedIds.length,
-    }).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
+    updateDoc(
+      doc(db, "groups", groupId),
+      removeUndefined({
+        selectedClientIds: newSelectedIds,
+        selectTeamRoster: nextRoster,
+        playersCount: newSelectedIds.length,
+      }) as any,
+    ).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
       console.warn(
         `Failed to remove client from select team in Firestore:`,
         err,
       );
+    });
+  };
+
+  const createSelectTeam = async (payload: {
+    name: string;
+    birthYearFrom: number;
+    birthYearTo: number;
+    coachId: string;
+    coachName: string;
+    assistantCoachId?: string;
+    assistantCoachName?: string;
+    targetCompetition?: string;
+    competitionDate?: string;
+    competitionEndDate?: string;
+    competitionLocation?: string;
+    competitionFee?: number;
+    matchFormat?: MatchFormat;
+    formationId?: string;
+    selectTeamStatus?: "forming" | "ready" | "completed";
+    selectTeamNotes?: string;
+    scheduleDays?: string[];
+    selectedClientIds?: string[];
+    selectTeamRoster?: Record<string, SelectTeamMember>;
+  }): Promise<TrainingGroup> => {
+    const selectedIds = payload.selectedClientIds || [];
+    const newTeam: TrainingGroup = removeUndefined({
+      id: `st_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      name: payload.name.trim().slice(0, 100),
+      year: payload.birthYearFrom,
+      birthYearFrom: payload.birthYearFrom,
+      birthYearTo: payload.birthYearTo,
+      coachId: payload.coachId || "",
+      coachName: payload.coachName || "Не назначен",
+      assistantCoachId: payload.assistantCoachId || undefined,
+      assistantCoachName: payload.assistantCoachName || undefined,
+      playersCount: selectedIds.length,
+      attendanceRate: 100,
+      scheduleDays: payload.scheduleDays || [],
+      isSelectTeam: true,
+      targetCompetition: payload.targetCompetition?.trim() || "",
+      competitionDate: payload.competitionDate || undefined,
+      competitionEndDate: payload.competitionEndDate || undefined,
+      competitionLocation: payload.competitionLocation?.trim() || undefined,
+      competitionFee: Number(payload.competitionFee || 0),
+      matchFormat: payload.matchFormat || "5x5",
+      formationId: payload.formationId || "5x5_diamond",
+      selectTeamStatus: payload.selectTeamStatus || "forming",
+      selectTeamNotes: payload.selectTeamNotes?.trim() || undefined,
+      selectedClientIds: selectedIds,
+      selectTeamRoster: payload.selectTeamRoster || {},
+    });
+
+    setGroups((prev) => [...prev, newTeam]);
+    await setDoc(doc(db, "groups", newTeam.id), newTeam).catch((err) => {
+      handleFirestoreError(err, OperationType.WRITE, "groups");
+      console.warn("Failed to create select team in Firestore:", err);
+    });
+    return newTeam;
+  };
+
+  const updateSelectTeamMember = async (
+    groupId: string,
+    clientId: string,
+    updates: Partial<SelectTeamMember>,
+    options?: { syncPreferredPosition?: boolean },
+  ) => {
+    const group = groups.find((g) => g.id === groupId);
+    if (!group) return;
+
+    const currentRoster = { ...(group.selectTeamRoster || {}) };
+    const existingMember: SelectTeamMember = currentRoster[clientId] || {
+      clientId,
+      participationStatus: "pending",
+      paymentStatus: "unpaid",
+    };
+
+    const nextMember: SelectTeamMember = removeUndefined({
+      ...existingMember,
+      ...updates,
+      clientId,
+      updatedAt: updates.updatedAt || new Date().toISOString(),
+    });
+
+    // If setting captain = true, clear captain flag on other members
+    if (updates.isCaptain === true) {
+      for (const otherId of Object.keys(currentRoster)) {
+        if (otherId !== clientId && currentRoster[otherId]?.isCaptain) {
+          currentRoster[otherId] = {
+            ...currentRoster[otherId],
+            isCaptain: false,
+          };
+        }
+      }
+    }
+
+    // If assigning a specific pitchSlotId, clear it from any other member currently occupying that slot
+    if (updates.pitchSlotId) {
+      for (const otherId of Object.keys(currentRoster)) {
+        if (
+          otherId !== clientId &&
+          currentRoster[otherId]?.pitchSlotId === updates.pitchSlotId
+        ) {
+          currentRoster[otherId] = removeUndefined({
+            ...currentRoster[otherId],
+            pitchSlotId: undefined,
+            lineupStatus: "bench",
+          });
+        }
+      }
+    }
+
+    currentRoster[clientId] = nextMember;
+
+    const selectedIds = group.selectedClientIds || [];
+    const nextSelectedIds = selectedIds.includes(clientId)
+      ? selectedIds
+      : [...selectedIds, clientId];
+
+    const payload = removeUndefined({
+      selectedClientIds: nextSelectedIds,
+      selectTeamRoster: currentRoster,
+      playersCount: nextSelectedIds.length,
+    });
+
+    setGroups((prev) =>
+      prev.map((g) => (g.id === groupId ? { ...g, ...payload } : g)),
+    );
+
+    updateDoc(doc(db, "groups", groupId), payload as any).catch((err) => {
+      handleFirestoreError(err, OperationType.WRITE, "groups");
+      console.warn("Failed to update select team member in Firestore:", err);
+    });
+
+    if (options?.syncPreferredPosition && updates.position) {
+      updateClient(clientId, {
+        preferredPosition: updates.position,
+        ...(updates.jerseyNumber ? { jerseyNumber: updates.jerseyNumber } : {}),
+      }).catch(() => {});
+    }
+  };
+
+  const batchUpdateSelectTeamRoster = async (
+    groupId: string,
+    nextRoster: Record<string, SelectTeamMember>,
+    nextSelectedClientIds?: string[],
+  ) => {
+    const group = groups.find((g) => g.id === groupId);
+    if (!group) return;
+
+    const finalSelectedIds =
+      nextSelectedClientIds ||
+      Array.from(
+        new Set([
+          ...(group.selectedClientIds || []),
+          ...Object.keys(nextRoster),
+        ]),
+      );
+
+    const cleanRoster: Record<string, SelectTeamMember> = {};
+    for (const cid of finalSelectedIds) {
+      if (nextRoster[cid]) {
+        cleanRoster[cid] = removeUndefined({
+          ...nextRoster[cid],
+          clientId: cid,
+        });
+      }
+    }
+
+    const payload = removeUndefined({
+      selectedClientIds: finalSelectedIds,
+      selectTeamRoster: cleanRoster,
+      playersCount: finalSelectedIds.length,
+    });
+
+    setGroups((prev) =>
+      prev.map((g) => (g.id === groupId ? { ...g, ...payload } : g)),
+    );
+
+    updateDoc(doc(db, "groups", groupId), payload as any).catch((err) => {
+      handleFirestoreError(err, OperationType.WRITE, "groups");
+      console.warn("Failed to batch update select team roster:", err);
+    });
+  };
+
+  const recordSelectTeamFeePayment = async (params: {
+    groupId: string;
+    clientId: string;
+    amount: number;
+    accountId: string;
+    postToFinance: boolean;
+    paymentStatus?: "paid" | "partial";
+    actorName?: string;
+    actorRole?: "admin" | "director" | "manager" | "trainer";
+  }) => {
+    const {
+      groupId,
+      clientId,
+      amount,
+      accountId,
+      postToFinance,
+      paymentStatus = "paid",
+      actorName,
+      actorRole,
+    } = params;
+    const group = groups.find((g) => g.id === groupId);
+    const client = clients.find((c) => c.id === clientId);
+    if (!group || !client) return;
+
+    const existingMember = group.selectTeamRoster?.[clientId];
+    let financeRecordId = existingMember?.financeRecordId;
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    if (postToFinance && amount > 0 && !financeRecordId) {
+      const fId = `f_st_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
+      const clientFullName = `${client.childSurname} ${client.childName}`.trim();
+      const compLabel = group.targetCompetition
+        ? `${group.name} (${group.targetCompetition})`
+        : group.name;
+
+      const newFinRecord: FinanceRecord = removeUndefined({
+        id: fId,
+        type: "income",
+        category: "Турниры и соревнования",
+        amount: Number(amount),
+        date: todayStr,
+        description: `Взнос за участие в соревновании: ${clientFullName} — ${compLabel}`,
+        groupName: group.name,
+        targetMonth: todayStr.slice(0, 7),
+        accountId: accountId || accounts[0]?.id || "acc_cash",
+        paymentStatus: "paid",
+        clientId: client.id,
+        clientName: clientFullName,
+      });
+
+      financeRecordId = fId;
+      setFinances((prev) => [newFinRecord, ...prev]);
+      setDoc(doc(db, "finances", fId), newFinRecord).catch((err) => {
+        handleFirestoreError(err, OperationType.WRITE, "finances");
+      });
+    }
+
+    await updateSelectTeamMember(groupId, clientId, {
+      paymentStatus,
+      paidAmount: Number(amount),
+      paidAt: todayStr,
+      paymentAccountId: accountId || undefined,
+      financeRecordId,
+      updatedBy: actorName || userProfile.name,
+      updatedByRole: actorRole,
     });
   };
 
@@ -5097,6 +5402,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         assignClientToGroup,
         assignClientToSelectTeam,
         removeClientFromSelectTeam,
+        createSelectTeam,
+        updateSelectTeamMember,
+        batchUpdateSelectTeamRoster,
+        recordSelectTeamFeePayment,
         createCoach,
         deleteCoach,
         assignCoachToGroup,

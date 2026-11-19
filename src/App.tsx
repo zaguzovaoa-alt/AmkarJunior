@@ -13,6 +13,7 @@ import { CoachesList } from "./components/CoachesList";
 import { GoogleCalendarSync } from "./components/GoogleCalendarSync";
 import { HQSettings } from "./components/HQSettings";
 import { GroupsModule } from "./components/GroupsModule";
+import { SelectTeamsModule } from "./components/SelectTeamsModule";
 import { DirectorUsers } from "./components/DirectorUsers";
 import { JoinPage } from "./components/JoinPage";
 import { AdminStore } from "./components/AdminStore";
@@ -225,6 +226,11 @@ function DashboardContainer() {
         if (currentTab === "hq_store") return <AdminStore />;
         if (currentTab === "hq_tasks") return <TasksModule />;
         if (
+          currentTab === "hq_select_teams" ||
+          currentTab === "trainer_select_teams"
+        )
+          return <SelectTeamsModule />;
+        if (
           currentTab === "director_groups" ||
           currentTab === "hq_groups" ||
           currentTab === "trainer_groups" ||
@@ -265,6 +271,11 @@ function DashboardContainer() {
           return <GoogleCalendarSync />;
         if (currentTab === "manager_coaches" || currentTab === "hq_coaches")
           return <CoachesList />;
+        if (
+          currentTab === "hq_select_teams" ||
+          currentTab === "trainer_select_teams"
+        )
+          return <SelectTeamsModule />;
         if (
           currentTab === "manager_groups" ||
           currentTab === "hq_groups" ||
@@ -351,6 +362,11 @@ function DashboardContainer() {
               setActiveTab={setCurrentTab}
             />
           );
+        if (
+          currentTab === "trainer_select_teams" ||
+          currentTab === "hq_select_teams"
+        )
+          return <SelectTeamsModule />;
         if (
           currentTab === "trainer_groups" ||
           currentTab === "hq_groups"
