@@ -5,6 +5,7 @@ import { db } from "../firebase";
 import { setDoc, doc, updateDoc } from "firebase/firestore";
 import { useCRM, INITIAL_FINANCE_CATEGORIES } from "../context/CRMContext";
 import { Counterparty } from "../types";
+import { VenueEconomicsPanel } from "./VenueEconomicsPanel";
 import {
   TrendingUp,
   TrendingDown,
@@ -314,7 +315,7 @@ export const FinanceModule: React.FC = () => {
       fDesc.trim() ||
       (fType === "income"
         ? linkedClient
-          ? `Ручное внесение: ${resolvedCategoryName} (${linkedClient.childSurname} ${linkedClient.childName})`
+          ? `Ручное внесение: ${resolvedCategoryName} (${linkedClient.childSurname} ${linkedClient.childName}${selectedVenueCp ? `, площадка «${selectedVenueCp.name}»` : ""})`
           : selectedVenueCp
             ? `${resolvedCategoryName}: площадка «${selectedVenueCp.name}»`
             : `${resolvedCategoryName} (вручную, без привязки к игроку)${fGroupName ? `, Группа: ${fGroupName}` : ""}`
@@ -2513,6 +2514,12 @@ export const FinanceModule: React.FC = () => {
                             const found = clients.find((c) => c.id === id);
                             if (found?.groupName) {
                               setFGroupName(found.groupName);
+                              const grp = groups.find(
+                                (g) => g.name === found.groupName,
+                              );
+                              if (grp?.venueId && !fCounterparty) {
+                                setFCounterparty(grp.venueId);
+                              }
                             }
                           }}
                           className="w-full p-2.5 bg-white border border-emerald-200 outline-none rounded-xl text-xs font-bold text-slate-800"
@@ -2536,7 +2543,16 @@ export const FinanceModule: React.FC = () => {
                         </label>
                         <select
                           value={fGroupName}
-                          onChange={(e) => setFGroupName(e.target.value)}
+                          onChange={(e) => {
+                            const nextGroupName = e.target.value;
+                            setFGroupName(nextGroupName);
+                            const grp = groups.find(
+                              (g) => g.name === nextGroupName,
+                            );
+                            if (grp?.venueId) {
+                              setFCounterparty(grp.venueId);
+                            }
+                          }}
                           className="w-full p-2.5 bg-white border border-emerald-200 outline-none rounded-xl text-xs font-bold text-slate-800"
                         >
                           <option value="">Без привязки к группе</option>
@@ -2547,38 +2563,32 @@ export const FinanceModule: React.FC = () => {
                           ))}
                         </select>
                       </div>
-                      {(fCat === "cat_in_subrent" ||
-                        financeCategories
-                          .find((c) => c.id === fCat)
-                          ?.name.toLowerCase()
-                          .includes("аренд")) && (
-                        <div className="sm:col-span-2 pt-2 border-t border-emerald-100">
-                          <label className="block text-[11px] font-bold text-emerald-800 uppercase tracking-widest mb-1.5">
-                            Площадка / Объект сдачи в аренду
-                          </label>
-                          <select
-                            value={fCounterparty}
-                            onChange={(e) => setFCounterparty(e.target.value)}
-                            className="w-full p-2.5 bg-white border border-emerald-200 outline-none rounded-xl text-xs font-bold text-slate-800"
-                          >
-                            <option value="">
-                              Общая сдача в аренду (или укажите площадку в примечании)
-                            </option>
-                            {counterparties
-                              .filter(
-                                (cp) =>
-                                  cp.type === "school_rent" ||
-                                  cp.type === "hall_rent" ||
-                                  cp.type === "other",
-                              )
-                              .map((cp) => (
-                                <option key={cp.id} value={cp.id}>
-                                  {cp.name}
-                                </option>
-                              ))}
-                          </select>
-                        </div>
-                      )}
+                      <div className="sm:col-span-2 pt-2 border-t border-emerald-100">
+                        <label className="block text-[11px] font-bold text-emerald-800 uppercase tracking-widest mb-1.5">
+                          Площадка / Объект (для учёта доходов по объекту)
+                        </label>
+                        <select
+                          value={fCounterparty}
+                          onChange={(e) => setFCounterparty(e.target.value)}
+                          className="w-full p-2.5 bg-white border border-emerald-200 outline-none rounded-xl text-xs font-bold text-slate-800"
+                        >
+                          <option value="">
+                            Без привязки к площадке (или определится по группе)
+                          </option>
+                          {counterparties
+                            .filter(
+                              (cp) =>
+                                cp.type === "school_rent" ||
+                                cp.type === "hall_rent" ||
+                                cp.type === "other",
+                            )
+                            .map((cp) => (
+                              <option key={cp.id} value={cp.id}>
+                                {cp.name}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
                     </div>
                   )}
                   {fType === "expense" && (
@@ -4879,6 +4889,20 @@ export const FinanceModule: React.FC = () => {
                         </span>
                       </div>
                     </div>
+
+                    {/* Comprehensive Per-Venue Economics (Subrent + Groups + Individual Trainings - Rent/Expenses) */}
+                    <VenueEconomicsPanel
+                      finances={finances}
+                      counterparties={counterparties}
+                      groups={groups}
+                      clients={clients}
+                      accounts={calculatedAccounts}
+                      rentMonth={rentMonth}
+                      rentDateMode={rentDateMode}
+                      rentStartDate={rentStartDate}
+                      rentEndDate={rentEndDate}
+                      currentMonthStr={currentMonthStr}
+                    />
 
                     {/* Sublease / Venue Rental Income Section */}
                     <div className="bg-emerald-50/30 border border-emerald-100 rounded-2xl p-5 space-y-5">

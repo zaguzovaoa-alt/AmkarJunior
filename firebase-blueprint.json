@@ -144,7 +144,8 @@
         "amount": { "type": "number" },
         "date": { "type": "string" },
         "description": { "type": "string" },
-        "groupName": { "type": "string" }
+        "groupName": { "type": "string" },
+        "counterpartyId": { "type": "string", "description": "Linked venue/object or counterparty ID" }
       },
       "required": ["id", "type", "category", "amount", "date"]
     },

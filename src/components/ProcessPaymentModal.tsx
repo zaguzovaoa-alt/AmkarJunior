@@ -35,6 +35,7 @@ export const ProcessPaymentModal: React.FC<ProcessPaymentModalProps> = ({
     clients,
     groups,
     accounts,
+    counterparties,
     financeCategories,
     updateClient,
     addFinanceRecord,
@@ -52,6 +53,7 @@ export const ProcessPaymentModal: React.FC<ProcessPaymentModalProps> = ({
   >("8_sessions");
   const [amount, setAmount] = useState<number>(crmConfig.price8 || 4500);
   const [selectedGroup, setSelectedGroup] = useState<string>("");
+  const [selectedVenueId, setSelectedVenueId] = useState<string>("");
   const [selectedAccount, setSelectedAccount] = useState<string>("acc_bank");
   const [selectedCategory, setSelectedCategory] = useState<string>("Абонементы");
   const [customDescription, setCustomDescription] = useState<string>("");
@@ -78,11 +80,15 @@ export const ProcessPaymentModal: React.FC<ProcessPaymentModalProps> = ({
       if (client) {
         setPaymentMode("client");
         setSelectedClientId(client.id);
-        setSelectedGroup(client.groupName || groups[0]?.name || "");
+        const initGroupName = client.groupName || groups[0]?.name || "";
+        setSelectedGroup(initGroupName);
+        const initGroupObj = groups.find((g) => g.name === initGroupName);
+        setSelectedVenueId(initGroupObj?.venueId || "");
       } else {
         setPaymentMode("unlinked");
         setSelectedClientId("");
         setSelectedGroup("");
+        setSelectedVenueId("");
       }
       setAbonementType("8_sessions");
       setAmount(crmConfig.price8 || 4500);
@@ -173,9 +179,17 @@ export const ProcessPaymentModal: React.FC<ProcessPaymentModalProps> = ({
         const categoryName =
           selectedCategory ||
           (abonementType === "1_session" ? "Разовые тренировки" : "Абонементы");
+        const targetGroupUnlinked = groups.find(
+          (g) => g.name === selectedGroup,
+        );
+        const resolvedVenueIdUnlinked =
+          selectedVenueId || targetGroupUnlinked?.venueId || undefined;
+        const resolvedVenueNameUnlinked = resolvedVenueIdUnlinked
+          ? counterparties.find((c) => c.id === resolvedVenueIdUnlinked)?.name
+          : undefined;
         const descText =
           customDescription.trim() ||
-          `${itemLabel} (без привязки к игроку${selectedGroup ? `, Группа: ${selectedGroup}` : ""})`;
+          `${itemLabel}${resolvedVenueNameUnlinked ? ` (площадка «${resolvedVenueNameUnlinked}»)` : selectedGroup ? ` (Группа: ${selectedGroup})` : " (без привязки к игроку)"}`;
 
         await addFinanceRecord({
           type: "income",
@@ -186,6 +200,7 @@ export const ProcessPaymentModal: React.FC<ProcessPaymentModalProps> = ({
           description: descText,
           accountId: selectedAccount || "acc_bank",
           groupName: selectedGroup || undefined,
+          counterpartyId: resolvedVenueIdUnlinked,
           isFixed: false,
         });
 
@@ -233,6 +248,8 @@ export const ProcessPaymentModal: React.FC<ProcessPaymentModalProps> = ({
         const categoryName =
           selectedCategory ||
           (abonementType === "1_session" ? "Разовые тренировки" : "Абонементы");
+        const resolvedVenueIdClient =
+          selectedVenueId || targetGroup?.venueId || undefined;
         await addFinanceRecord({
           type: "income",
           category: categoryName,
@@ -244,6 +261,7 @@ export const ProcessPaymentModal: React.FC<ProcessPaymentModalProps> = ({
             `Оплата ${itemLabel} (${activeClient.childSurname} ${activeClient.childName}, Группа: ${selectedGroup || "Не указана"})`,
           accountId: selectedAccount || "acc_bank",
           groupName: selectedGroup || undefined,
+          counterpartyId: resolvedVenueIdClient,
           clientId: activeClient.id,
           clientName: `${activeClient.childSurname} ${activeClient.childName}`.trim(),
           isFixed: false,
@@ -548,7 +566,14 @@ export const ProcessPaymentModal: React.FC<ProcessPaymentModalProps> = ({
                   <div className="relative">
                     <select
                       value={selectedGroup}
-                      onChange={(e) => setSelectedGroup(e.target.value)}
+                      onChange={(e) => {
+                        const nextGroup = e.target.value;
+                        setSelectedGroup(nextGroup);
+                        const grp = groups.find((g) => g.name === nextGroup);
+                        if (grp?.venueId) {
+                          setSelectedVenueId(grp.venueId);
+                        }
+                      }}
                       className="w-full text-xs font-bold p-2.5 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 bg-white"
                     >
                       <option value="">-- Без группы --</option>
@@ -561,6 +586,34 @@ export const ProcessPaymentModal: React.FC<ProcessPaymentModalProps> = ({
                     <Users className="w-3.5 h-3.5 absolute right-3 top-3 text-slate-400 pointer-events-none" />
                   </div>
                 </div>
+              </div>
+
+              {/* Venue / Object Link */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Площадка / Объект (для экономики объекта)
+                </label>
+                <select
+                  value={selectedVenueId}
+                  onChange={(e) => setSelectedVenueId(e.target.value)}
+                  className="w-full text-xs font-semibold p-2.5 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 bg-white"
+                >
+                  <option value="">
+                    -- Без привязки к объекту (или по группе) --
+                  </option>
+                  {counterparties
+                    .filter(
+                      (cp) =>
+                        cp.type === "school_rent" ||
+                        cp.type === "hall_rent" ||
+                        cp.type === "other",
+                    )
+                    .map((cp) => (
+                      <option key={cp.id} value={cp.id}>
+                        {cp.name}
+                      </option>
+                    ))}
+                </select>
               </div>
 
               {/* Payment Account & Description */}
