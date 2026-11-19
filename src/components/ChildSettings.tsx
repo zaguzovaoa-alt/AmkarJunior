@@ -3,6 +3,7 @@ import { useCRM } from "../context/CRMContext";
 import { Client } from "../types";
 import { Camera, Save, CheckCircle2, Loader2 } from "lucide-react";
 import { compressImage } from "../utils/image";
+import { UniformKitControl } from "./UniformKitControl";
 
 interface ChildSettingsProps {
   client: Client;
@@ -169,6 +170,18 @@ export function ChildSettings({ client }: ChildSettingsProps) {
                 <option value="M">Взрослый M</option>
               </select>
             </div>
+          </div>
+
+          <div className="p-3 bg-white border border-gray-200 rounded-xl flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              Наличие игровой формы
+            </span>
+            <UniformKitControl
+              variant="readonly"
+              hasUniform={client.hasUniform}
+              uniformKits={client.uniformKits}
+              uniformSize={formData.uniformSize}
+            />
           </div>
 
           <div className="flex justify-between items-center pt-2">

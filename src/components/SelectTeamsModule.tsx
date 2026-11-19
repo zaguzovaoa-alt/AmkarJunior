@@ -56,6 +56,11 @@ import { SelectTeamScoutModal } from "./select-teams/SelectTeamScoutModal";
 import { TacticalPitchView } from "./select-teams/TacticalPitchView";
 import { CompetitionResultsView } from "./select-teams/CompetitionResultsView";
 import { CompetitionStatsBoard } from "./select-teams/CompetitionStatsBoard";
+import {
+  UniformKitControl,
+  UniformFilterValue,
+  matchesUniformFilter,
+} from "./UniformKitControl";
 
 const ROLE_LABELS_RU: Record<string, string> = {
   admin: "Администратор",
@@ -130,6 +135,8 @@ export const SelectTeamsModule: React.FC = () => {
   const [filterPayment, setFilterPayment] = useState<string>("all");
   const [filterPosition, setFilterPosition] = useState<string>("all");
   const [filterBranch, setFilterBranch] = useState<string>("all");
+  const [filterUniform, setFilterUniform] =
+    useState<UniformFilterValue>("all");
   const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
 
   // Fee tab controls
@@ -262,6 +269,9 @@ export const SelectTeamsModule: React.FC = () => {
       if (filterBranch !== "all" && branch !== filterBranch) {
         return false;
       }
+      if (!matchesUniformFilter(client, filterUniform)) {
+        return false;
+      }
       if (q) {
         const hay =
           `${client.childSurname} ${client.childName} ${client.parentName} ${branch} ${member.subRole || ""} ${member.note || ""}`.toLowerCase();
@@ -276,6 +286,7 @@ export const SelectTeamsModule: React.FC = () => {
     filterPayment,
     filterPosition,
     filterBranch,
+    filterUniform,
   ]);
 
   // Handlers
@@ -1286,6 +1297,21 @@ export const SelectTeamsModule: React.FC = () => {
                           ))}
                         </select>
                       )}
+
+                      <select
+                        value={filterUniform}
+                        onChange={(e) =>
+                          setFilterUniform(e.target.value as UniformFilterValue)
+                        }
+                        className="px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-red-600"
+                      >
+                        <option value="all">Форма: все</option>
+                        <option value="has_any">Есть форма</option>
+                        <option value="red_black">Красно-чёрная</option>
+                        <option value="white">Белая</option>
+                        <option value="both">Обе (К-Ч + Белая)</option>
+                        <option value="none">Нет формы</option>
+                      </select>
                     </div>
 
                     {/* Roster Table */}
@@ -1314,11 +1340,12 @@ export const SelectTeamsModule: React.FC = () => {
                       </div>
                     ) : (
                       <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse min-w-[960px]">
+                        <table className="w-full text-left border-collapse min-w-[1060px]">
                           <thead>
                             <tr className="border-b border-slate-200 bg-slate-50/50 text-[11px] font-semibold text-slate-500">
                               <th className="py-3 pl-4 pr-2 w-12">№</th>
                               <th className="py-3 px-3">Игрок и филиал</th>
+                              <th className="py-3 px-3">Форма</th>
                               <th className="py-3 px-3">Участие</th>
                               <th className="py-3 px-3">Взнос на турнир</th>
                               <th className="py-3 px-3">Роль в сборной</th>
@@ -1446,6 +1473,21 @@ export const SelectTeamsModule: React.FC = () => {
                                             {member.note}
                                           </div>
                                         )}
+                                      </td>
+
+                                      {/* Uniform Kit Quick Toggle */}
+                                      <td className="py-3 px-3 align-middle">
+                                        <UniformKitControl
+                                          variant="compact"
+                                          hasUniform={client.hasUniform}
+                                          uniformKits={client.uniformKits}
+                                          onChange={(next) =>
+                                            updateClient(client.id, {
+                                              hasUniform: next.hasUniform,
+                                              uniformKits: next.uniformKits,
+                                            })
+                                          }
+                                        />
                                       </td>
 
                                       {/* Participation Quick Toggle */}
@@ -1694,7 +1736,7 @@ export const SelectTeamsModule: React.FC = () => {
                                     {/* EXPANDED SMART ROLE & PLAYER NOTE DRAWER */}
                                     {isExpanded && (
                                       <tr className="bg-slate-50/90">
-                                        <td colSpan={7} className="px-6 py-4">
+                                        <td colSpan={8} className="px-6 py-4">
                                           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 text-left">
                                             {/* Role Fit Breakdown */}
                                             <div className="lg:col-span-5 space-y-2.5">

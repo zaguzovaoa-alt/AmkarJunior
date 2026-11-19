@@ -58,7 +58,10 @@
         "preferredPosition": { "type": "string", "description": "Primary football position: GK, DEF, MID, FWD, UNI" },
         "secondaryPosition": { "type": "string", "description": "Secondary football position" },
         "dominantFoot": { "type": "string", "description": "right, left, or both" },
-        "jerseyNumber": { "type": "number", "description": "Preferred jersey number" }
+        "jerseyNumber": { "type": "number", "description": "Preferred jersey number" },
+        "uniformSize": { "type": "string", "description": "Clothing size of the student's uniform" },
+        "hasUniform": { "type": "boolean", "description": "Whether the student owns club uniform" },
+        "uniformKits": { "type": "array", "description": "Owned club uniform kit types: red_black (красно-чёрная) and/or white (белая)" }
       },
       "required": ["id", "parentName", "parentPhone", "childName", "childSurname", "status", "abonement", "abonementStatus"]
     },

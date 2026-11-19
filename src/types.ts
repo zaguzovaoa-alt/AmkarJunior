@@ -202,6 +202,8 @@ export interface Client {
   notes: string;
   avatarUrl?: string;
   uniformSize?: string;
+  hasUniform?: boolean;
+  uniformKits?: UniformKitType[];
   relationshipRisk?: 'none' | 'low' | 'high';
   relationshipNotes?: string;
   managerBonusAccrued?: number;
@@ -217,6 +219,8 @@ export interface Client {
   dominantFoot?: 'right' | 'left' | 'both';
   jerseyNumber?: number;
 }
+
+export type UniformKitType = 'red_black' | 'white';
 
 export type PlayerPosition = 'GK' | 'DEF' | 'MID' | 'FWD' | 'UNI';
 

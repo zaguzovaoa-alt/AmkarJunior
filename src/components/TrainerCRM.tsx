@@ -61,6 +61,7 @@ import {
 import { AIProgressReportCard } from "./AIProgressReportCard";
 import { TrainerCancelModal } from "./TrainerCancelModal";
 import { VideoLessonsModule } from "./VideoLessonsModule";
+import { UniformKitControl } from "./UniformKitControl";
 import {
   resolveTrainerIdentity,
   isGroupAssignedToCoach,
@@ -4013,6 +4014,19 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                                     <div className="text-[10px] font-bold px-2 py-0.5 rounded-md inline-block mt-1 w-fit border text-emerald-700 bg-emerald-50 border-emerald-100">
                                       Остаток: {player.abonementSessionsLeft} занятий
                                     </div>
+                                    <div className="pt-1.5">
+                                      <UniformKitControl
+                                        variant="compact"
+                                        hasUniform={player.hasUniform}
+                                        uniformKits={player.uniformKits}
+                                        onChange={(next) =>
+                                          updateClient(player.id, {
+                                            hasUniform: next.hasUniform,
+                                            uniformKits: next.uniformKits,
+                                          })
+                                        }
+                                      />
+                                    </div>
                                   </div>
                                 </div>
                                 <div className="flex space-x-1">
@@ -4335,6 +4349,21 @@ export const TrainerCRM: React.FC<TrainerCRMProps> = ({
                                            <span className="text-gray-500 italic">Полис не загружен</span>
                                         )}
                                       </div>
+
+                                      <h4 className="font-extrabold text-sm uppercase text-slate-900 tracking-wider pt-2">
+                                        Игровая форма
+                                      </h4>
+                                      <UniformKitControl
+                                        variant="form"
+                                        hasUniform={selectedClient.hasUniform}
+                                        uniformKits={selectedClient.uniformKits}
+                                        onChange={(next) =>
+                                          updateClient(selectedClient.id, {
+                                            hasUniform: next.hasUniform,
+                                            uniformKits: next.uniformKits,
+                                          })
+                                        }
+                                      />
                                    </div>
                                 </div>
                             )}

@@ -39,13 +39,19 @@ import {
   UserCheck,
   RotateCcw,
 } from "lucide-react";
-import { Client, Lead, ClientStatus, CRMTask } from "../types";
+import { Client, Lead, ClientStatus, CRMTask, UniformKitType } from "../types";
 import { calculateAge, isBirthdayToday, cleanClientNotes } from "../utils/dateUtils";
 import { compressImage } from "../utils/image";
 import { ConfirmModal } from "./ConfirmModal";
 import { BirthdaysBanner } from "./BirthdaysBanner";
 import { ProcessPaymentModal } from "./ProcessPaymentModal";
 import { AIProgressReportCard } from "./AIProgressReportCard";
+import {
+  UniformKitControl,
+  UniformFilterValue,
+  matchesUniformFilter,
+  normalizeUniformState,
+} from "./UniformKitControl";
 
 const formatBirthDate = (dateString?: string, fallbackYear?: number) => {
   if (!dateString) return fallbackYear ? `${fallbackYear} г.р.` : "";
@@ -311,6 +317,10 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
     useState<Client["status"]>("active");
   const [newDirectAbonement, setNewDirectAbonement] =
     useState<Client["abonement"]>("none");
+  const [newDirectHasUniform, setNewDirectHasUniform] = useState(false);
+  const [newDirectUniformKits, setNewDirectUniformKits] = useState<
+    UniformKitType[]
+  >([]);
 
   // Edit Client modal state
   const [isEditClientOpen, setIsEditClientOpen] = useState(false);
@@ -354,6 +364,8 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
   >("none");
   const [editRiskComment, setEditRiskComment] = useState("");
   const [editManagerBonus, setEditManagerBonus] = useState(0);
+  const [editHasUniform, setEditHasUniform] = useState(false);
+  const [editUniformKits, setEditUniformKits] = useState<UniformKitType[]>([]);
 
   // Dynamic set of all active/school groups present in DB or default presets (trimmed to avoid duplicates)
   const availableGroups = Array.from(
@@ -399,6 +411,8 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
   const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
   const [filterAbonement, setFilterAbonement] = useState<string>("all");
   const [filterBranch, setFilterBranch] = useState<string>("all");
+  const [filterUniform, setFilterUniform] =
+    useState<UniformFilterValue>("all");
 
   const [itemsPerPage, setItemsPerPage] = useState<number>(10);
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -457,6 +471,12 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
     setEditRiskResolution(client.riskResolution || "none");
     setEditRiskComment(client.riskComment || "");
     setEditManagerBonus(client.managerBonusAccrued || 0);
+    const normUniform = normalizeUniformState(
+      client.hasUniform,
+      client.uniformKits,
+    );
+    setEditHasUniform(normUniform.hasUniform);
+    setEditUniformKits(normUniform.uniformKits);
     setIsEditClientOpen(true);
   };
 
@@ -488,6 +508,8 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
         riskResolution: editRiskResolution,
         riskComment: editRiskComment,
         managerBonusAccrued: editManagerBonus,
+        hasUniform: editHasUniform,
+        uniformKits: editUniformKits,
       });
       // also assign client to selected group effectively
       await assignClientToGroup(editClientId, editGroup || null);
@@ -524,6 +546,8 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
         riskResolution: editRiskResolution,
         riskComment: editRiskComment,
         managerBonusAccrued: editManagerBonus,
+        hasUniform: editHasUniform,
+        uniformKits: editUniformKits,
       });
       // also assign client to selected group effectively
       await assignClientToGroup(selectedClient.id, editGroup || null);
@@ -847,6 +871,8 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                   : 0,
         groupName: newDirectGroup || undefined,
         managerBonusAccrued: 0,
+        hasUniform: newDirectHasUniform,
+        uniformKits: newDirectUniformKits,
         notes: "Добавлен менеджером вручную из CRM",
       });
       alert("Новый ученик успешно добавлен!");
@@ -858,6 +884,8 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
       setNewDirectPhone("+7 ");
       setNewDirectEmail("");
       setNewDirectGroup("");
+      setNewDirectHasUniform(false);
+      setNewDirectUniformKits([]);
     } catch (err: any) {
       setAddClientError(
         "Ошибка при добавлении ученика: " + (err.message || String(err)),
@@ -1059,12 +1087,15 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
       const matchesBranch =
         filterBranch === "all" || (c.branch && c.branch === filterBranch);
 
+      const matchesUniform = matchesUniformFilter(c, filterUniform);
+
       return (
         matchesSearch &&
         matchesStatus &&
         matchesGroup &&
         matchesAbonement &&
-        matchesBranch
+        matchesBranch &&
+        matchesUniform
       );
     })
     .sort((a, b) => {
@@ -1079,7 +1110,7 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
   React.useEffect(() => {
     setCurrentPage(1);
     setSelectedClientIds(new Set());
-  }, [searchTerm, filterStatus, filterGroup, filterAbonement, filterBranch, itemsPerPage]);
+  }, [searchTerm, filterStatus, filterGroup, filterAbonement, filterBranch, filterUniform, itemsPerPage]);
 
   const paginatedClients = filteredClients.slice(
     (safeCurrentPage - 1) * itemsPerPage,
@@ -1901,6 +1932,27 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                         <option value="left">Ушли / Выпускники</option>
                       </select>
 
+                      <select
+                        value={filterUniform}
+                        onChange={(e) =>
+                          setFilterUniform(e.target.value as UniformFilterValue)
+                        }
+                        className="py-2 pl-3 pr-8 bg-white border-none font-medium text-gray-500 text-[11px] rounded-full outline-none appearance-none cursor-pointer hover:bg-gray-50"
+                        style={{
+                          backgroundImage:
+                            "url(\"data:image/svg+xml,%3Csvg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")",
+                          backgroundRepeat: "no-repeat",
+                          backgroundPosition: "right 10px center",
+                        }}
+                      >
+                        <option value="all">Форма: Все</option>
+                        <option value="has_any">Есть форма (любая)</option>
+                        <option value="red_black">Красно-чёрная</option>
+                        <option value="white">Белая</option>
+                        <option value="both">Обе формы (К-Ч + Белая)</option>
+                        <option value="none">Нет формы</option>
+                      </select>
+
                       <button
                         onClick={() =>
                           setIsAdvancedFiltersOpen(!isAdvancedFiltersOpen)
@@ -2088,6 +2140,9 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                           <th className="p-2 md:p-3 hidden md:table-cell">
                             Группа
                           </th>
+                          <th className="p-2 md:p-3 hidden md:table-cell">
+                            Форма
+                          </th>
                           <th className="p-2 md:p-3 hidden sm:table-cell">
                             Статус
                           </th>
@@ -2144,6 +2199,12 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                 setEditManagerBonus(
                                   client.managerBonusAccrued || 0,
                                 );
+                                const normUniform = normalizeUniformState(
+                                  client.hasUniform,
+                                  client.uniformKits,
+                                );
+                                setEditHasUniform(normUniform.hasUniform);
+                                setEditUniformKits(normUniform.uniformKits);
 
                                 // prefill note
                                 if (!clientNotes[client.id]) {
@@ -2216,6 +2277,19 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                                     Тренер: {client.coachName}
                                   </div>
                                 )}
+                              </td>
+                              <td className="p-2 md:p-3 hidden md:table-cell align-middle">
+                                <UniformKitControl
+                                  variant="compact"
+                                  hasUniform={client.hasUniform}
+                                  uniformKits={client.uniformKits}
+                                  onChange={(next) =>
+                                    updateClient(client.id, {
+                                      hasUniform: next.hasUniform,
+                                      uniformKits: next.uniformKits,
+                                    })
+                                  }
+                                />
                               </td>
                               <td className="p-2 md:p-3 hidden sm:table-cell align-middle">
                                 <div className="flex flex-col gap-1 items-start">
@@ -2985,6 +3059,16 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                           </div>
                         </div>
 
+                        <UniformKitControl
+                          variant="form"
+                          hasUniform={editHasUniform}
+                          uniformKits={editUniformKits}
+                          onChange={(next) => {
+                            setEditHasUniform(next.hasUniform);
+                            setEditUniformKits(next.uniformKits);
+                          }}
+                        />
+
                         <div className="pt-3 flex gap-2">
                           <button
                             type="submit"
@@ -3138,6 +3222,19 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                             </div>
                           </div>
                         </div>
+
+                        {/* Interactive Uniform Kit Status (1-click toggle) */}
+                        <UniformKitControl
+                          variant="form"
+                          hasUniform={selectedClient.hasUniform}
+                          uniformKits={selectedClient.uniformKits}
+                          onChange={(next) =>
+                            updateClient(selectedClient.id, {
+                              hasUniform: next.hasUniform,
+                              uniformKits: next.uniformKits,
+                            })
+                          }
+                        />
 
                         {/* Explicit Risk Display area below Summary Info */}
                         {selectedClient.relationshipRisk &&
@@ -4617,6 +4714,16 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                 </select>
               </div>
 
+              <UniformKitControl
+                variant="form"
+                hasUniform={newDirectHasUniform}
+                uniformKits={newDirectUniformKits}
+                onChange={(next) => {
+                  setNewDirectHasUniform(next.hasUniform);
+                  setNewDirectUniformKits(next.uniformKits);
+                }}
+              />
+
               {addClientError && (
                 <div className="bg-red-50 border-s-4 border-red-500 text-red-700 px-3 py-2 text-xs font-semibold shadow-sm rounded-r-lg">
                   {addClientError}
@@ -4870,6 +4977,17 @@ export const ManagerCRM: React.FC<ManagerCRMProps> = ({
                   </select>
                 </div>
               </div>
+
+              {/* Uniform Ownership & Kit Types */}
+              <UniformKitControl
+                variant="form"
+                hasUniform={editHasUniform}
+                uniformKits={editUniformKits}
+                onChange={(next) => {
+                  setEditHasUniform(next.hasUniform);
+                  setEditUniformKits(next.uniformKits);
+                }}
+              />
 
               {/* Abonement details */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 pb-2">
