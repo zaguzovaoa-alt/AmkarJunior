@@ -1807,6 +1807,43 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       (err) => console.warn("Finance categories listener notice:", err),
     );
 
+    const unsubFinancialPlans = onSnapshot(
+      doc(db, "_config", "financial_plans"),
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          if (Array.isArray(data?.items)) {
+            const remotePlans = data.items as FinancialPlan[];
+            setFinancialPlans(remotePlans);
+            try {
+              localStorage.setItem(
+                "amkar_financial_plans",
+                JSON.stringify(remotePlans),
+              );
+            } catch {}
+          }
+        } else {
+          try {
+            const cached = localStorage.getItem("amkar_financial_plans");
+            if (cached) {
+              const parsed = JSON.parse(cached);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                setDoc(
+                  doc(db, "_config", "financial_plans"),
+                  {
+                    items: parsed.map((item) => removeUndefined(item)),
+                    updatedAt: new Date().toISOString(),
+                  },
+                  { merge: true },
+                ).catch(() => {});
+              }
+            }
+          } catch {}
+        }
+      },
+      (err) => console.warn("Financial plans listener notice:", err),
+    );
+
     return () => {
       unsubConfig();
       unsubLeads();
@@ -1826,6 +1863,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       unsubVideoLessonsCatalog();
       unsubVideoLessonsCol();
       unsubFinanceCategories();
+      unsubFinancialPlans();
     };
   }, [firebaseReady]);
 
@@ -4071,14 +4109,32 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const updateFinancialPlan = async (plan: FinancialPlan) => {
-    setFinancialPlans((prev) => {
-      const existing = prev.find((p) => p.month === plan.month);
-      if (existing) {
-        return prev.map((p) => (p.month === plan.month ? plan : p));
-      }
-      return [...prev, plan];
-    });
-    // Would save to Firestore here
+    const cleanPlan = removeUndefined(plan);
+    const existing = financialPlans.find((p) => p.month === cleanPlan.month);
+    const updatedPlans = existing
+      ? financialPlans.map((p) => (p.month === cleanPlan.month ? cleanPlan : p))
+      : [...financialPlans, cleanPlan];
+
+    setFinancialPlans(updatedPlans);
+    try {
+      localStorage.setItem(
+        "amkar_financial_plans",
+        JSON.stringify(updatedPlans),
+      );
+    } catch {}
+
+    try {
+      await setDoc(
+        doc(db, "_config", "financial_plans"),
+        {
+          items: updatedPlans.map((item) => removeUndefined(item)),
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true },
+      );
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, "_config/financial_plans");
+    }
   };
 
   const resetAllData = async () => {

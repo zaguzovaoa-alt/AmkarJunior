@@ -7,6 +7,18 @@ import { useCRM, INITIAL_FINANCE_CATEGORIES } from "../context/CRMContext";
 import { Counterparty } from "../types";
 import { VenueEconomicsPanel } from "./VenueEconomicsPanel";
 import {
+  isCashFlowRecord,
+  isInternalTransfer,
+  getRecordAccrualMonth,
+  getEffectiveRevenueGoal,
+  calcCategoryIncomePlanTotal,
+  calcCategoryExpensePlanTotal,
+  getPreviousPeriodRange,
+  calculatePercentDelta,
+  calculateClientDebts,
+  buildDailyCashBalanceSeries,
+} from "../utils/financeMetrics";
+import {
   TrendingUp,
   TrendingDown,
   DollarSign,
@@ -41,10 +53,13 @@ import {
   Search,
   Info,
   Clock,
+  Target,
 } from "lucide-react";
 import {
   LineChart,
   Line,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -130,33 +145,130 @@ export const FinanceModule: React.FC = () => {
   const [dashStartDate, setDashStartDate] = useState(defaultStartDate);
   const [dashEndDate, setDashEndDate] = useState(defaultEndDate);
 
-  // Dashboard Logic (excluding internal account-to-account transfers from external revenue/expenses)
-  const totalIncomes = finances
-    .filter(
-      (f) =>
-        f.type === "income" &&
-        f.category !== "Перевод между счетами" &&
-        f.date >= dashStartDate &&
-        f.date <= dashEndDate,
-    )
-    .reduce((acc, f) => acc + Number(f.amount || 0), 0);
-  const totalExpenses = finances
-    .filter(
-      (f) =>
-        f.type === "expense" &&
-        f.category !== "Перевод между счетами" &&
-        f.paymentStatus !== "accrued" &&
-        f.date >= dashStartDate &&
-        f.date <= dashEndDate,
-    )
-    .reduce((acc, f) => acc + Number(f.amount || 0), 0);
-  const operatingProfit = totalIncomes - totalExpenses;
-  const unpaidClients = (clients || []).filter(
-    (c) =>
-      c.status === "active" &&
-      (c.abonementStatus === "unpaid" || c.abonementStatus === "expired"),
+  // ДДС table filter states
+  const [showCashflowFilters, setShowCashflowFilters] = useState(false);
+  const [cfTypeFilter, setCfTypeFilter] = useState<"all" | "income" | "expense" | "transfer">("all");
+  const [cfAccountFilter, setCfAccountFilter] = useState<string>("all");
+  const [cfHideTransfers, setCfHideTransfers] = useState<boolean>(false);
+
+  // Accrual period matcher (ОПУ: by targetMonth when set, else by date)
+  const isInAccrualPeriod = (
+    f: (typeof finances)[number],
+    startDate: string,
+    endDate: string,
+  ) => {
+    const startYM = startDate.slice(0, 7);
+    const endYM = endDate.slice(0, 7);
+    if (f.targetMonth) {
+      return f.targetMonth >= startYM && f.targetMonth <= endYM;
+    }
+    return f.date >= startDate && f.date <= endDate;
+  };
+
+  // Dashboard Logic:
+  // - totalRevenueAccrual (Выручка ОПУ): recognized income by service month (targetMonth || date)
+  // - totalIncomes (Поступления ДДС): cash received by actual payment date
+  // - totalExpenses (Расходы ДДС): paid expenses by actual payment date (excluding accruals & transfers)
+  const totalRevenueAccrual = useMemo(
+    () =>
+      finances
+        .filter(
+          (f) =>
+            f.type === "income" &&
+            isCashFlowRecord(f) &&
+            isInAccrualPeriod(f, dashStartDate, dashEndDate),
+        )
+        .reduce((acc, f) => acc + Number(f.amount || 0), 0),
+    [finances, dashStartDate, dashEndDate],
   );
-  const totalDebts = unpaidClients.length * 4500;
+
+  const totalIncomes = useMemo(
+    () =>
+      finances
+        .filter(
+          (f) =>
+            f.type === "income" &&
+            isCashFlowRecord(f) &&
+            f.date >= dashStartDate &&
+            f.date <= dashEndDate,
+        )
+        .reduce((acc, f) => acc + Number(f.amount || 0), 0),
+    [finances, dashStartDate, dashEndDate],
+  );
+
+  const totalExpenses = useMemo(
+    () =>
+      finances
+        .filter(
+          (f) =>
+            f.type === "expense" &&
+            isCashFlowRecord(f) &&
+            f.date >= dashStartDate &&
+            f.date <= dashEndDate,
+        )
+        .reduce((acc, f) => acc + Number(f.amount || 0), 0),
+    [finances, dashStartDate, dashEndDate],
+  );
+
+  const operatingProfit = totalIncomes - totalExpenses;
+
+  // Previous comparable period metrics for truthful period-over-period % badges
+  const prevPeriodMetrics = useMemo(() => {
+    const { prevStartDate, prevEndDate } = getPreviousPeriodRange(
+      dashStartDate,
+      dashEndDate,
+    );
+    const prevRevenue = finances
+      .filter(
+        (f) =>
+          f.type === "income" &&
+          isCashFlowRecord(f) &&
+          isInAccrualPeriod(f, prevStartDate, prevEndDate),
+      )
+      .reduce((acc, f) => acc + Number(f.amount || 0), 0);
+    const prevIncomes = finances
+      .filter(
+        (f) =>
+          f.type === "income" &&
+          isCashFlowRecord(f) &&
+          f.date >= prevStartDate &&
+          f.date <= prevEndDate,
+      )
+      .reduce((acc, f) => acc + Number(f.amount || 0), 0);
+    const prevExpenses = finances
+      .filter(
+        (f) =>
+          f.type === "expense" &&
+          isCashFlowRecord(f) &&
+          f.date >= prevStartDate &&
+          f.date <= prevEndDate,
+      )
+      .reduce((acc, f) => acc + Number(f.amount || 0), 0);
+    const prevProfit = prevIncomes - prevExpenses;
+
+    return {
+      prevStartDate,
+      prevEndDate,
+      revenueDelta: calculatePercentDelta(totalRevenueAccrual, prevRevenue),
+      incomesDelta: calculatePercentDelta(totalIncomes, prevIncomes),
+      expensesDelta: calculatePercentDelta(totalExpenses, prevExpenses),
+      profitDelta: calculatePercentDelta(operatingProfit, prevProfit),
+    };
+  }, [
+    finances,
+    dashStartDate,
+    dashEndDate,
+    totalRevenueAccrual,
+    totalIncomes,
+    totalExpenses,
+    operatingProfit,
+  ]);
+
+  // Client debts using shared tariff-aware logic & actual Russian statuses
+  const { debtors: unpaidClients, totalDebt: totalDebts } = useMemo(
+    () => calculateClientDebts(clients, crmConfig),
+    [clients, crmConfig],
+  );
 
   // States for input form
   const [fType, setFType] = useState<"income" | "expense" | "transfer">("income");
@@ -855,9 +967,9 @@ export const FinanceModule: React.FC = () => {
     showNotification("Перевод между счетами отменен, балансы восстановлены");
   };
 
-  // Plan State
+  // Plan State (correctly anchored to gridFilterMonth, synced with Firestore & Director Dashboard)
   const activePlan = financialPlans.find(
-    (p) => p.month === currentMonthStr,
+    (p) => p.month === gridFilterMonth,
   ) || {
     month: gridFilterMonth,
     renew12Count: 0,
@@ -870,6 +982,8 @@ export const FinanceModule: React.FC = () => {
     price8: crmConfig.price8,
     price4: crmConfig.price4,
     categoryTargets: {},
+    revenueGoal: undefined,
+    childrenGoal: undefined,
   };
   const [plan, setPlan] = useState<typeof activePlan>(activePlan);
 
@@ -879,7 +993,7 @@ export const FinanceModule: React.FC = () => {
       setPlan({ ...current, categoryTargets: current.categoryTargets || {} });
     } else {
       setPlan({
-        month: currentMonthStr,
+        month: gridFilterMonth,
         renew12Count: 0,
         renew8Count: 0,
         renew4Count: 0,
@@ -890,17 +1004,38 @@ export const FinanceModule: React.FC = () => {
         price8: crmConfig.price8,
         price4: crmConfig.price4,
         categoryTargets: {},
+        revenueGoal: undefined,
+        childrenGoal: undefined,
       });
     }
-  }, [financialPlans, gridFilterMonth]);
+  }, [financialPlans, gridFilterMonth, crmConfig.price12, crmConfig.price8, crmConfig.price4]);
 
-  const savePlan = () => {
-    updateFinancialPlan(plan);
+  const savePlan = async (overridePlan?: typeof activePlan) => {
+    const planToSave = {
+      ...(overridePlan || plan),
+      month: gridFilterMonth,
+    };
+    await updateFinancialPlan(planToSave);
+
+    // Keep global default goal in sync when updating the current month's explicit revenue goal
+    if (
+      planToSave.month === currentMonthStr &&
+      Number(planToSave.revenueGoal || 0) > 0
+    ) {
+      updateCRMConfig({ targetRevenueGoal: Number(planToSave.revenueGoal) });
+      try {
+        localStorage.setItem(
+          "amkar_target_revenue_goal",
+          String(Number(planToSave.revenueGoal)),
+        );
+      } catch {}
+    }
+
     const btn = document.getElementById("savePlanBtn");
     if (btn) {
       btn.innerText = "План сохранен";
       setTimeout(() => {
-        btn.innerText = "Зафиксировать KPI план";
+        btn.innerText = "Зафиксировать базовые KPI";
       }, 2000);
     }
   };
@@ -909,6 +1044,70 @@ export const FinanceModule: React.FC = () => {
     (plan.renew12Count + plan.new12Count) * plan.price12 +
     (plan.renew8Count + plan.new8Count) * plan.price8 +
     (plan.renew4Count + plan.new4Count) * plan.price4;
+
+  const categoryIncomePlanTotal = useMemo(
+    () => calcCategoryIncomePlanTotal(plan, financeCategories),
+    [plan, financeCategories],
+  );
+  const categoryExpensePlanTotal = useMemo(
+    () => calcCategoryExpensePlanTotal(plan, financeCategories),
+    [plan, financeCategories],
+  );
+
+  // Synchronized Revenue Goal for Dashboard (active period start month) & Plan tab (gridFilterMonth)
+  const dashboardGoalMonth = dashStartDate ? dashStartDate.slice(0, 7) : currentMonthStr;
+  const dashboardRevenueGoalInfo = useMemo(() => {
+    const legacyLocalGoal = Number(
+      localStorage.getItem("amkar_target_revenue_goal") || 0,
+    );
+    return getEffectiveRevenueGoal(
+      dashboardGoalMonth,
+      financialPlans,
+      financeCategories,
+      crmConfig,
+      legacyLocalGoal > 0 ? legacyLocalGoal : 600000,
+    );
+  }, [dashboardGoalMonth, financialPlans, financeCategories, crmConfig]);
+
+  const dashboardMonthCashIncomes = useMemo(
+    () =>
+      finances
+        .filter(
+          (f) =>
+            f.type === "income" &&
+            isCashFlowRecord(f) &&
+            f.date.substring(0, 7) === dashboardGoalMonth,
+        )
+        .reduce((sum, f) => sum + Number(f.amount || 0), 0),
+    [finances, dashboardGoalMonth],
+  );
+
+  const planMonthCashIncomes = useMemo(
+    () =>
+      finances
+        .filter(
+          (f) =>
+            f.type === "income" &&
+            isCashFlowRecord(f) &&
+            f.date.substring(0, 7) === gridFilterMonth,
+        )
+        .reduce((sum, f) => sum + Number(f.amount || 0), 0),
+    [finances, gridFilterMonth],
+  );
+
+  const planMonthEffectiveGoal = useMemo(() => {
+    const explicit = Number(plan.revenueGoal || 0);
+    if (explicit > 0) return { goal: explicit, sourceLabel: "Заданная цель месяца" };
+    if (categoryIncomePlanTotal > 0)
+      return { goal: categoryIncomePlanTotal, sourceLabel: "План по категориям доходов" };
+    if (planRevenue > 0)
+      return { goal: planRevenue, sourceLabel: "Прогноз абонементов" };
+    const fallback =
+      Number(crmConfig?.targetRevenueGoal || 0) ||
+      Number(localStorage.getItem("amkar_target_revenue_goal") || 0) ||
+      600000;
+    return { goal: fallback, sourceLabel: "Базовая цель клуба" };
+  }, [plan.revenueGoal, categoryIncomePlanTotal, planRevenue, crmConfig?.targetRevenueGoal]);
 
   const planCount =
     plan.renew12Count +
@@ -924,7 +1123,7 @@ export const FinanceModule: React.FC = () => {
     return accounts.map((acc) => {
       const accTransactions = finances.filter((f) => f.accountId === acc.id);
       const accIncomes = accTransactions
-        .filter((f) => f.type === "income")
+        .filter((f) => f.type === "income" && f.paymentStatus !== "accrued")
         .reduce((sum, f) => sum + Number(f.amount || 0), 0);
       const accExpenses = accTransactions
         .filter((f) => f.type === "expense" && f.paymentStatus !== "accrued")
@@ -933,6 +1132,18 @@ export const FinanceModule: React.FC = () => {
       return { ...acc, actualBalance };
     });
   }, [accounts, finances]);
+
+  // True daily cumulative Cash Balance series for ДДС chart
+  const cashBalanceChartData = useMemo(
+    () =>
+      buildDailyCashBalanceSeries(
+        accounts,
+        finances,
+        dashStartDate,
+        dashEndDate,
+      ),
+    [accounts, finances, dashStartDate, dashEndDate],
+  );
 
   // New Dashboard calculations
   const dashboardData = useMemo(() => {
@@ -955,34 +1166,35 @@ export const FinanceModule: React.FC = () => {
         ][index % 6],
       }));
 
-    // Top Stats metrics (excluding internal transfers between own accounts)
+    // Top Stats metrics (excluding internal transfers & unpaid accruals)
     const periodData = finances.filter(
       (f) =>
         f.date >= dashStartDate &&
         f.date <= dashEndDate &&
-        f.category !== "Перевод между счетами",
+        isCashFlowRecord(f),
     );
     const mIncomes = periodData
       .filter((f) => f.type === "income")
       .reduce((acc, f) => acc + Number(f.amount || 0), 0);
     const mExpenses = periodData
-      .filter((f) => f.type === "expense" && f.paymentStatus !== "accrued")
+      .filter((f) => f.type === "expense")
       .reduce((acc, f) => acc + Number(f.amount || 0), 0);
     const mProfit = mIncomes - mExpenses;
 
-    // Group monthly for LineChart
+    // Group monthly for LineChart (ОПУ dynamics by service month, excluding transfers & accruals)
     const monthsMap = new Map<
       string,
       { name: string; Доходы: number; Расходы: number }
     >();
     finances.forEach((f) => {
-      if (f.category === "Перевод между счетами") return;
-      const tm = f.targetMonth || f.date.substring(0, 7);
+      if (!isCashFlowRecord(f)) return;
+      const tm = getRecordAccrualMonth(f);
+      if (!tm) return;
       if (!monthsMap.has(tm))
         monthsMap.set(tm, { name: tm, Доходы: 0, Расходы: 0 });
       const stat = monthsMap.get(tm)!;
       if (f.type === "income") stat.Доходы += Number(f.amount || 0);
-      else if (f.type === "expense" && f.paymentStatus !== "accrued") stat.Расходы += Number(f.amount || 0);
+      else if (f.type === "expense") stat.Расходы += Number(f.amount || 0);
     });
 
     // Sort ascending by month string
@@ -1662,104 +1874,229 @@ export const FinanceModule: React.FC = () => {
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
               <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between">
                 <div>
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center justify-between mb-1">
                     <span className="text-gray-600 font-medium text-sm">
-                      Выручка
+                      Выручка (ОПУ)
                     </span>
                     <div className="w-6 h-6 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center">
                       <TrendingUp className="w-3.5 h-3.5" />
                     </div>
                   </div>
+                  <div className="text-[10px] text-gray-400 mb-2">
+                    по месяцу услуг
+                  </div>
                   <div className="text-2xl font-black text-slate-900">
-                    {totalIncomes.toLocaleString()} ₽
+                    {totalRevenueAccrual.toLocaleString("ru-RU")} ₽
                   </div>
                 </div>
-                <div className="text-emerald-500 text-xs font-bold mt-3">
-                  +0%{" "}
+                <div
+                  className={`text-xs font-bold mt-3 ${
+                    prevPeriodMetrics.revenueDelta.direction === "up"
+                      ? "text-emerald-500"
+                      : prevPeriodMetrics.revenueDelta.direction === "down"
+                        ? "text-red-500"
+                        : "text-slate-400"
+                  }`}
+                >
+                  {prevPeriodMetrics.revenueDelta.text}{" "}
                   <span className="text-gray-400 font-normal">к прошлому</span>
                 </div>
               </div>
 
               <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between">
                 <div>
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center justify-between mb-1">
                     <span className="text-gray-600 font-medium text-sm">
-                      Поступления
+                      Поступления (ДДС)
                     </span>
                     <div className="w-6 h-6 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center">
                       <ArrowDownRight className="w-3.5 h-3.5" />
                     </div>
                   </div>
+                  <div className="text-[10px] text-gray-400 mb-2">
+                    по дате оплаты
+                  </div>
                   <div className="text-2xl font-black text-slate-900">
-                    {dashboardData.mIncomes.toLocaleString()} ₽
+                    {dashboardData.mIncomes.toLocaleString("ru-RU")} ₽
                   </div>
                 </div>
-                <div className="text-emerald-500 text-xs font-bold mt-3">
-                  +0%{" "}
+                <div
+                  className={`text-xs font-bold mt-3 ${
+                    prevPeriodMetrics.incomesDelta.direction === "up"
+                      ? "text-emerald-500"
+                      : prevPeriodMetrics.incomesDelta.direction === "down"
+                        ? "text-red-500"
+                        : "text-slate-400"
+                  }`}
+                >
+                  {prevPeriodMetrics.incomesDelta.text}{" "}
                   <span className="text-gray-400 font-normal">к прошлому</span>
                 </div>
               </div>
 
               <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between">
                 <div>
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center justify-between mb-1">
                     <span className="text-gray-600 font-medium text-sm">
-                      Расходы
+                      Расходы (ДДС)
                     </span>
                     <div className="w-6 h-6 bg-red-50 text-red-500 rounded-full flex items-center justify-center">
                       <ArrowUpRight className="w-3.5 h-3.5" />
                     </div>
                   </div>
+                  <div className="text-[10px] text-gray-400 mb-2">
+                    оплаченные без переводов
+                  </div>
                   <div className="text-2xl font-black text-slate-900">
-                    {dashboardData.mExpenses.toLocaleString()} ₽
+                    {dashboardData.mExpenses.toLocaleString("ru-RU")} ₽
                   </div>
                 </div>
-                <div className="text-emerald-500 text-xs font-bold mt-3">
-                  -0%{" "}
+                <div
+                  className={`text-xs font-bold mt-3 ${
+                    prevPeriodMetrics.expensesDelta.direction === "down"
+                      ? "text-emerald-500"
+                      : prevPeriodMetrics.expensesDelta.direction === "up"
+                        ? "text-red-500"
+                        : "text-slate-400"
+                  }`}
+                >
+                  {prevPeriodMetrics.expensesDelta.text}{" "}
                   <span className="text-gray-400 font-normal">к прошлому</span>
                 </div>
               </div>
 
               <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between">
                 <div>
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center justify-between mb-1">
                     <span className="text-gray-600 font-medium text-sm">
-                      Прибыль
+                      Чистый поток
                     </span>
                     <div className="w-6 h-6 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center">
                       <Wallet className="w-3.5 h-3.5" />
                     </div>
                   </div>
-                  <div className="text-2xl font-black text-slate-900">
-                    {dashboardData.mProfit.toLocaleString()} ₽
+                  <div className="text-[10px] text-gray-400 mb-2">
+                    поступления − расходы
+                  </div>
+                  <div
+                    className={`text-2xl font-black ${
+                      dashboardData.mProfit < 0 ? "text-red-600" : "text-slate-900"
+                    }`}
+                  >
+                    {dashboardData.mProfit > 0 ? "+" : ""}
+                    {dashboardData.mProfit.toLocaleString("ru-RU")} ₽
                   </div>
                 </div>
-                <div className="text-emerald-500 text-xs font-bold mt-3">
-                  +0%{" "}
+                <div
+                  className={`text-xs font-bold mt-3 ${
+                    prevPeriodMetrics.profitDelta.direction === "up"
+                      ? "text-emerald-500"
+                      : prevPeriodMetrics.profitDelta.direction === "down"
+                        ? "text-red-500"
+                        : "text-slate-400"
+                  }`}
+                >
+                  {prevPeriodMetrics.profitDelta.text}{" "}
                   <span className="text-gray-400 font-normal">к прошлому</span>
                 </div>
               </div>
 
-              <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between">
+              <button
+                type="button"
+                onClick={() => setActiveTab("debts")}
+                className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between text-left hover:border-orange-200 transition"
+              >
                 <div>
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center justify-between mb-1">
                     <span className="text-gray-600 font-medium text-sm truncate pr-2">
-                      Долги/задолженность
+                      Долги клиентов
                     </span>
                     <div className="w-6 h-6 bg-orange-50 text-orange-500 rounded-full flex items-center justify-center flex-shrink-0">
                       <AlertOctagon className="w-3.5 h-3.5" />
                     </div>
                   </div>
+                  <div className="text-[10px] text-gray-400 mb-2">
+                    ожидают оплаты / не оплачено
+                  </div>
                   <div className="text-2xl font-black text-slate-900">
-                    {totalDebts.toLocaleString()} ₽
+                    {totalDebts.toLocaleString("ru-RU")} ₽
                   </div>
                 </div>
-                <div className="text-emerald-500 text-xs font-bold mt-3">
-                  -0%{" "}
-                  <span className="text-gray-400 font-normal">к прошлому</span>
+                <div className="text-orange-600 text-xs font-bold mt-3">
+                  {unpaidClients.length}{" "}
+                  <span className="text-gray-400 font-normal">
+                    {unpaidClients.length === 1 ? "должник" : "должников"} →
+                  </span>
                 </div>
-              </div>
+              </button>
             </div>
+
+            {/* Synchronized Monthly Revenue Goal Strip */}
+            {(() => {
+              const goalVal = dashboardRevenueGoalInfo.goal;
+              const pct =
+                goalVal > 0
+                  ? Math.round((dashboardMonthCashIncomes / goalVal) * 100)
+                  : 0;
+              const remaining = Math.max(0, goalVal - dashboardMonthCashIncomes);
+              const overachieved = Math.max(0, dashboardMonthCashIncomes - goalVal);
+              return (
+                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                        <Target className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold text-slate-900 flex items-center gap-2 flex-wrap">
+                          <span>Цель по выручке ({dashboardGoalMonth})</span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                            {dashboardRevenueGoalInfo.sourceLabel}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-400">
+                          Сопоставление фактических поступлений ДДС (без переводов и начислений) с целью месяца
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <div className="text-sm font-black font-mono text-slate-900">
+                          <span className="text-emerald-600">
+                            {dashboardMonthCashIncomes.toLocaleString("ru-RU")} ₽
+                          </span>{" "}
+                          / {goalVal.toLocaleString("ru-RU")} ₽
+                        </div>
+                        <div className="text-[11px] font-bold text-slate-500">
+                          Выполнено: <span className={pct >= 100 ? "text-emerald-600" : "text-indigo-600"}>{pct}%</span>
+                          {overachieved > 0 && goalVal > 0
+                            ? ` · Перевыполнение +${overachieved.toLocaleString("ru-RU")} ₽`
+                            : ` · Осталось ${remaining.toLocaleString("ru-RU")} ₽`}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setGridFilterMonth(dashboardGoalMonth);
+                          setActiveTab("plan");
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition whitespace-nowrap"
+                      >
+                        Настроить план
+                      </button>
+                    </div>
+                  </div>
+                  <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        pct >= 100 ? "bg-emerald-500" : "bg-indigo-500"
+                      }`}
+                      style={{ width: `${Math.min(100, pct)}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -1977,7 +2314,12 @@ export const FinanceModule: React.FC = () => {
                   <h3 className="font-bold text-slate-900 text-sm">
                     Структура расходов{" "}
                     <span className="text-gray-400 font-normal">
-                      ({currentMonthStr})
+                      (
+                      {dashStartDate === defaultStartDate &&
+                      dashEndDate === defaultEndDate
+                        ? currentMonthStr
+                        : `${dashStartDate} — ${dashEndDate}`}
+                      )
                     </span>
                   </h3>
                 </div>
@@ -2655,32 +2997,51 @@ export const FinanceModule: React.FC = () => {
         {activeTab === "cashflow" &&
           (() => {
             const periodFinances = finances.filter(
-              (f) => f.date >= dashStartDate && f.date <= dashEndDate && f.paymentStatus !== "accrued",
+              (f) =>
+                f.date >= dashStartDate &&
+                f.date <= dashEndDate &&
+                f.paymentStatus !== "accrued",
             );
             periodFinances.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 
             const incomes = periodFinances
-              .filter(
-                (f) =>
-                  f.type === "income" &&
-                  f.category !== "Перевод между счетами",
-              )
+              .filter((f) => f.type === "income" && !isInternalTransfer(f))
               .reduce((acc, f) => acc + Number(f.amount || 0), 0);
             const expenses = periodFinances
-              .filter(
-                (f) =>
-                  f.type === "expense" &&
-                  f.category !== "Перевод между счетами",
-              )
+              .filter((f) => f.type === "expense" && !isInternalTransfer(f))
               .reduce((acc, f) => acc + Number(f.amount || 0), 0);
             const netFlow = incomes - expenses;
 
-            const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
+            const filteredCashflowRows = periodFinances.filter((f) => {
+              const transfer = isInternalTransfer(f);
+              if (cfHideTransfers && transfer) return false;
+              if (cfTypeFilter === "income" && (f.type !== "income" || transfer))
+                return false;
+              if (cfTypeFilter === "expense" && (f.type !== "expense" || transfer))
+                return false;
+              if (cfTypeFilter === "transfer" && !transfer) return false;
+              if (cfAccountFilter !== "all" && f.accountId !== cfAccountFilter)
+                return false;
+              return true;
+            });
+
+            const filteredExternalIncomes = filteredCashflowRows
+              .filter((f) => f.type === "income" && !isInternalTransfer(f))
+              .reduce((sum, f) => sum + Number(f.amount || 0), 0);
+            const filteredExternalExpenses = filteredCashflowRows
+              .filter((f) => f.type === "expense" && !isInternalTransfer(f))
+              .reduce((sum, f) => sum + Number(f.amount || 0), 0);
+            const activeFilterCount =
+              (cfTypeFilter !== "all" ? 1 : 0) +
+              (cfAccountFilter !== "all" ? 1 : 0) +
+              (cfHideTransfers ? 1 : 0);
+
+            const today = (() => {
+              const d = new Date();
+              return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+            })();
             const todayFinances = finances.filter(
-              (f) =>
-                f.date === today &&
-                f.paymentStatus !== "accrued" &&
-                f.category !== "Перевод между счетами",
+              (f) => f.date === today && isCashFlowRecord(f),
             );
             const todayIncomesList = todayFinances.filter(
               (f) => f.type === "income",
@@ -2720,6 +3081,18 @@ export const FinanceModule: React.FC = () => {
               4,
             );
 
+            const scrollToCashflowTable = (
+              nextType: "all" | "income" | "expense" | "transfer",
+            ) => {
+              setCfTypeFilter(nextType);
+              setShowCashflowFilters(true);
+              setTimeout(() => {
+                document
+                  .getElementById("cashflow-operations-table")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }, 50);
+            };
+
             return (
               <div className="space-y-6">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -2744,20 +3117,100 @@ export const FinanceModule: React.FC = () => {
                       <Calendar className="w-4 h-4 text-slate-400" />
                     </div>
                     <button
-                      onClick={() => showNotification("Фильтры в разработке")}
-                      className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold text-slate-700 flex items-center gap-2 shadow-sm hover:bg-slate-50 transition"
+                      type="button"
+                      onClick={() => setShowCashflowFilters((v) => !v)}
+                      className={`border rounded-xl px-4 py-2 text-sm font-bold flex items-center gap-2 shadow-sm transition ${
+                        showCashflowFilters || activeFilterCount > 0
+                          ? "bg-slate-900 text-white border-slate-900"
+                          : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                      }`}
                     >
-                      <Filter className="w-4 h-4" /> Фильтры
+                      <Filter className="w-4 h-4" />
+                      <span>Фильтры</span>
+                      {activeFilterCount > 0 && (
+                        <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-emerald-500 text-white">
+                          {activeFilterCount}
+                        </span>
+                      )}
                     </button>
                   </div>
                 </div>
+
+                {showCashflowFilters && (
+                  <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-wrap items-center gap-3 justify-between">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {(
+                        [
+                          { id: "all", label: "Все операции" },
+                          { id: "income", label: "Только приходы" },
+                          { id: "expense", label: "Только расходы" },
+                          { id: "transfer", label: "Переводы между счетами" },
+                        ] as const
+                      ).map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setCfTypeFilter(opt.id)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                            cfTypeFilter === opt.id
+                              ? "bg-slate-900 text-white"
+                              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3">
+                      <select
+                        value={cfAccountFilter}
+                        onChange={(e) => setCfAccountFilter(e.target.value)}
+                        className="text-xs font-bold bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 outline-none"
+                      >
+                        <option value="all">Все счета</option>
+                        {accounts.map((acc) => (
+                          <option key={acc.id} value={acc.id}>
+                            {acc.name}
+                          </option>
+                        ))}
+                      </select>
+
+                      {cfTypeFilter !== "transfer" && (
+                        <label className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={cfHideTransfers}
+                            onChange={(e) => setCfHideTransfers(e.target.checked)}
+                            className="rounded border-slate-300 text-slate-900"
+                          />
+                          <span>Скрыть переводы в таблице</span>
+                        </label>
+                      )}
+
+                      {activeFilterCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCfTypeFilter("all");
+                            setCfAccountFilter("all");
+                            setCfHideTransfers(false);
+                          }}
+                          className="text-xs font-bold text-red-500 hover:underline"
+                        >
+                          Сбросить
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   {/* Остатки на счетах */}
                   <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm relative">
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                        Остатки на счетах
+                        Остатки на счетах (сейчас)
                       </div>
                       <button
                         type="button"
@@ -2798,7 +3251,7 @@ export const FinanceModule: React.FC = () => {
                   {/* Приходы */}
                   <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm relative flex flex-col justify-between">
                     <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                      Приходы
+                      Приходы (без переводов)
                     </div>
                     <div className="absolute top-4 right-4 w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-500">
                       <ArrowDownRight className="w-4 h-4" />
@@ -2808,7 +3261,7 @@ export const FinanceModule: React.FC = () => {
                         + {incomes.toLocaleString("ru-RU")} ₽
                       </div>
                       <div className="text-[10px] font-bold text-slate-400">
-                        за период
+                        за выбранный период
                       </div>
                     </div>
                   </div>
@@ -2816,7 +3269,7 @@ export const FinanceModule: React.FC = () => {
                   {/* Расходы */}
                   <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm relative flex flex-col justify-between">
                     <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                      Расходы
+                      Расходы (оплаченные)
                     </div>
                     <div className="absolute top-4 right-4 w-8 h-8 rounded-full bg-red-50 flex items-center justify-center text-red-500">
                       <ArrowUpRight className="w-4 h-4" />
@@ -2826,7 +3279,7 @@ export const FinanceModule: React.FC = () => {
                         - {expenses.toLocaleString("ru-RU")} ₽
                       </div>
                       <div className="text-[10px] font-bold text-slate-400">
-                        за период
+                        за выбранный период
                       </div>
                     </div>
                   </div>
@@ -2834,18 +3287,22 @@ export const FinanceModule: React.FC = () => {
                   {/* Чистый поток */}
                   <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm relative flex flex-col justify-between">
                     <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                      Чистый поток
+                      Чистый поток (ЧДП)
                     </div>
                     <div className="absolute top-4 right-4 w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-500">
                       <TrendingUp className="w-4 h-4" />
                     </div>
                     <div>
-                      <div className="text-2xl font-black text-slate-900 mb-1">
+                      <div
+                        className={`text-2xl font-black mb-1 ${
+                          netFlow < 0 ? "text-red-600" : "text-slate-900"
+                        }`}
+                      >
                         {netFlow > 0 ? "+" : ""}
                         {netFlow.toLocaleString("ru-RU")} ₽
                       </div>
                       <div className="text-[10px] font-bold text-slate-400">
-                        за период
+                        приходы − расходы за период
                       </div>
                     </div>
                   </div>
@@ -2881,28 +3338,50 @@ export const FinanceModule: React.FC = () => {
                         )}
                       </div>
                     </div>
-                    <button className="text-[11px] font-bold text-blue-500 hover:underline text-left">
+                    <button
+                      type="button"
+                      onClick={() => scrollToCashflowTable("income")}
+                      className="text-[11px] font-bold text-blue-500 hover:underline text-left"
+                    >
                       Все поступления &gt;
                     </button>
                   </div>
 
                   <div className="lg:col-span-2 bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex flex-col">
-                    <div className="text-xs font-bold text-slate-900 mb-4">
-                      Динамика остатка денежных средств
+                    <div className="flex items-center justify-between gap-2 mb-4">
+                      <div>
+                        <div className="text-xs font-bold text-slate-900">
+                          Динамика остатка денежных средств
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          Накопительный баланс по всем счетам за период ({dashStartDate} — {dashEndDate})
+                        </div>
+                      </div>
+                      {cashBalanceChartData.length > 0 && (
+                        <span className="text-[11px] font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">
+                          На конец: {cashBalanceChartData[cashBalanceChartData.length - 1].Остаток.toLocaleString("ru-RU")} ₽
+                        </span>
+                      )}
                     </div>
                     <div className="flex-1 min-h-[200px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart 
-                          data={dashboardData.dynamicChartData}
-                          margin={{ top: 10, right: 30, left: 10, bottom: 10 }}
+                        <AreaChart
+                          data={cashBalanceChartData}
+                          margin={{ top: 10, right: 20, left: 10, bottom: 10 }}
                         >
+                          <defs>
+                            <linearGradient id="cashBalanceGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.28} />
+                              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.0} />
+                            </linearGradient>
+                          </defs>
                           <CartesianGrid
                             strokeDasharray="3 3"
                             vertical={false}
                             stroke="#f1f5f9"
                           />
                           <XAxis
-                            dataKey="name"
+                            dataKey="label"
                             axisLine={false}
                             tickLine={false}
                             tick={{ fill: "#94a3b8", fontSize: 10 }}
@@ -2911,23 +3390,32 @@ export const FinanceModule: React.FC = () => {
                             axisLine={false}
                             tickLine={false}
                             tick={{ fill: "#94a3b8", fontSize: 10 }}
+                            tickFormatter={(val) =>
+                              val === 0 ? "0 ₽" : `${Math.round(val / 1000)}k`
+                            }
                           />
-                          <Tooltip />
-                          <Line
+                          <Tooltip
+                            contentStyle={{
+                              borderRadius: "12px",
+                              border: "none",
+                              boxShadow:
+                                "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+                              fontSize: "12px",
+                            }}
+                            formatter={(value: number, name: string) => [
+                              `${Number(value).toLocaleString("ru-RU")} ₽`,
+                              name,
+                            ]}
+                          />
+                          <Area
                             type="monotone"
-                            dataKey="Доходы"
-                            stroke="#10b981"
-                            strokeWidth={2}
-                            dot={{ r: 3, fill: "#10b981" }}
+                            dataKey="Остаток"
+                            stroke="#3b82f6"
+                            strokeWidth={2.5}
+                            fillOpacity={1}
+                            fill="url(#cashBalanceGrad)"
                           />
-                          <Line
-                            type="monotone"
-                            dataKey="Расходы"
-                            stroke="#ef4444"
-                            strokeWidth={2}
-                            dot={{ r: 3, fill: "#ef4444" }}
-                          />
-                        </LineChart>
+                        </AreaChart>
                       </ResponsiveContainer>
                     </div>
                   </div>
@@ -2961,17 +3449,29 @@ export const FinanceModule: React.FC = () => {
                         )}
                       </div>
                     </div>
-                    <button className="text-[11px] font-bold text-blue-500 hover:underline text-left">
+                    <button
+                      type="button"
+                      onClick={() => scrollToCashflowTable("expense")}
+                      className="text-[11px] font-bold text-blue-500 hover:underline text-left"
+                    >
                       Все расходы &gt;
                     </button>
                   </div>
                 </div>
 
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col overflow-hidden">
-                  <div className="flex justify-between items-center p-5 border-b border-slate-100">
-                    <h3 className="text-sm font-bold text-slate-900">
-                      Все операции
-                    </h3>
+                <div
+                  id="cashflow-operations-table"
+                  className="bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col overflow-hidden"
+                >
+                  <div className="flex flex-wrap justify-between items-center gap-3 p-5 border-b border-slate-100">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900">
+                        Все операции ({filteredCashflowRows.length})
+                      </h3>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Внутренние переводы выделены синим и не включаются в итоги «Приходы» и «Расходы» ДДС
+                      </p>
+                    </div>
                     <button
                       onClick={() => setActiveTab("input")}
                       className="text-xs font-bold text-red-500 border border-red-200 bg-red-50 px-4 py-2 rounded-xl hover:bg-red-100 transition"
@@ -3013,32 +3513,53 @@ export const FinanceModule: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {periodFinances.map((f) => {
+                        {filteredCashflowRows.map((f) => {
                           const accObj = accounts.find(
                             (a) => a.id === f.accountId,
                           );
+                          const transferRow = isInternalTransfer(f);
                           return (
                             <tr
                               key={f.id}
-                              className="hover:bg-slate-50 transition"
+                              className={`transition ${
+                                transferRow
+                                  ? "bg-blue-50/30 hover:bg-blue-50/60"
+                                  : "hover:bg-slate-50"
+                              }`}
                             >
                               <td className="px-5 py-3 text-slate-500 font-medium">
                                 {new Date(f.date).toLocaleDateString("ru-RU")}
                               </td>
                               <td className="px-5 py-3 text-slate-900 font-bold">
-                                {f.category}
+                                <div className="flex items-center gap-2">
+                                  <span>{f.category}</span>
+                                  {transferRow && (
+                                    <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-blue-100 text-blue-700">
+                                      Перевод
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-5 py-3 text-slate-500">
-                                {f.isFixed ? "Постоянный" : "Переменный"}
+                                {transferRow
+                                  ? "Внутренний"
+                                  : f.isFixed
+                                    ? "Постоянный"
+                                    : "Переменный"}
                               </td>
                               <td className="px-5 py-3 text-slate-900 font-bold">
                                 {(() => {
                                   if (f.counterpartyId) {
-                                    const cp = counterparties.find(c => c.id === f.counterpartyId);
+                                    const cp = counterparties.find(
+                                      (c) => c.id === f.counterpartyId,
+                                    );
                                     if (cp) return cp.name;
                                   }
                                   if (f.description) {
-                                    if (f.category === "Зарплата" || f.category === "Тренер") {
+                                    if (
+                                      f.category === "Зарплата" ||
+                                      f.category === "Тренер"
+                                    ) {
                                       const match = f.description.match(/: ([^(]+)/);
                                       if (match && match[1]) return match[1].trim();
                                     }
@@ -3051,18 +3572,24 @@ export const FinanceModule: React.FC = () => {
                                   return "—";
                                 })()}
                               </td>
-                              <td className="px-5 py-3 text-emerald-600 font-bold text-right">
+                              <td
+                                className={`px-5 py-3 font-bold text-right ${
+                                  transferRow
+                                    ? "text-blue-600/80"
+                                    : "text-emerald-600"
+                                }`}
+                              >
                                 {f.type === "income"
-                                  ? `+${Number(f.amount).toLocaleString(
-                                      "ru-RU",
-                                    )} ₽`
+                                  ? `+${Number(f.amount).toLocaleString("ru-RU")} ₽`
                                   : ""}
                               </td>
-                              <td className="px-5 py-3 text-red-600 font-bold text-right">
+                              <td
+                                className={`px-5 py-3 font-bold text-right ${
+                                  transferRow ? "text-blue-600/80" : "text-red-600"
+                                }`}
+                              >
                                 {f.type === "expense"
-                                  ? `-${Number(f.amount).toLocaleString(
-                                      "ru-RU",
-                                    )} ₽`
+                                  ? `-${Number(f.amount).toLocaleString("ru-RU")} ₽`
                                   : ""}
                               </td>
                               <td className="px-5 py-3 text-slate-500">
@@ -3076,7 +3603,7 @@ export const FinanceModule: React.FC = () => {
                                   "—"
                                 )}
                               </td>
-                              <td className="px-5 py-3 text-slate-500 max-w-[150px] truncate">
+                              <td className="px-5 py-3 text-slate-500 max-w-[180px] truncate">
                                 {f.description || "—"}
                               </td>
                               <td className="px-5 py-3 text-center">
@@ -3090,17 +3617,50 @@ export const FinanceModule: React.FC = () => {
                             </tr>
                           );
                         })}
-                        {periodFinances.length === 0 && (
+                        {filteredCashflowRows.length === 0 && (
                           <tr>
                             <td
                               colSpan={9}
                               className="px-5 py-8 text-center text-slate-400 font-medium"
                             >
-                              Нет операций за выбранный период
+                              Нет операций за выбранный период по текущим фильтрам
                             </td>
                           </tr>
                         )}
                       </tbody>
+                      {filteredCashflowRows.length > 0 && cfTypeFilter !== "transfer" && (
+                        <tfoot className="bg-slate-50 border-t-2 border-slate-200 font-bold text-xs">
+                          <tr>
+                            <td colSpan={4} className="px-5 py-3 text-slate-700">
+                              Итого по внешним операциям ДДС (без переводов):
+                            </td>
+                            <td className="px-5 py-3 text-right text-emerald-600 font-mono">
+                              +{filteredExternalIncomes.toLocaleString("ru-RU")} ₽
+                            </td>
+                            <td className="px-5 py-3 text-right text-red-600 font-mono">
+                              -{filteredExternalExpenses.toLocaleString("ru-RU")} ₽
+                            </td>
+                            <td colSpan={3} className="px-5 py-3 text-slate-700 font-mono">
+                              ЧДП:{" "}
+                              <span
+                                className={
+                                  filteredExternalIncomes - filteredExternalExpenses < 0
+                                    ? "text-red-600"
+                                    : "text-slate-900"
+                                }
+                              >
+                                {filteredExternalIncomes - filteredExternalExpenses > 0
+                                  ? "+"
+                                  : ""}
+                                {(
+                                  filteredExternalIncomes - filteredExternalExpenses
+                                ).toLocaleString("ru-RU")}{" "}
+                                ₽
+                              </span>
+                            </td>
+                          </tr>
+                        </tfoot>
+                      )}
                     </table>
                   </div>
                 </div>
@@ -3136,17 +3696,17 @@ export const FinanceModule: React.FC = () => {
             const getMonthData = (monthStr: string) => {
               const mFinances = finances.filter(
                 (f) =>
-                  (f.targetMonth || f.date.substring(0, 7)) === monthStr &&
-                  f.category !== "Перевод между счетами",
+                  getRecordAccrualMonth(f) === monthStr &&
+                  isCashFlowRecord(f),
               );
               const incomeTransactions = mFinances.filter(
                 (f) => f.type === "income",
               );
               const variableTransactions = mFinances.filter(
-                (f) => f.type === "expense" && !f.isFixed && f.paymentStatus !== "accrued",
+                (f) => f.type === "expense" && !f.isFixed,
               );
               const fixedTransactions = mFinances.filter(
-                (f) => f.type === "expense" && f.isFixed && f.paymentStatus !== "accrued",
+                (f) => f.type === "expense" && f.isFixed,
               );
 
               const income = incomeTransactions.reduce(
@@ -3592,29 +4152,186 @@ export const FinanceModule: React.FC = () => {
 
         {activeTab === "plan" && (
           <div className="space-y-6 border-none">
+            {/* СИНХРОНИЗИРОВАННАЯ ЦЕЛЬ ПО ВЫРУЧКЕ (Связана с Дашбордом Директора и Firestore) */}
+            {(() => {
+              const effectiveGoal = planMonthEffectiveGoal.goal;
+              const goalPct =
+                effectiveGoal > 0
+                  ? Math.round((planMonthCashIncomes / effectiveGoal) * 100)
+                  : 0;
+              const remaining = Math.max(0, effectiveGoal - planMonthCashIncomes);
+              const over = Math.max(0, planMonthCashIncomes - effectiveGoal);
+
+              return (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 max-w-5xl space-y-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-4">
+                    <div>
+                      <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                        <Target className="w-5 h-5 text-indigo-600" />
+                        Цель по выручке и сопоставление с ДДС
+                      </h2>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Синхронизируется с виджетом «Цели месяца» на Дашборде директора и сохраняется в облачной базе
+                      </p>
+                    </div>
+                    <div className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold text-slate-700 flex items-center gap-2 shadow-sm w-max">
+                      <input
+                        type="month"
+                        value={gridFilterMonth}
+                        onChange={(e) => setGridFilterMonth(e.target.value)}
+                        className="outline-none bg-transparent"
+                      />
+                      <Calendar className="w-4 h-4 text-slate-400" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-indigo-50/60 border border-indigo-100 rounded-xl p-4">
+                      <label className="text-[11px] font-bold text-indigo-700 uppercase tracking-wider block mb-2">
+                        Общая цель по выручке ({gridFilterMonth})
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          placeholder={String(effectiveGoal)}
+                          value={plan.revenueGoal ? plan.revenueGoal : ""}
+                          onChange={(e) =>
+                            setPlan({
+                              ...plan,
+                              month: gridFilterMonth,
+                              revenueGoal:
+                                e.target.value === "" ? undefined : Number(e.target.value),
+                            })
+                          }
+                          onBlur={() => savePlan()}
+                          className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-2 text-base font-black font-mono text-slate-900 outline-none focus:border-indigo-500"
+                        />
+                        <span className="font-bold text-slate-500">₽</span>
+                      </div>
+                      <p className="text-[10px] text-indigo-600/80 mt-2 font-medium">
+                        Источник: {planMonthEffectiveGoal.sourceLabel}
+                      </p>
+                    </div>
+
+                    <div className="bg-slate-50 border border-slate-200/70 rounded-xl p-4 flex flex-col justify-between">
+                      <div>
+                        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                          Сумма плана по категориям
+                        </div>
+                        <div className="text-xl font-black font-mono text-slate-900 mt-1">
+                          {categoryIncomePlanTotal.toLocaleString("ru-RU")} ₽
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          План расходов: {categoryExpensePlanTotal.toLocaleString("ru-RU")} ₽
+                        </div>
+                      </div>
+                      {categoryIncomePlanTotal > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextPlan = {
+                              ...plan,
+                              month: gridFilterMonth,
+                              revenueGoal: categoryIncomePlanTotal,
+                            };
+                            setPlan(nextPlan);
+                            savePlan(nextPlan);
+                            showNotification("Цель по выручке установлена по сумме категорий");
+                          }}
+                          className="mt-2 text-[11px] font-bold text-indigo-600 hover:underline text-left"
+                        >
+                          Применить как общую цель →
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="bg-slate-50 border border-slate-200/70 rounded-xl p-4 flex flex-col justify-between">
+                      <div>
+                        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                          Прогноз абонементов (12/8/4)
+                        </div>
+                        <div className="text-xl font-black font-mono text-slate-900 mt-1">
+                          {planRevenue.toLocaleString("ru-RU")} ₽
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          Без доп. статей (субаренда, форма, инд.)
+                        </div>
+                      </div>
+                      {planRevenue > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextPlan = {
+                              ...plan,
+                              month: gridFilterMonth,
+                              revenueGoal: planRevenue,
+                            };
+                            setPlan(nextPlan);
+                            savePlan(nextPlan);
+                            showNotification("Цель по выручке установлена по прогнозу абонементов");
+                          }}
+                          className="mt-2 text-[11px] font-bold text-indigo-600 hover:underline text-left"
+                        >
+                          Применить как общую цель →
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold mb-2">
+                      <span className="text-slate-700">
+                        Факт поступлений ДДС за {gridFilterMonth} (без переводов):{" "}
+                        <span className="text-emerald-600 font-mono">
+                          {planMonthCashIncomes.toLocaleString("ru-RU")} ₽
+                        </span>
+                      </span>
+                      <span className="font-mono text-slate-900">
+                        {goalPct}% от {effectiveGoal.toLocaleString("ru-RU")} ₽
+                      </span>
+                    </div>
+                    <div className="w-full h-3 bg-slate-200 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          goalPct >= 100 ? "bg-emerald-500" : "bg-indigo-500"
+                        }`}
+                        style={{ width: `${Math.min(100, goalPct)}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[11px] text-slate-500 font-mono mt-2">
+                      <span>Выполнение: {goalPct}%</span>
+                      {over > 0 && effectiveGoal > 0 ? (
+                        <span className="text-emerald-600 font-bold">
+                          Перевыполнение: +{over.toLocaleString("ru-RU")} ₽
+                        </span>
+                      ) : (
+                        <span>Осталось до цели: {remaining.toLocaleString("ru-RU")} ₽</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* ДИНАМИКА И ВЫПОЛНЕНИЕ ПЛАНА (ТРАТЫ И ДОХОДЫ) */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 max-w-5xl">
-              <h2 className="text-xl font-bold text-slate-900 border-b border-gray-100 pb-3 mb-6">
-                Выполнение финансового плана (по категориям)
-                <br />
-                <div className="mt-2 flex items-center gap-3">
-    <div className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold text-slate-700 flex items-center gap-2 shadow-sm w-max">
-      <input
-        type="month"
-        value={gridFilterMonth}
-        onChange={(e) => setGridFilterMonth(e.target.value)}
-        className="outline-none bg-transparent"
-      />
-      <Calendar className="w-4 h-4 text-slate-400" />
-    </div>
-  </div>
-              </h2>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-4 mb-6">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">
+                    Выполнение финансового плана (по категориям)
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Факт считается только по оплаченным операциям за {gridFilterMonth} (без внутренних переводов и неоплаченных начислений)
+                  </p>
+                </div>
+              </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Расходы блок */}
                 <div>
                   <h3 className="text-sm font-bold text-red-600 mb-4 flex items-center gap-2 uppercase tracking-wide">
-                    План по расходам
+                    План по расходам ({categoryExpensePlanTotal.toLocaleString("ru-RU")} ₽)
                   </h3>
                   <div className="space-y-4">
                     {financeCategories
@@ -3626,9 +4343,9 @@ export const FinanceModule: React.FC = () => {
                           .filter(
                             (f) =>
                               f.type === "expense" &&
+                              isCashFlowRecord(f) &&
                               f.category === cat.name &&
-                              (f.targetMonth || f.date.substring(0, 7)) ===
-                                plan.month,
+                              getRecordAccrualMonth(f) === gridFilterMonth,
                           )
                           .reduce((a, b) => a + Number(b.amount || 0), 0);
 
@@ -3660,14 +4377,15 @@ export const FinanceModule: React.FC = () => {
                                   onChange={(e) => {
                                     setPlan({
                                       ...plan,
+                                      month: gridFilterMonth,
                                       categoryTargets: {
                                         ...(plan.categoryTargets || {}),
                                         [cat.id]: Number(e.target.value),
                                       },
                                     });
                                   }}
-                                  onBlur={savePlan}
-                                  className="w-20 bg-white border border-gray-200 outline-none font-bold text-right py-1 px-2 rounded-lg text-sm focus:border-red-500"
+                                  onBlur={() => savePlan()}
+                                  className="w-24 bg-white border border-gray-200 outline-none font-bold text-right py-1 px-2 rounded-lg text-sm focus:border-red-500"
                                 />
                               </div>
                             </div>
@@ -3677,7 +4395,7 @@ export const FinanceModule: React.FC = () => {
                               <div className="flex mb-2 items-center justify-between">
                                 <div>
                                   <span className="text-xs font-semibold inline-block text-slate-500">
-                                    Факт: {actual.toLocaleString()} ₽
+                                    Факт (оплачено): {actual.toLocaleString("ru-RU")} ₽
                                   </span>
                                 </div>
                                 <div className="text-right">
@@ -3699,7 +4417,7 @@ export const FinanceModule: React.FC = () => {
                               {isOverspent && (
                                 <p className="text-[10px] text-red-500 font-bold mt-1">
                                   Перерасход:{" "}
-                                  {(actual - target).toLocaleString()} ₽
+                                  {(actual - target).toLocaleString("ru-RU")} ₽
                                 </p>
                               )}
                             </div>
@@ -3712,7 +4430,7 @@ export const FinanceModule: React.FC = () => {
                 {/* Доходы блок */}
                 <div>
                   <h3 className="text-sm font-bold text-emerald-600 mb-4 flex items-center gap-2 uppercase tracking-wide">
-                    План по доходам
+                    План по доходам ({categoryIncomePlanTotal.toLocaleString("ru-RU")} ₽)
                   </h3>
                   <div className="space-y-4">
                     {financeCategories
@@ -3724,9 +4442,9 @@ export const FinanceModule: React.FC = () => {
                           .filter(
                             (f) =>
                               f.type === "income" &&
+                              isCashFlowRecord(f) &&
                               f.category === cat.name &&
-                              (f.targetMonth || f.date.substring(0, 7)) ===
-                                plan.month,
+                              getRecordAccrualMonth(f) === gridFilterMonth,
                           )
                           .reduce((a, b) => a + Number(b.amount || 0), 0);
 
@@ -3758,14 +4476,15 @@ export const FinanceModule: React.FC = () => {
                                   onChange={(e) => {
                                     setPlan({
                                       ...plan,
+                                      month: gridFilterMonth,
                                       categoryTargets: {
                                         ...(plan.categoryTargets || {}),
                                         [cat.id]: Number(e.target.value),
                                       },
                                     });
                                   }}
-                                  onBlur={savePlan}
-                                  className="w-20 bg-white border border-gray-200 outline-none font-bold text-right py-1 px-2 rounded-lg text-sm focus:border-emerald-500"
+                                  onBlur={() => savePlan()}
+                                  className="w-24 bg-white border border-gray-200 outline-none font-bold text-right py-1 px-2 rounded-lg text-sm focus:border-emerald-500"
                                 />
                               </div>
                             </div>
@@ -3775,7 +4494,7 @@ export const FinanceModule: React.FC = () => {
                               <div className="flex mb-2 items-center justify-between">
                                 <div>
                                   <span className="text-xs font-semibold inline-block text-slate-500">
-                                    Факт: {actual.toLocaleString()} ₽
+                                    Факт: {actual.toLocaleString("ru-RU")} ₽
                                   </span>
                                 </div>
                                 <div className="text-right">
@@ -3797,7 +4516,7 @@ export const FinanceModule: React.FC = () => {
                               {isAchieved && (
                                 <p className="text-[10px] text-emerald-600 font-bold mt-1">
                                   Перевыполнение:{" "}
-                                  {(actual - target).toLocaleString()} ₽
+                                  {(actual - target).toLocaleString("ru-RU")} ₽
                                 </p>
                               )}
                             </div>
@@ -3947,7 +4666,7 @@ export const FinanceModule: React.FC = () => {
 
                 <button
                   id="savePlanBtn"
-                  onClick={savePlan}
+                  onClick={() => savePlan()}
                   className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold tracking-wide rounded-xl transition shadow-lg shadow-slate-200"
                 >
                   Зафиксировать базовые KPI

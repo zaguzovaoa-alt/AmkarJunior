@@ -66,6 +66,12 @@ import {
 import { BirthdaysBanner } from "./BirthdaysBanner";
 import { calculateAge, formatSessionDateDisplay } from "../utils/dateUtils";
 import { isGroupMatch, isDateMatch } from "../utils/sessionMatching";
+import {
+  isCashFlowRecord,
+  getEffectiveRevenueGoal,
+  calculateClientDebts,
+  getRecordAccrualMonth,
+} from "../utils/financeMetrics";
 
 // Mini Sparkline component for KPI top summary cards
 const MiniSparklineChart = ({
@@ -333,6 +339,11 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
     cancelledSessions,
     addCancelledSession,
     deleteCancelledSession,
+    financialPlans,
+    updateFinancialPlan,
+    financeCategories,
+    crmConfig,
+    updateCRMConfig,
   } = useCRM();
   const now = new Date();
   const yyyy = now.getFullYear();
@@ -347,13 +358,40 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
   const [showAddCancellationModal, setShowAddCancellationModal] = useState(false);
   const [cancellationScope, setCancellationScope] = useState<"month" | "all">("month");
 
-  // Goals State
-  const [targetChildrenGoal, setTargetChildrenGoal] = useState<number>(() => {
-    return Number(localStorage.getItem("amkar_target_children_goal")) || 120;
-  });
-  const [targetRevenueGoal, setTargetRevenueGoal] = useState<number>(() => {
-    return Number(localStorage.getItem("amkar_target_revenue_goal")) || 600000;
-  });
+  // Goals State (synchronized with Firestore financialPlans + crmConfig)
+  const currentMonthPlan = useMemo(
+    () => financialPlans.find((p) => p.month === currentMonthStr),
+    [financialPlans, currentMonthStr],
+  );
+
+  const effectiveRevenueGoalInfo = useMemo(() => {
+    const legacyLocalGoal = Number(
+      localStorage.getItem("amkar_target_revenue_goal") || 0,
+    );
+    return getEffectiveRevenueGoal(
+      currentMonthStr,
+      financialPlans,
+      financeCategories,
+      crmConfig,
+      legacyLocalGoal > 0 ? legacyLocalGoal : 600000,
+    );
+  }, [currentMonthStr, financialPlans, financeCategories, crmConfig]);
+
+  const targetRevenueGoal = effectiveRevenueGoalInfo.goal;
+
+  const targetChildrenGoal = useMemo(() => {
+    if (Number(currentMonthPlan?.childrenGoal || 0) > 0) {
+      return Number(currentMonthPlan!.childrenGoal);
+    }
+    if (Number(crmConfig?.targetChildrenGoal || 0) > 0) {
+      return Number(crmConfig.targetChildrenGoal);
+    }
+    const legacyLocal = Number(
+      localStorage.getItem("amkar_target_children_goal") || 0,
+    );
+    return legacyLocal > 0 ? legacyLocal : 120;
+  }, [currentMonthPlan, crmConfig]);
+
   const [isEditingGoals, setIsEditingGoals] = useState(false);
   const [tempChildrenGoal, setTempChildrenGoal] = useState(targetChildrenGoal);
   const [tempRevenueGoal, setTempRevenueGoal] = useState(targetRevenueGoal);
@@ -390,12 +428,43 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
     });
   }, [trainingSessions, directorLessonPlanFilter]);
 
-  const handleSaveGoals = () => {
-    setTargetChildrenGoal(tempChildrenGoal);
-    setTargetRevenueGoal(tempRevenueGoal);
-    localStorage.setItem("amkar_target_children_goal", String(tempChildrenGoal));
-    localStorage.setItem("amkar_target_revenue_goal", String(tempRevenueGoal));
+  const handleSaveGoals = async () => {
+    const cleanChildrenGoal = Math.max(0, Number(tempChildrenGoal) || 0);
+    const cleanRevenueGoal = Math.max(0, Number(tempRevenueGoal) || 0);
+
+    try {
+      localStorage.setItem("amkar_target_children_goal", String(cleanChildrenGoal));
+      localStorage.setItem("amkar_target_revenue_goal", String(cleanRevenueGoal));
+    } catch {}
+
     setIsEditingGoals(false);
+
+    // Sync to global CRMConfig in Firestore
+    updateCRMConfig({
+      targetChildrenGoal: cleanChildrenGoal,
+      targetRevenueGoal: cleanRevenueGoal,
+    });
+
+    // Sync to current month's FinancialPlan in Firestore
+    const basePlan = currentMonthPlan || {
+      month: currentMonthStr,
+      renew12Count: 0,
+      renew8Count: 0,
+      renew4Count: 0,
+      new12Count: 0,
+      new8Count: 0,
+      new4Count: 0,
+      price12: crmConfig.price12,
+      price8: crmConfig.price8,
+      price4: crmConfig.price4,
+      categoryTargets: {},
+    };
+    await updateFinancialPlan({
+      ...basePlan,
+      month: currentMonthStr,
+      revenueGoal: cleanRevenueGoal,
+      childrenGoal: cleanChildrenGoal,
+    });
   };
 
   const [isSubmittingCancellation, setIsSubmittingCancellation] = useState(false);
@@ -425,13 +494,13 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
     }
   };
 
-  // Today Income Records & Sum (excluding internal transfers between own accounts)
+  // Today Income Records & Sum (excluding internal transfers & unpaid accruals)
   const todayIncomeRecords = useMemo(() => {
     return finances.filter(
       (f) =>
         f.type === "income" &&
         f.date === todayISO &&
-        f.category !== "Перевод между счетами",
+        isCashFlowRecord(f),
     );
   }, [finances, todayISO]);
 
@@ -439,60 +508,73 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
     return todayIncomeRecords.reduce((sum, f) => sum + Number(f.amount || 0), 0);
   }, [todayIncomeRecords]);
 
-  // Debts / Debtors list
-  const debtorsList = useMemo(() => {
-    return clients.filter(
-      (c) =>
-        c.abonementStatus === "Не оплачено" ||
-        c.abonementStatus === "Ожидает оплаты" ||
-        (c.bonusBalance && c.bonusBalance < 0) ||
-        ((c as any).debtAmount && (c as any).debtAmount > 0)
-    );
-  }, [clients]);
+  // Debts / Debtors list (shared tariff-aware calculation)
+  const { debtors: debtorsList, totalDebt: totalDebtSum } = useMemo(
+    () => calculateClientDebts(clients, crmConfig),
+    [clients, crmConfig],
+  );
 
-  const totalDebtSum = useMemo(() => {
-    return debtorsList.reduce((sum, c) => {
-      const explicitDebt = (c as any).debtAmount || 0;
-      if (explicitDebt > 0) return sum + explicitDebt;
-      const abCost =
-        c.abonement === "12_sessions"
-          ? 12000
-          : c.abonement === "8_sessions"
-            ? 8000
-            : c.abonement === "4_sessions"
-              ? 4500
-              : 3500;
-      return sum + abCost;
-    }, 0);
-  }, [debtorsList]);
-
-  // Accrued Rent for current month
-  const monthlyRentRecords = useMemo(() => {
+  // Rent for current month — separated into accrued vs paid to prevent double-counting
+  const monthlyRentAllRecords = useMemo(() => {
     return finances.filter(
       (f) =>
-        f.category === "Аренда" &&
+        (f.category === "Аренда" || f.category === "Аренда зала") &&
         f.type === "expense" &&
-        (f.targetMonth === currentMonthStr || f.date.substring(0, 7) === currentMonthStr)
+        getRecordAccrualMonth(f) === currentMonthStr,
     );
   }, [finances, currentMonthStr]);
 
-  const monthlyRentSum = useMemo(() => {
-    return monthlyRentRecords.reduce((sum, f) => sum + Number(f.amount || 0), 0);
-  }, [monthlyRentRecords]);
+  const monthlyRentAccruedRecords = useMemo(
+    () => monthlyRentAllRecords.filter((f) => f.paymentStatus === "accrued"),
+    [monthlyRentAllRecords],
+  );
+  const monthlyRentPaidRecords = useMemo(
+    () => monthlyRentAllRecords.filter((f) => f.paymentStatus !== "accrued"),
+    [monthlyRentAllRecords],
+  );
+  const monthlyRentRecords =
+    monthlyRentAccruedRecords.length > 0
+      ? monthlyRentAccruedRecords
+      : monthlyRentPaidRecords;
+  const monthlyRentSum = useMemo(
+    () => monthlyRentRecords.reduce((sum, f) => sum + Number(f.amount || 0), 0),
+    [monthlyRentRecords],
+  );
+  const monthlyRentPaidSum = useMemo(
+    () => monthlyRentPaidRecords.reduce((sum, f) => sum + Number(f.amount || 0), 0),
+    [monthlyRentPaidRecords],
+  );
 
-  // Accrued Salaries for current month
-  const monthlySalaryRecords = useMemo(() => {
+  // Salaries for current month — separated into accrued vs paid to prevent double-counting
+  const monthlySalaryAllRecords = useMemo(() => {
     return finances.filter(
       (f) =>
-        f.category === "Зарплата" &&
+        (f.category === "Зарплата" || f.category === "Зарплаты") &&
         f.type === "expense" &&
-        (f.targetMonth === currentMonthStr || f.date.substring(0, 7) === currentMonthStr)
+        getRecordAccrualMonth(f) === currentMonthStr,
     );
   }, [finances, currentMonthStr]);
 
-  const monthlySalarySum = useMemo(() => {
-    return monthlySalaryRecords.reduce((sum, f) => sum + Number(f.amount || 0), 0);
-  }, [monthlySalaryRecords]);
+  const monthlySalaryAccruedRecords = useMemo(
+    () => monthlySalaryAllRecords.filter((f) => f.paymentStatus === "accrued"),
+    [monthlySalaryAllRecords],
+  );
+  const monthlySalaryPaidRecords = useMemo(
+    () => monthlySalaryAllRecords.filter((f) => f.paymentStatus !== "accrued"),
+    [monthlySalaryAllRecords],
+  );
+  const monthlySalaryRecords =
+    monthlySalaryAccruedRecords.length > 0
+      ? monthlySalaryAccruedRecords
+      : monthlySalaryPaidRecords;
+  const monthlySalarySum = useMemo(
+    () => monthlySalaryRecords.reduce((sum, f) => sum + Number(f.amount || 0), 0),
+    [monthlySalaryRecords],
+  );
+  const monthlySalaryPaidSum = useMemo(
+    () => monthlySalaryPaidRecords.reduce((sum, f) => sum + Number(f.amount || 0), 0),
+    [monthlySalaryPaidRecords],
+  );
 
   // Expiring Subscriptions (1, 2, 3 sessions left or overdue/0)
   const expiringSubscriptionClients = useMemo(() => {
@@ -649,7 +731,13 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
     });
 
     finances.forEach((f) => {
-      if (f.category === "Аренда" && f.groupName) {
+      if (
+        f.type === "expense" &&
+        (f.category === "Аренда" || f.category === "Аренда зала") &&
+        f.paymentStatus === "accrued" &&
+        getRecordAccrualMonth(f) === currentMonthStr &&
+        f.groupName
+      ) {
         const matchingVenue = Object.keys(venueMap).find((vKey) =>
           f.groupName?.includes(vKey)
         );
@@ -987,7 +1075,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
       .filter(
         (f) =>
           f.type === "income" &&
-          f.category !== "Перевод между счетами" &&
+          isCashFlowRecord(f) &&
           f.date.substring(0, 7) === currentMonthStr,
       )
       .reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -1040,7 +1128,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
       .filter(
         (f) =>
           f.type === "income" &&
-          f.category !== "Перевод между счетами" &&
+          isCashFlowRecord(f) &&
           f.date.substring(0, 7) === targetMonth,
       )
       .reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -1052,7 +1140,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
         .filter(
           (f) =>
             f.type === "expense" &&
-            f.category !== "Перевод между счетами" &&
+            isCashFlowRecord(f) &&
             f.date === todayISO,
         )
         .reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -1062,7 +1150,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
       .filter(
         (f) =>
           f.type === "expense" &&
-          f.category !== "Перевод между счетами" &&
+          isCashFlowRecord(f) &&
           f.date.substring(0, 7) === targetMonth,
       )
       .reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -2864,7 +2952,10 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
                       {monthlyRentSum.toLocaleString("ru-RU")} ₽
                     </div>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      Начислено за текущий период ({currentMonthStr})
+                      {monthlyRentAccruedRecords.length > 0 ? "Начислено" : "Оплачено"} за {currentMonthStr}
+                      {monthlyRentAccruedRecords.length > 0 && (
+                        <> · Оплачено: <span className="font-bold text-emerald-600">{monthlyRentPaidSum.toLocaleString("ru-RU")} ₽</span></>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -2922,7 +3013,10 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
                       ₽
                     </div>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      ФОТ за проведение {trainingSessions.length} тренировок
+                      ФОТ за {currentMonthStr} · Выплачено:{" "}
+                      <span className="font-bold text-slate-700">
+                        {monthlySalaryPaidSum.toLocaleString("ru-RU")} ₽
+                      </span>
                     </p>
                   </div>
                 </div>
@@ -2997,32 +3091,40 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Goal 1: Children count */}
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 space-y-2">
-                    <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-                      <span>Цель по детям</span>
-                      {isEditingGoals ? (
-                        <input
-                          type="number"
-                          placeholder="0"
-                          value={tempChildrenGoal === 0 ? "" : tempChildrenGoal}
-                          onChange={(e) => setTempChildrenGoal(e.target.value === "" ? 0 : Number(e.target.value))}
-                          className="w-20 border rounded px-2 py-0.5 text-xs text-right font-mono"
-                        />
-                      ) : (
-                        <span className="font-mono text-emerald-600">{clients.length} / {targetChildrenGoal} детей</span>
-                      )}
-                    </div>
-                    <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
-                      <div
-                        className="bg-emerald-500 h-3 rounded-full transition-all duration-500"
-                        style={{ width: `${Math.min(100, Math.round((clients.length / targetChildrenGoal) * 100))}%` }}
-                      ></div>
-                    </div>
-                    <div className="flex justify-between text-[10px] text-gray-500 font-mono">
-                      <span>Выполнение: {Math.round((clients.length / targetChildrenGoal) * 100)}%</span>
-                      <span>Осталось: {Math.max(0, targetChildrenGoal - clients.length)} детей</span>
-                    </div>
-                  </div>
+                  {(() => {
+                    const childrenPercent =
+                      targetChildrenGoal > 0
+                        ? Math.round((clients.length / targetChildrenGoal) * 100)
+                        : 0;
+                    return (
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 space-y-2">
+                        <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+                          <span>Цель по детям</span>
+                          {isEditingGoals ? (
+                            <input
+                              type="number"
+                              placeholder="0"
+                              value={tempChildrenGoal === 0 ? "" : tempChildrenGoal}
+                              onChange={(e) => setTempChildrenGoal(e.target.value === "" ? 0 : Number(e.target.value))}
+                              className="w-20 border rounded px-2 py-0.5 text-xs text-right font-mono"
+                            />
+                          ) : (
+                            <span className="font-mono text-emerald-600">{clients.length} / {targetChildrenGoal} детей</span>
+                          )}
+                        </div>
+                        <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+                          <div
+                            className="bg-emerald-500 h-3 rounded-full transition-all duration-500"
+                            style={{ width: `${Math.min(100, childrenPercent)}%` }}
+                          ></div>
+                        </div>
+                        <div className="flex justify-between text-[10px] text-gray-500 font-mono">
+                          <span>Выполнение: {childrenPercent}%</span>
+                          <span>Осталось: {Math.max(0, targetChildrenGoal - clients.length)} детей</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Goal 2: Revenue for Director; Leads for Manager */}
                   {currentRole === "manager" ? (
@@ -3045,14 +3147,21 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
                   ) : (
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 space-y-2">
                       {(() => {
-                        const monthRevenue = finances
-                          .filter((f) => f.type === "income" && f.date.substring(0, 7) === currentMonthStr)
-                          .reduce((sum, item) => sum + Number(item.amount || 0), 0);
-                        const percent = Math.round((monthRevenue / targetRevenueGoal) * 100);
+                        const percent =
+                          targetRevenueGoal > 0
+                            ? Math.round((monthRevenue / targetRevenueGoal) * 100)
+                            : 0;
+                        const remaining = Math.max(0, targetRevenueGoal - monthRevenue);
+                        const overachieved = Math.max(0, monthRevenue - targetRevenueGoal);
                         return (
                           <>
-                            <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-                              <span>Цель по выручке</span>
+                            <div className="flex items-center justify-between text-xs font-bold text-slate-800 gap-2">
+                              <div>
+                                <span>Цель по выручке</span>
+                                <span className="block text-[9px] font-medium text-slate-400">
+                                  {effectiveRevenueGoalInfo.sourceLabel} · факт ДДС без переводов
+                                </span>
+                              </div>
                               {isEditingGoals ? (
                                 <input
                                   type="number"
@@ -3062,18 +3171,26 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
                                   className="w-28 border rounded px-2 py-0.5 text-xs text-right font-mono"
                                 />
                               ) : (
-                                <span className="font-mono text-emerald-600">{monthRevenue.toLocaleString("ru-RU")} / {targetRevenueGoal.toLocaleString("ru-RU")} ₽</span>
+                                <span className="font-mono text-emerald-600 whitespace-nowrap">
+                                  {monthRevenue.toLocaleString("ru-RU")} / {targetRevenueGoal.toLocaleString("ru-RU")} ₽
+                                </span>
                               )}
                             </div>
                             <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
                               <div
-                                className="bg-indigo-500 h-3 rounded-full transition-all duration-500"
+                                className={`h-3 rounded-full transition-all duration-500 ${percent >= 100 ? "bg-emerald-500" : "bg-indigo-500"}`}
                                 style={{ width: `${Math.min(100, percent)}%` }}
                               ></div>
                             </div>
                             <div className="flex justify-between text-[10px] text-gray-500 font-mono">
                               <span>Выполнение: {percent}%</span>
-                              <span>Осталось: {Math.max(0, targetRevenueGoal - monthRevenue).toLocaleString("ru-RU")} ₽</span>
+                              {overachieved > 0 && targetRevenueGoal > 0 ? (
+                                <span className="text-emerald-600 font-bold">
+                                  Перевыполнение: +{overachieved.toLocaleString("ru-RU")} ₽
+                                </span>
+                              ) : (
+                                <span>Осталось: {remaining.toLocaleString("ru-RU")} ₽</span>
+                              )}
                             </div>
                           </>
                         );

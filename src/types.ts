@@ -469,6 +469,8 @@ export interface FinancialPlan {
   price8: number;
   price4: number;
   categoryTargets?: Record<string, number>;
+  revenueGoal?: number;
+  childrenGoal?: number;
 }
 
 export interface ReportConfig {
@@ -487,6 +489,8 @@ export interface CRMConfig {
   price1: number;
   referralBonusAmount: number;
   referralBonusType: 'rubles' | 'sessions';
+  targetChildrenGoal?: number;
+  targetRevenueGoal?: number;
   yandexFormUrl?: string; // Link to the Yandex Form
   telegramBotToken?: string;
   telegramGroupChatId?: string;
