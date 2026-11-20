@@ -3746,7 +3746,7 @@ export const FinanceModule: React.FC = () => {
 
             const getDiff = (curr: number, prev: number) => {
               if (prev === 0) return { val: 0, text: "0%" };
-              const diff = ((curr - prev) / prev) * 100;
+              const diff = ((curr - prev) / Math.abs(prev)) * 100;
               return {
                 val: diff,
                 text: `${diff > 0 ? "+" : ""}${diff.toFixed(0)}%`,
@@ -3928,7 +3928,11 @@ export const FinanceModule: React.FC = () => {
                         ?
                       </div>
                     </div>
-                    <div className="text-2xl font-black text-slate-900 mb-1">
+                    <div
+                      className={`text-2xl font-black mb-1 ${
+                        currentData.rent < 0 ? "text-red-600" : "text-slate-900"
+                      }`}
+                    >
                       {currentData.rent.toFixed(1).replace(".", ",")} %
                     </div>
                     <div

@@ -71,6 +71,7 @@ import {
   getEffectiveRevenueGoal,
   calculateClientDebts,
   getRecordAccrualMonth,
+  buildDailyCashBalanceSeries,
 } from "../utils/financeMetrics";
 
 // Mini Sparkline component for KPI top summary cards
@@ -1080,6 +1081,52 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
       )
       .reduce((sum, item) => sum + Number(item.amount || 0), 0);
   }, [finances, currentMonthStr]);
+
+  const monthExpenses = useMemo(() => {
+    return finances
+      .filter(
+        (f) =>
+          f.type === "expense" &&
+          isCashFlowRecord(f) &&
+          f.date.substring(0, 7) === currentMonthStr,
+      )
+      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  }, [finances, currentMonthStr]);
+
+  const monthProfit = monthRevenue - monthExpenses;
+
+  const monthProfitabilityPct = useMemo(() => {
+    if (monthRevenue <= 0) return 0;
+    return Math.round((monthProfit / monthRevenue) * 1000) / 10;
+  }, [monthProfit, monthRevenue]);
+
+  const monthBalanceSeries = useMemo(() => {
+    const monthStartISO = `${currentMonthStr}-01`;
+    return buildDailyCashBalanceSeries(accounts, finances, monthStartISO, todayISO);
+  }, [accounts, finances, currentMonthStr, todayISO]);
+
+  const monthBalanceSparkline = useMemo(() => {
+    if (monthBalanceSeries.length >= 2) {
+      return monthBalanceSeries.map((p) => p.Остаток);
+    }
+    return [totalBalance, totalBalance];
+  }, [monthBalanceSeries, totalBalance]);
+
+  const monthProfitSparkline = useMemo(() => {
+    if (monthBalanceSeries.length >= 2) {
+      let cumulative = 0;
+      return monthBalanceSeries.map((p) => {
+        cumulative += p.Приходы - p.Расходы;
+        return cumulative;
+      });
+    }
+    return [0, monthProfit];
+  }, [monthBalanceSeries, monthProfit]);
+
+  const childrenPlanPct =
+    targetChildrenGoal > 0
+      ? Math.round((activeClients.length / targetChildrenGoal) * 100)
+      : 0;
 
   const availableFinanceMonths = useMemo(() => {
     const monthSet = new Set<string>();
@@ -2423,8 +2470,18 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
                     <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
                       Деньги на счетах
                     </span>
-                    <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-bold text-[10.5px] rounded-full shrink-0 whitespace-nowrap flex items-center gap-0.5">
-                      +18 300 ₽
+                    <span
+                      title="Чистое изменение денежных средств за текущий месяц (приходы − оплаченные расходы без переводов)"
+                      className={`px-2 py-0.5 font-bold text-[10.5px] rounded-full shrink-0 whitespace-nowrap flex items-center gap-0.5 ${
+                        monthProfit > 0
+                          ? "bg-emerald-50 text-emerald-700"
+                          : monthProfit < 0
+                            ? "bg-red-50 text-red-700"
+                            : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {monthProfit > 0 ? "+" : ""}
+                      {monthProfit.toLocaleString("ru-RU")} ₽
                     </span>
                   </div>
                   <div className="text-xl sm:text-2xl font-black text-slate-900 mt-1 tracking-tight">
@@ -2436,18 +2493,13 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
                       </span>
                     )}
                   </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">
+                    ЧДП за {currentMonthStr}
+                  </div>
                 </div>
                 <MiniSparklineChart
-                  data={[
-                    Math.max(1, totalBalance - 23400),
-                    Math.max(1, totalBalance - 19800),
-                    Math.max(1, totalBalance - 18200),
-                    Math.max(1, totalBalance - 12000),
-                    Math.max(1, totalBalance - 8500),
-                    Math.max(1, totalBalance - 3200),
-                    totalBalance,
-                  ]}
-                  color="#10b981"
+                  data={monthBalanceSparkline}
+                  color={monthProfit < 0 ? "#ef4444" : "#10b981"}
                   gradientId="sparkBal"
                 />
               </div>
@@ -2485,31 +2537,50 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
                 />
               </div>
 
-              {/* 3. Прибыль / Выручка за месяц */}
-              <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs text-left relative overflow-hidden flex flex-col justify-between min-h-[150px] hover:shadow-md transition">
+              {/* 3. Прибыль месяца и Рентабельность */}
+              <div
+                onClick={() => setActiveTab && setActiveTab("hq_finances")}
+                className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs text-left relative overflow-hidden flex flex-col justify-between min-h-[150px] hover:border-purple-300 hover:shadow-md transition cursor-pointer"
+              >
                 <div>
                   <div className="flex items-start justify-between gap-1.5 mb-1.5 flex-wrap">
                     <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
                       Прибыль месяца
                     </span>
-                    <span className="px-2 py-0.5 bg-purple-50 text-purple-700 font-bold text-[10.5px] rounded-full shrink-0 whitespace-nowrap">
-                      Рентабельность 26%
+                    <span
+                      title="Рентабельность = Прибыль / Выручка × 100%"
+                      className={`px-2 py-0.5 font-bold text-[10.5px] rounded-full shrink-0 whitespace-nowrap ${
+                        monthRevenue <= 0
+                          ? "bg-slate-100 text-slate-500"
+                          : monthProfitabilityPct < 0
+                            ? "bg-red-50 text-red-700"
+                            : "bg-purple-50 text-purple-700"
+                      }`}
+                    >
+                      Рентабельность{" "}
+                      {monthProfitabilityPct
+                        .toFixed(1)
+                        .replace(/\.0$/, "")
+                        .replace(".", ",")}
+                      %
                     </span>
                   </div>
-                  <div className="text-xl sm:text-2xl font-black text-slate-900 mt-1 tracking-tight">
-                    {monthRevenue.toLocaleString("ru-RU")} ₽
+                  <div
+                    className={`text-xl sm:text-2xl font-black mt-1 tracking-tight ${
+                      monthProfit < 0 ? "text-red-600" : "text-slate-900"
+                    }`}
+                  >
+                    {monthProfit > 0 ? "+" : ""}
+                    {monthProfit.toLocaleString("ru-RU")} ₽
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5 truncate">
+                    Выручка: {monthRevenue.toLocaleString("ru-RU")} ₽ · Расход:{" "}
+                    {monthExpenses.toLocaleString("ru-RU")} ₽
                   </div>
                 </div>
                 <MiniSparklineChart
-                  data={[
-                    Math.round(monthRevenue * 0.15),
-                    Math.round(monthRevenue * 0.32),
-                    Math.round(monthRevenue * 0.52),
-                    Math.round(monthRevenue * 0.7),
-                    Math.round(monthRevenue * 0.85),
-                    monthRevenue,
-                  ]}
-                  color="#8b5cf6"
+                  data={monthProfitSparkline}
+                  color={monthProfit < 0 ? "#ef4444" : "#8b5cf6"}
                   gradientId="sparkRev"
                 />
               </div>
@@ -2522,7 +2593,7 @@ export const DirectorCRM: React.FC<DirectorCRMProps> = ({ setActiveTab, initialS
                       Активные дети
                     </span>
                     <span className="px-2 py-0.5 bg-blue-50 text-blue-700 font-bold text-[10.5px] rounded-full shrink-0 whitespace-nowrap">
-                      86% от плана
+                      {childrenPlanPct}% от плана
                     </span>
                   </div>
                   <div className="text-xl sm:text-2xl font-black text-slate-900 mt-1 tracking-tight">
