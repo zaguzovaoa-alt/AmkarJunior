@@ -246,6 +246,10 @@ interface CRMContextType {
   deleteClient: (id: string) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   deleteFinanceRecord: (id: string) => Promise<void>;
+  updateFinanceRecord: (
+    id: string,
+    updates: Partial<Omit<FinanceRecord, "id">>,
+  ) => Promise<void>;
   addFinanceCategory: (
     category: Omit<FinanceCategory, "id"> & { id?: string },
   ) => Promise<void>;
@@ -4439,6 +4443,25 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     });
   };
 
+  const updateFinanceRecord = async (
+    id: string,
+    updates: Partial<Omit<FinanceRecord, "id">>,
+  ) => {
+    const cleanUpdates = removeUndefined(updates);
+    setFinances((prev) =>
+      prev.map((f) => (f.id === id ? { ...f, ...cleanUpdates } : f)),
+    );
+    try {
+      await updateDoc(doc(db, "finances", id), cleanUpdates);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `finances/${id}`);
+      console.warn(
+        `Failed to update finance record ${id} on Firestore, kept locally:`,
+        err,
+      );
+    }
+  };
+
   const updateClientNotes = async (clientId: string, notes: string) => {
     setClients((prev) =>
       prev.map((c) => (c.id === clientId ? { ...c, notes } : c)),
@@ -5445,6 +5468,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         deleteClient,
         deleteTask,
         deleteFinanceRecord,
+        updateFinanceRecord,
         addFinanceCategory,
         updateFinanceCategory,
         deleteFinanceCategory,

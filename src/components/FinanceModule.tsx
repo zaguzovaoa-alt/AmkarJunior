@@ -97,6 +97,7 @@ export const FinanceModule: React.FC = () => {
     updateFinancialPlan,
     financialPlans,
     deleteFinanceRecord,
+    updateFinanceRecord,
     coaches,
     trainingSessions,
     crmConfig,
@@ -313,12 +314,46 @@ export const FinanceModule: React.FC = () => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   });
+  const [payoutTargetMonth, setPayoutTargetMonth] = useState(currentMonthStr);
+
+  const formatTargetMonthShort = (ym?: string) => {
+    if (!ym || !/^\d{4}-\d{2}$/.test(ym)) return "—";
+    const [y, m] = ym.split("-");
+    const names = [
+      "Янв",
+      "Фев",
+      "Мар",
+      "Апр",
+      "Май",
+      "Июн",
+      "Июл",
+      "Авг",
+      "Сен",
+      "Окт",
+      "Ноя",
+      "Дек",
+    ];
+    return `${names[Number(m) - 1] || m} ${y}`;
+  };
+
+  const handleUpdateRecordTargetMonth = async (
+    recordId: string,
+    newTargetMonth: string,
+  ) => {
+    if (!newTargetMonth || !/^\d{4}-\d{2}$/.test(newTargetMonth)) return;
+    await updateFinanceRecord(recordId, { targetMonth: newTargetMonth });
+    showNotification(
+      `Месяц для ОПУ обновлён: ${formatTargetMonthShort(newTargetMonth)}`,
+    );
+  };
 
   const handlePayoutSubmit = () => {
     if (!payoutAmount || Number(payoutAmount) <= 0 || !payoutAccountId) return;
 
     const isSalary = payoutType === "salary";
     const cat = isSalary ? "Зарплата" : "Аренда";
+    const effectiveTargetMonth =
+      payoutTargetMonth || payoutDate.substring(0, 7);
     const desc = isSalary
       ? `Выплата зарплаты: ${payoutTargetName}`
       : `Оплата аренды площадки: ${payoutTargetName}`;
@@ -328,6 +363,7 @@ export const FinanceModule: React.FC = () => {
       category: cat,
       amount: Number(payoutAmount),
       date: payoutDate,
+      targetMonth: effectiveTargetMonth,
       description: desc,
       accountId: payoutAccountId,
       paymentStatus: "paid",
@@ -337,7 +373,11 @@ export const FinanceModule: React.FC = () => {
 
     setPayoutModalOpen(false);
     setPayoutAmount("");
-    setAddSuccessMsg(isSalary ? "Зарплата успешно выплачена!" : "Аренда успешно оплачена!");
+    setAddSuccessMsg(
+      isSalary
+        ? `Зарплата выплачена (в ОПУ за ${formatTargetMonthShort(effectiveTargetMonth)})`
+        : `Аренда оплачена (в ОПУ за ${formatTargetMonthShort(effectiveTargetMonth)})`,
+    );
     setTimeout(() => setAddSuccessMsg(""), 3000);
   };
 
@@ -2294,8 +2334,21 @@ export const FinanceModule: React.FC = () => {
                             {f.type === "income" ? "+" : "-"}
                             {f.amount.toLocaleString()} ₽
                           </div>
-                          <div className="text-[10px] text-gray-400">
-                            {f.date}
+                          <div className="text-[10px] text-gray-400 flex items-center justify-end gap-1.5">
+                            <span>{f.date}</span>
+                            {!isInternalTransfer(f) && (
+                              <span
+                                title="Месяц отнесения в ОПУ (P&L)"
+                                className={`px-1.5 py-0.2 rounded font-bold ${
+                                  f.targetMonth &&
+                                  f.targetMonth !== f.date.substring(0, 7)
+                                    ? "bg-indigo-50 text-indigo-600"
+                                    : "bg-slate-100 text-slate-500"
+                                }`}
+                              >
+                                за {formatTargetMonthShort(getRecordAccrualMonth(f))}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -3484,7 +3537,10 @@ export const FinanceModule: React.FC = () => {
                       <thead className="text-slate-400 uppercase tracking-wider text-[10px] font-bold bg-slate-50">
                         <tr>
                           <th className="px-5 py-3 border-b border-slate-100">
-                            Дата
+                            Дата оплаты
+                          </th>
+                          <th className="px-5 py-3 border-b border-slate-100">
+                            За месяц (ОПУ)
                           </th>
                           <th className="px-5 py-3 border-b border-slate-100">
                             Статья
@@ -3518,6 +3574,10 @@ export const FinanceModule: React.FC = () => {
                             (a) => a.id === f.accountId,
                           );
                           const transferRow = isInternalTransfer(f);
+                          const effectivePnlMonth = getRecordAccrualMonth(f);
+                          const isCrossMonth =
+                            Boolean(effectivePnlMonth) &&
+                            effectivePnlMonth !== (f.date || "").substring(0, 7);
                           return (
                             <tr
                               key={f.id}
@@ -3529,6 +3589,28 @@ export const FinanceModule: React.FC = () => {
                             >
                               <td className="px-5 py-3 text-slate-500 font-medium">
                                 {new Date(f.date).toLocaleDateString("ru-RU")}
+                              </td>
+                              <td className="px-5 py-3">
+                                {transferRow ? (
+                                  <span className="text-slate-300">—</span>
+                                ) : (
+                                  <input
+                                    type="month"
+                                    value={effectivePnlMonth}
+                                    onChange={(e) =>
+                                      handleUpdateRecordTargetMonth(
+                                        f.id,
+                                        e.target.value,
+                                      )
+                                    }
+                                    title="Месяц для отчёта о прибылях и убытках (ОПУ). Нажмите, чтобы изменить"
+                                    className={`text-[11px] font-bold rounded-lg px-2 py-1 border outline-none cursor-pointer transition ${
+                                      isCrossMonth
+                                        ? "bg-indigo-50 text-indigo-700 border-indigo-200 hover:border-indigo-400"
+                                        : "bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300"
+                                    }`}
+                                  />
+                                )}
                               </td>
                               <td className="px-5 py-3 text-slate-900 font-bold">
                                 <div className="flex items-center gap-2">
@@ -3620,7 +3702,7 @@ export const FinanceModule: React.FC = () => {
                         {filteredCashflowRows.length === 0 && (
                           <tr>
                             <td
-                              colSpan={9}
+                              colSpan={10}
                               className="px-5 py-8 text-center text-slate-400 font-medium"
                             >
                               Нет операций за выбранный период по текущим фильтрам
@@ -3631,7 +3713,7 @@ export const FinanceModule: React.FC = () => {
                       {filteredCashflowRows.length > 0 && cfTypeFilter !== "transfer" && (
                         <tfoot className="bg-slate-50 border-t-2 border-slate-200 font-bold text-xs">
                           <tr>
-                            <td colSpan={4} className="px-5 py-3 text-slate-700">
+                            <td colSpan={5} className="px-5 py-3 text-slate-700">
                               Итого по внешним операциям ДДС (без переводов):
                             </td>
                             <td className="px-5 py-3 text-right text-emerald-600 font-mono">
@@ -4792,7 +4874,7 @@ export const FinanceModule: React.FC = () => {
             };
 
             const periodFinances = finances.filter(
-              (f) => f.date.substring(0, 7) === gridFilterMonth,
+              (f) => getRecordAccrualMonth(f) === gridFilterMonth,
             );
 
             // Coach stats
@@ -5110,6 +5192,7 @@ export const FinanceModule: React.FC = () => {
                                       setPayoutTargetName(stat.coach.name);
                                       setPayoutTargetId(stat.coach.id);
                                       setPayoutAmount(String(stat.toPay));
+                                      setPayoutTargetMonth(gridFilterMonth);
                                       setPayoutModalOpen(true);
                                     }}
                                     className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-sm transition"
@@ -5139,7 +5222,10 @@ export const FinanceModule: React.FC = () => {
                         <thead className="text-slate-400 text-[10px] font-bold">
                           <tr>
                             <th className="px-5 py-4 border-b border-slate-50 font-medium">
-                              Дата
+                              Дата оплаты
+                            </th>
+                            <th className="px-5 py-4 border-b border-slate-50 font-medium">
+                              За месяц (ОПУ)
                             </th>
                             <th className="px-5 py-4 border-b border-slate-50 font-medium">
                               Сотрудник / Описание
@@ -5148,7 +5234,7 @@ export const FinanceModule: React.FC = () => {
                               Сумма
                             </th>
                             <th className="px-5 py-4 border-b border-slate-50 font-medium">
-                              Счет
+                              Статус / Счет
                             </th>
                           </tr>
                         </thead>
@@ -5165,31 +5251,70 @@ export const FinanceModule: React.FC = () => {
                                 new Date(b.date).getTime() -
                                 new Date(a.date).getTime(),
                             )
-                            .map((f, i) => (
-                              <tr
-                                key={i}
-                                className="hover:bg-slate-50 transition group"
-                              >
-                                <td className="px-5 py-4 text-slate-600 font-medium">
-                                  {new Date(f.date).toLocaleDateString("ru-RU")}
-                                </td>
-                                <td className="px-5 py-4">
-                                  <div className="font-bold text-slate-900">
-                                    {f.description || f.category}
-                                  </div>
-                                  <div className="text-[10px] text-slate-500">
-                                    {f.category}
-                                  </div>
-                                </td>
-                                <td className="px-5 py-4 text-slate-900 font-medium text-right">
-                                  {Number(f.amount).toLocaleString("ru-RU")} ₽
-                                </td>
-                                <td className="px-5 py-4 text-slate-500 font-medium">
-                                  {accounts.find((a) => a.id === f.accountId)
-                                    ?.name || "Неизвестный счет"}
-                                </td>
-                              </tr>
-                            ))}
+                            .map((f) => {
+                              const effectivePnlMonth = getRecordAccrualMonth(f);
+                              const isCrossMonth =
+                                Boolean(effectivePnlMonth) &&
+                                effectivePnlMonth !==
+                                  (f.date || "").substring(0, 7);
+                              const isAccrual = f.paymentStatus === "accrued";
+                              return (
+                                <tr
+                                  key={f.id}
+                                  className="hover:bg-slate-50 transition group"
+                                >
+                                  <td className="px-5 py-4 text-slate-600 font-medium">
+                                    {new Date(f.date).toLocaleDateString("ru-RU")}
+                                  </td>
+                                  <td className="px-5 py-4">
+                                    <input
+                                      type="month"
+                                      value={effectivePnlMonth}
+                                      onChange={(e) =>
+                                        handleUpdateRecordTargetMonth(
+                                          f.id,
+                                          e.target.value,
+                                        )
+                                      }
+                                      title="Месяц для ОПУ (P&L) и расчёта зарплаты"
+                                      className={`text-[11px] font-bold rounded-lg px-2 py-1 border outline-none cursor-pointer transition ${
+                                        isCrossMonth
+                                          ? "bg-indigo-50 text-indigo-700 border-indigo-200 hover:border-indigo-400"
+                                          : "bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300"
+                                      }`}
+                                    />
+                                  </td>
+                                  <td className="px-5 py-4">
+                                    <div className="font-bold text-slate-900">
+                                      {f.description || f.category}
+                                    </div>
+                                    <div className="text-[10px] text-slate-500">
+                                      {f.category}
+                                    </div>
+                                  </td>
+                                  <td className="px-5 py-4 text-slate-900 font-bold text-right">
+                                    {Number(f.amount).toLocaleString("ru-RU")} ₽
+                                  </td>
+                                  <td className="px-5 py-4 text-slate-500 font-medium">
+                                    {isAccrual ? (
+                                      <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 rounded-md">
+                                        Начислено (К выплате)
+                                      </span>
+                                    ) : (
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 rounded-md">
+                                          Выплачено
+                                        </span>
+                                        <span>
+                                          {accounts.find((a) => a.id === f.accountId)
+                                            ?.name || "—"}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           {periodFinances.filter(
                             (f) =>
                               f.category === "Зарплата" ||
@@ -5198,10 +5323,10 @@ export const FinanceModule: React.FC = () => {
                           ).length === 0 && (
                             <tr>
                               <td
-                                colSpan={4}
+                                colSpan={5}
                                 className="px-5 py-8 text-center text-slate-400 font-medium"
                               >
-                                Нет операций в этом месяце
+                                Нет операций за {getMonthName(gridFilterMonth)}
                               </td>
                             </tr>
                           )}
@@ -5249,6 +5374,9 @@ export const FinanceModule: React.FC = () => {
                       setPayoutTargetName("Аренда площадок");
                       setPayoutTargetId("");
                       setPayoutAmount("");
+                      setPayoutTargetMonth(
+                        rentMonth === "all" ? currentMonthStr : rentMonth,
+                      );
                       setPayoutModalOpen(true);
                     }}
                     className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-sm transition flex items-center gap-1.5 shrink-0"
@@ -5932,6 +6060,11 @@ export const FinanceModule: React.FC = () => {
                                             setPayoutTargetName(item.name);
                                             setPayoutTargetId(item.id);
                                             setPayoutAmount(String(debt));
+                                            setPayoutTargetMonth(
+                                              rentMonth === "all"
+                                                ? currentMonthStr
+                                                : rentMonth,
+                                            );
                                             setPayoutModalOpen(true);
                                           }}
                                           className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-sm transition"
@@ -7610,6 +7743,11 @@ export const FinanceModule: React.FC = () => {
                                     setPayoutTargetName(item.name);
                                     setPayoutTargetId(item.id);
                                     setPayoutAmount(String(debt));
+                                    setPayoutTargetMonth(
+                                      rentMonth === "all"
+                                        ? currentMonthStr
+                                        : rentMonth,
+                                    );
                                     setPayoutModalOpen(true);
                                   }}
                                   className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-sm transition"
@@ -8309,17 +8447,33 @@ export const FinanceModule: React.FC = () => {
                 })()}
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                  Дата выплаты
-                </label>
-                <input
-                  type="date"
-                  value={payoutDate}
-                  onChange={(e) => setPayoutDate(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    Дата выплаты (ДДС)
+                  </label>
+                  <input
+                    type="date"
+                    value={payoutDate}
+                    onChange={(e) => setPayoutDate(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-3 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-indigo-600 uppercase tracking-wider mb-2">
+                    За месяц (для ОПУ)
+                  </label>
+                  <input
+                    type="month"
+                    value={payoutTargetMonth}
+                    onChange={(e) => setPayoutTargetMonth(e.target.value)}
+                    className="w-full bg-indigo-50/50 border border-indigo-200 rounded-xl px-3.5 py-3 text-sm font-bold text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                  />
+                </div>
               </div>
+              <p className="text-[11px] text-slate-400 leading-snug -mt-1">
+                Дата выплаты фиксирует списание в ДДС, а «За месяц» относит расход к нужному месяцу в отчёте ОПУ (P&L) и ведомости зарплат.
+              </p>
             </div>
 
             <div className="mt-8 flex gap-3 justify-end">
@@ -8756,7 +8910,8 @@ export const FinanceModule: React.FC = () => {
                     <table className="w-full text-left text-xs whitespace-nowrap">
                       <thead className="bg-slate-50 text-slate-400 font-bold text-[10px] uppercase sticky top-0">
                         <tr>
-                          <th className="px-4 py-3 border-b border-slate-100">Дата</th>
+                          <th className="px-4 py-3 border-b border-slate-100">Дата оплаты</th>
+                          <th className="px-4 py-3 border-b border-slate-100">За месяц (ОПУ)</th>
                           <th className="px-4 py-3 border-b border-slate-100">Категория / Тип</th>
                           <th className="px-4 py-3 border-b border-slate-100">Описание</th>
                           <th className="px-4 py-3 border-b border-slate-100 text-right">Сумма</th>
@@ -8766,9 +8921,33 @@ export const FinanceModule: React.FC = () => {
                       <tbody className="divide-y divide-slate-100">
                         {coachFinances.map((f) => {
                           const isAccrual = f.paymentStatus === "accrued";
+                          const effectivePnlMonth = getRecordAccrualMonth(f);
+                          const isCrossMonth =
+                            Boolean(effectivePnlMonth) &&
+                            effectivePnlMonth !== (f.date || "").substring(0, 7);
                           return (
                             <tr key={f.id} className="hover:bg-slate-50 transition">
-                              <td className="px-4 py-3 font-bold text-slate-900">{f.date}</td>
+                              <td className="px-4 py-3 font-bold text-slate-900">
+                                {new Date(f.date).toLocaleDateString("ru-RU")}
+                              </td>
+                              <td className="px-4 py-3">
+                                <input
+                                  type="month"
+                                  value={effectivePnlMonth}
+                                  onChange={(e) =>
+                                    handleUpdateRecordTargetMonth(
+                                      f.id,
+                                      e.target.value,
+                                    )
+                                  }
+                                  title="Месяц для отчёта ОПУ (P&L)"
+                                  className={`text-[11px] font-bold rounded-lg px-2 py-1 border outline-none cursor-pointer transition ${
+                                    isCrossMonth
+                                      ? "bg-indigo-50 text-indigo-700 border-indigo-200 hover:border-indigo-400"
+                                      : "bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300"
+                                  }`}
+                                />
+                              </td>
                               <td className="px-4 py-3 font-semibold text-slate-800">{f.category}</td>
                               <td className="px-4 py-3 text-slate-600 max-w-xs truncate">{f.description}</td>
                               <td
@@ -8817,6 +8996,7 @@ export const FinanceModule: React.FC = () => {
                         setPayoutTargetName(coach.name);
                         setPayoutTargetId(coach.id);
                         setPayoutAmount(String(toPay));
+                        setPayoutTargetMonth(gridFilterMonth);
                         setSelectedCoachIdForDetail(null);
                         setPayoutModalOpen(true);
                       }}
