@@ -891,15 +891,23 @@ export const FinanceModule: React.FC = () => {
     setNewCpRate(0);
   };
 
-  const handleAddAccount = () => {
-    if (!newAccName.trim()) return;
-    addAccount({
-      name: newAccName.trim(),
-      type: newAccType,
-      balance: newAccBalance || 0,
-    });
-    setNewAccName("");
-    setNewAccBalance(0);
+  const handleAddAccount = async () => {
+    const trimmedName = newAccName.trim();
+    if (!trimmedName) return;
+    try {
+      await addAccount({
+        name: trimmedName,
+        type: newAccType,
+        balance: newAccBalance || 0,
+      });
+      setNewAccName("");
+      setNewAccBalance(0);
+      showNotification(`Счёт «${trimmedName}» добавлен и сохранён в базе`);
+    } catch {
+      showNotification(
+        "Не удалось сохранить счёт в базе. Проверьте подключение и попробуйте снова.",
+      );
+    }
   };
 
   const handleEditAccountSubmit = async () => {
@@ -909,7 +917,7 @@ export const FinanceModule: React.FC = () => {
       (f) => f.accountId === editingAccount,
     );
     const accIncomes = accTransactions
-      .filter((f) => f.type === "income")
+      .filter((f) => f.type === "income" && f.paymentStatus !== "accrued")
       .reduce((sum, f) => sum + Number(f.amount || 0), 0);
     const accExpenses = accTransactions
       .filter((f) => f.type === "expense" && f.paymentStatus !== "accrued")
@@ -918,12 +926,18 @@ export const FinanceModule: React.FC = () => {
 
     const newBaseBalance = editAccBalance - incomesMinusExpenses;
 
-    await updateAccount(editingAccount, {
-      name: editAccName.trim(),
-      balance: newBaseBalance,
-    });
-
-    setEditingAccount(null);
+    try {
+      await updateAccount(editingAccount, {
+        name: editAccName.trim(),
+        balance: newBaseBalance,
+      });
+      setEditingAccount(null);
+      showNotification(`Счёт «${editAccName.trim()}» обновлён`);
+    } catch {
+      showNotification(
+        "Не удалось сохранить изменения счёта. Проверьте подключение и попробуйте снова.",
+      );
+    }
   };
 
   const openTransferModal = (initialFromId?: string) => {
@@ -6693,9 +6707,16 @@ export const FinanceModule: React.FC = () => {
                             {deletingAccountId === acc.id ? (
                               <div className="flex items-center gap-1 bg-rose-50 px-1.5 py-0.5 rounded-lg border border-rose-200">
                                 <button
-                                  onClick={() => {
-                                    deleteAccount(acc.id);
+                                  onClick={async () => {
                                     setDeletingAccountId(null);
+                                    try {
+                                      await deleteAccount(acc.id);
+                                      showNotification(`Счёт «${acc.name}» удалён`);
+                                    } catch {
+                                      showNotification(
+                                        "Не удалось удалить счёт. Проверьте подключение и попробуйте снова.",
+                                      );
+                                    }
                                   }}
                                   className="text-[10px] font-black text-rose-600 hover:text-rose-800 px-1"
                                   title="Подтвердить удаление"

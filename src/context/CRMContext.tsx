@@ -1258,6 +1258,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     // Synchronize accounts and finances snapshots so totalBalance never renders a half-loaded state (e.g. 6300 before 79533)
     let accountsSnapshotReceived = false;
     let financesSnapshotReceived = false;
+    let accountsSeedChecked = false;
     let pendingAccounts: Account[] = [];
     let pendingFinances: FinanceRecord[] = [];
 
@@ -1288,11 +1289,27 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         });
         list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
         if (list.length === 0) {
-          INITIAL_ACCOUNTS.forEach((acc) => {
-            setDoc(doc(db, "accounts", acc.id), acc).catch(() => {});
-          });
+          // CRITICAL: Never overwrite Firestore accounts on an empty local-cache snapshot!
+          if (snapshot.metadata.fromCache) {
+            return;
+          }
+          if (!accountsSeedChecked) {
+            accountsSeedChecked = true;
+            void (async () => {
+              for (const acc of INITIAL_ACCOUNTS) {
+                try {
+                  const ref = doc(db, "accounts", acc.id);
+                  const existingSnap = await getDoc(ref);
+                  if (!existingSnap.exists()) {
+                    await setDoc(ref, acc);
+                  }
+                } catch {}
+              }
+            })();
+          }
           pendingAccounts = INITIAL_ACCOUNTS;
         } else {
+          accountsSeedChecked = true;
           pendingAccounts = list;
         }
         accountsSnapshotReceived = true;
@@ -1552,20 +1569,36 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       (err) => handleSnapshotErr(err, "notifications"),
     );
 
+    let counterpartiesSeedChecked = false;
     const unsubCounterparties = onSnapshot(
       collection(db, "counterparties"),
       (snapshot) => {
         const list: Counterparty[] = [];
-        snapshot.forEach((doc) => {
-          list.push(doc.data() as Counterparty);
+        snapshot.forEach((docSnap) => {
+          list.push(docSnap.data() as Counterparty);
         });
         list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
         if (list.length === 0) {
-          INITIAL_COUNTERPARTIES.forEach((cp) => {
-            setDoc(doc(db, "counterparties", cp.id), cp).catch(() => {});
-          });
+          if (snapshot.metadata.fromCache) {
+            return;
+          }
+          if (!counterpartiesSeedChecked) {
+            counterpartiesSeedChecked = true;
+            void (async () => {
+              for (const cp of INITIAL_COUNTERPARTIES) {
+                try {
+                  const ref = doc(db, "counterparties", cp.id);
+                  const existingSnap = await getDoc(ref);
+                  if (!existingSnap.exists()) {
+                    await setDoc(ref, cp);
+                  }
+                } catch {}
+              }
+            })();
+          }
           setCounterparties(INITIAL_COUNTERPARTIES);
         } else {
+          counterpartiesSeedChecked = true;
           setCounterparties(list);
         }
       },
@@ -3846,23 +3879,59 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const addAccount = async (acc: Omit<Account, "id">) => {
-    const id = `acc_${Date.now()}`;
-    const newAcc = { ...acc, id };
+    const id = `acc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const newAcc = removeUndefined({ ...acc, id });
     setAccounts((prev) => [...prev, newAcc]);
-    setDoc(doc(db, "accounts", id), newAcc).catch((err) => handleFirestoreError(err, OperationType.WRITE, "update"));
+    try {
+      await setDoc(doc(db, "accounts", id), newAcc);
+    } catch (err) {
+      setAccounts((prev) => prev.filter((a) => a.id !== id));
+      setFirestoreError(err instanceof Error ? err.message : String(err));
+      handleFirestoreError(err, OperationType.CREATE, `accounts/${id}`);
+    }
   };
   const updateAccount = async (
     id: string,
     updates: Partial<Omit<Account, "id">>,
   ) => {
+    const cleanUpdates = removeUndefined(updates);
+    let previousAcc: Account | undefined;
     setAccounts((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, ...updates } : a)),
+      prev.map((a) => {
+        if (a.id === id) {
+          previousAcc = a;
+          return { ...a, ...cleanUpdates };
+        }
+        return a;
+      }),
     );
-    updateDoc(doc(db, "accounts", id), updates).catch((err) => handleFirestoreError(err, OperationType.WRITE, "update"));
+    try {
+      await updateDoc(doc(db, "accounts", id), cleanUpdates);
+    } catch (err) {
+      if (previousAcc) {
+        setAccounts((prev) =>
+          prev.map((a) => (a.id === id ? previousAcc! : a)),
+        );
+      }
+      setFirestoreError(err instanceof Error ? err.message : String(err));
+      handleFirestoreError(err, OperationType.UPDATE, `accounts/${id}`);
+    }
   };
   const deleteAccount = async (id: string) => {
-    setAccounts((prev) => prev.filter((a) => a.id !== id));
-    deleteDoc(doc(db, "accounts", id)).catch((err) => handleFirestoreError(err, OperationType.WRITE, "update"));
+    let deletedAcc: Account | undefined;
+    setAccounts((prev) => {
+      deletedAcc = prev.find((a) => a.id === id);
+      return prev.filter((a) => a.id !== id);
+    });
+    try {
+      await deleteDoc(doc(db, "accounts", id));
+    } catch (err) {
+      if (deletedAcc) {
+        setAccounts((prev) => [...prev, deletedAcc!]);
+      }
+      setFirestoreError(err instanceof Error ? err.message : String(err));
+      handleFirestoreError(err, OperationType.DELETE, `accounts/${id}`);
+    }
   };
 
   const generateAIProgressReport = async (
@@ -4106,10 +4175,15 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const addFinanceRecord = async (record: Omit<FinanceRecord, "id">) => {
-    const id = `f_${Date.now()}`;
+    const id = `f_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const newRecord = removeUndefined({ accountId: "acc_cash", ...record, id });
     setFinances((prev) => [newRecord, ...prev]);
-    setDoc(doc(db, "finances", id), newRecord).catch((err) => handleFirestoreError(err, OperationType.WRITE, "update"));
+    try {
+      await setDoc(doc(db, "finances", id), newRecord);
+    } catch (err) {
+      setFirestoreError(err instanceof Error ? err.message : String(err));
+      console.error(`Failed to save finance record ${id}:`, err);
+    }
   };
 
   const updateFinancialPlan = async (plan: FinancialPlan) => {
