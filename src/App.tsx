@@ -446,7 +446,9 @@ function DashboardContainer() {
             const isOffline =
               firestoreError.toLowerCase().includes("offline") ||
               firestoreError.toLowerCase().includes("unavailable");
-            const isQuota = firestoreError.toLowerCase().includes("quota");
+            const isQuota =
+              firestoreError.toLowerCase().includes("quota") ||
+              firestoreError.toLowerCase().includes("resource-exhausted");
             return (
               <div className="bg-amber-50 border-b border-amber-200 px-6 py-4 text-xs font-sans text-amber-800 shrink-0 select-none">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -469,9 +471,9 @@ function DashboardContainer() {
                       <div className="text-amber-800 leading-relaxed max-w-4xl">
                         {isQuota ? (
                           <p>
-                            Исчерпан суточный лимит бесплатных операций чтения базы данных (50 000 операций чтения в день на бесплатном тарифе Spark).{" "}
-                            Квота автоматически обновляется каждые сутки в полночь по тихоокеанскому времени (PST).{" "}
-                            Приложение продолжает полноценно работать в <strong>автономном режиме на локальных кэшированных данных</strong>.
+                            Исчерпан суточный лимит бесплатных операций чтения базы данных на тарифе Spark.{" "}
+                            Квота автоматически сбрасывается ежедневно в полночь по тихоокеанскому времени (<strong>11:00 МСК</strong> зимой / <strong>10:00 МСК</strong> летом).{" "}
+                            Показаны последние <strong>локально кэшированные данные</strong>; сохранение изменений возобновится после сброса квоты.
                           </p>
                         ) : isOffline ? (
                           <p>

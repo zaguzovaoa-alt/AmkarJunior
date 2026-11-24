@@ -410,32 +410,7 @@ const INITIAL_MESSAGES: ChatMessage[] = [];
 
 const INITIAL_LEADS: Lead[] = [];
 
-const INITIAL_CANCELLED_SESSIONS: CancelledSession[] = [
-  {
-    id: "cs_1",
-    groupName: "Группа 2016-2017 (Манеж 1)",
-    date: "2026-08-01",
-    reason: "Занятость зала",
-    notes: "Проводятся плановые профилактические работы на газоне",
-    coachName: "Павел Ивонин"
-  },
-  {
-    id: "cs_2",
-    groupName: "Группа 2014-2015 (Школа 132)",
-    date: "2026-07-20",
-    reason: "Болезнь тренера",
-    notes: "Замена тренера не была найдена вовремя",
-    coachName: "Александр Смирнов"
-  },
-  {
-    id: "cs_3",
-    groupName: "Группа 2018 (Энергия)",
-    date: "2026-07-12",
-    reason: "Праздничный день",
-    notes: "Городские праздничные мероприятия в спорткомплексе",
-    coachName: "Иван Иванов"
-  }
-];
+const INITIAL_CANCELLED_SESSIONS: CancelledSession[] = [];
 
 export const INITIAL_FINANCE_CATEGORIES: FinanceCategory[] = [
   // Доходы (Поступления)
@@ -614,40 +589,7 @@ const INITIAL_ACCOUNTS: Account[] = [
   { id: "acc_bank", name: "Расчетный счет", balance: 0, type: "bank" },
 ];
 
-const INITIAL_COUNTERPARTIES: Counterparty[] = [
-  {
-    id: "cp_spartak",
-    name: "Манеж «Спартак»",
-    type: "hall_rent",
-    paymentType: "per_session",
-    rate: 2000,
-    description: "Крытый футбольный манеж Спартак (аренда поля)",
-  },
-  {
-    id: "cp_school_10",
-    name: "Школа №10 (Малый зал)",
-    type: "school_rent",
-    paymentType: "fixed",
-    rate: 30000,
-    description: "Фиксированная ежемесячная аренда малого зала школы (оплата 1 раз в месяц)",
-  },
-  {
-    id: "cp_hall_arena",
-    name: "Спорткомплекс Арена",
-    type: "hall_rent",
-    paymentType: "per_session",
-    rate: 1500,
-    description: "Почасовая аренда футбольного поля за каждую тренировку группы",
-  },
-  {
-    id: "cp_school_45",
-    name: "Лицей №45",
-    type: "school_rent",
-    paymentType: "per_session",
-    rate: 1200,
-    description: "Аренда зала за каждую проведенную тренировку группы",
-  },
-];
+const INITIAL_COUNTERPARTIES: Counterparty[] = [];
 
 export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
@@ -820,10 +762,25 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
     } catch {}
     return INITIAL_VIDEO_LESSONS;
   });
-  const [counterparties, setCounterparties] = useState<Counterparty[]>(INITIAL_COUNTERPARTIES);
+  const [counterparties, setCounterparties] = useState<Counterparty[]>(() => {
+    try {
+      const cached = localStorage.getItem("amkar_counterparties_cache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
   const [cancelledSessions, setCancelledSessions] = useState<CancelledSession[]>(() => {
-    const cached = localStorage.getItem("amkar_cancelled_sessions");
-    return cached ? JSON.parse(cached) : INITIAL_CANCELLED_SESSIONS;
+    try {
+      const cached = localStorage.getItem("amkar_cancelled_sessions");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return INITIAL_CANCELLED_SESSIONS;
   });
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [firebaseReady, setFirebaseReady] = useState(true);
@@ -1166,8 +1123,13 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
         const isOffline =
           errMsg.toLowerCase().includes("offline") ||
           errMsg.toLowerCase().includes("unavailable");
-        const isQuota = errMsg.toLowerCase().includes("quota");
-        if (isOffline || isQuota) {
+        const isQuota =
+          errMsg.toLowerCase().includes("quota") ||
+          errMsg.toLowerCase().includes("resource-exhausted");
+        if (isQuota) {
+          console.warn("Firestore daily quota exceeded:", errMsg);
+          setFirestoreError(errMsg);
+        } else if (isOffline) {
           console.warn("Firestore running in offline/cached mode:", errMsg);
         } else {
           console.error("Failed to initialize or fill Firestore:", err);
@@ -1236,8 +1198,13 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       const isOffline =
         errMsg.toLowerCase().includes("offline") ||
         errMsg.toLowerCase().includes("unavailable");
-      const isQuota = errMsg.toLowerCase().includes("quota");
-      if (isOffline || isQuota) {
+      const isQuota =
+        errMsg.toLowerCase().includes("quota") ||
+        errMsg.toLowerCase().includes("resource-exhausted");
+      if (isQuota) {
+        console.warn(`Firestore collection ${col} hit daily quota:`, errMsg);
+        setFirestoreError(errMsg);
+      } else if (isOffline) {
         console.warn(
           `Firestore collection ${col} running in cached/offline mode:`,
           errMsg,
@@ -1569,7 +1536,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
       (err) => handleSnapshotErr(err, "notifications"),
     );
 
-    let counterpartiesSeedChecked = false;
     const unsubCounterparties = onSnapshot(
       collection(db, "counterparties"),
       (snapshot) => {
@@ -1578,29 +1544,13 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
           list.push(docSnap.data() as Counterparty);
         });
         list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-        if (list.length === 0) {
-          if (snapshot.metadata.fromCache) {
-            return;
-          }
-          if (!counterpartiesSeedChecked) {
-            counterpartiesSeedChecked = true;
-            void (async () => {
-              for (const cp of INITIAL_COUNTERPARTIES) {
-                try {
-                  const ref = doc(db, "counterparties", cp.id);
-                  const existingSnap = await getDoc(ref);
-                  if (!existingSnap.exists()) {
-                    await setDoc(ref, cp);
-                  }
-                } catch {}
-              }
-            })();
-          }
-          setCounterparties(INITIAL_COUNTERPARTIES);
-        } else {
-          counterpartiesSeedChecked = true;
-          setCounterparties(list);
+        if (list.length === 0 && snapshot.metadata.fromCache) {
+          return;
         }
+        setCounterparties(list);
+        try {
+          localStorage.setItem("amkar_counterparties_cache", JSON.stringify(list));
+        } catch {}
       },
       (err) => handleSnapshotErr(err, "counterparties"),
     );
@@ -5302,26 +5252,54 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const addCounterparty = async (cp: Omit<Counterparty, "id">) => {
-    const id = `cp_${Date.now()}`;
-    const newCp = { ...cp, id };
-    setCounterparties((prev) => [...prev, newCp]);
-    setDoc(doc(db, "counterparties", id), newCp).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
-      console.warn("Failed to add counterparty:", err);
+    const id = `cp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const newCp = removeUndefined({ ...cp, id });
+    setCounterparties((prev) => {
+      const next = [...prev, newCp];
+      try {
+        localStorage.setItem("amkar_counterparties_cache", JSON.stringify(next));
+      } catch {}
+      return next;
     });
+    try {
+      await setDoc(doc(db, "counterparties", id), newCp);
+    } catch (err) {
+      setFirestoreError(err instanceof Error ? err.message : String(err));
+      console.warn("Failed to add counterparty:", err);
+    }
   };
 
   const updateCounterparty = async (id: string, updates: Partial<Counterparty>) => {
-    setCounterparties((prev) => prev.map((cp) => (cp.id === id ? { ...cp, ...updates } : cp)));
-    updateDoc(doc(db, "counterparties", id), updates).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
-      console.warn("Failed to update counterparty:", err);
+    const cleanUpdates = removeUndefined(updates);
+    setCounterparties((prev) => {
+      const next = prev.map((cp) => (cp.id === id ? { ...cp, ...cleanUpdates } : cp));
+      try {
+        localStorage.setItem("amkar_counterparties_cache", JSON.stringify(next));
+      } catch {}
+      return next;
     });
+    try {
+      await updateDoc(doc(db, "counterparties", id), cleanUpdates);
+    } catch (err) {
+      setFirestoreError(err instanceof Error ? err.message : String(err));
+      console.warn("Failed to update counterparty:", err);
+    }
   };
 
   const deleteCounterparty = async (id: string) => {
-    setCounterparties((prev) => prev.filter((cp) => cp.id !== id));
-    deleteDoc(doc(db, "counterparties", id)).catch((err) => { handleFirestoreError(err, OperationType.WRITE, "update");
-      console.warn("Failed to delete counterparty:", err);
+    setCounterparties((prev) => {
+      const next = prev.filter((cp) => cp.id !== id);
+      try {
+        localStorage.setItem("amkar_counterparties_cache", JSON.stringify(next));
+      } catch {}
+      return next;
     });
+    try {
+      await deleteDoc(doc(db, "counterparties", id));
+    } catch (err) {
+      setFirestoreError(err instanceof Error ? err.message : String(err));
+      console.warn("Failed to delete counterparty:", err);
+    }
   };
 
   const syncVideoLessonsToFirestore = async (nextList: VideoLesson[]) => {
