@@ -4,7 +4,7 @@ import { toYearMonthString, formatSessionDateDisplay } from "../utils/dateUtils"
 import { db } from "../firebase";
 import { setDoc, doc, updateDoc } from "firebase/firestore";
 import { useCRM, INITIAL_FINANCE_CATEGORIES } from "../context/CRMContext";
-import { Counterparty } from "../types";
+import { Counterparty, FinanceRecord } from "../types";
 import { VenueEconomicsPanel } from "./VenueEconomicsPanel";
 import {
   isCashFlowRecord,
@@ -336,15 +336,319 @@ export const FinanceModule: React.FC = () => {
     return `${names[Number(m) - 1] || m} ${y}`;
   };
 
+  const [deletingFinanceId, setDeletingFinanceId] = useState<string | null>(
+    null,
+  );
+
+  // Unified Finance Operation Create / Edit Modal (for ОДДС, Зарплаты, Аренда, ОперВвод)
+  const [financeModalOpen, setFinanceModalOpen] = useState(false);
+  const [financeModalMode, setFinanceModalMode] = useState<"create" | "edit">(
+    "edit",
+  );
+  const [editingFinanceId, setEditingFinanceId] = useState<string | null>(null);
+  const [editingTransferPairId, setEditingTransferPairId] = useState<
+    string | null
+  >(null);
+  const [opFormType, setOpFormType] = useState<
+    "expense" | "income" | "transfer"
+  >("expense");
+  const [opFormDate, setOpFormDate] = useState("");
+  const [opFormTargetMonth, setOpFormTargetMonth] = useState(currentMonthStr);
+  const [opFormAmount, setOpFormAmount] = useState("");
+  const [opFormAccountId, setOpFormAccountId] = useState("");
+  const [opFormToAccountId, setOpFormToAccountId] = useState("");
+  const [opFormCategory, setOpFormCategory] = useState("");
+  const [opFormIsFixed, setOpFormIsFixed] = useState(false);
+  const [opFormStatus, setOpFormStatus] = useState<"paid" | "accrued">("paid");
+  const [opFormCounterpartyId, setOpFormCounterpartyId] = useState("");
+  const [opFormCoachId, setOpFormCoachId] = useState("");
+  const [opFormGroupName, setOpFormGroupName] = useState("");
+  const [opFormDescription, setOpFormDescription] = useState("");
+  const [opFormSaving, setOpFormSaving] = useState(false);
+  const [opFormError, setOpFormError] = useState("");
+
+  const findPairedTransferRecord = (record: FinanceRecord) => {
+    if (!isInternalTransfer(record)) return undefined;
+    const oppositeType = record.type === "expense" ? "income" : "expense";
+    return finances.find(
+      (cand) =>
+        cand.id !== record.id &&
+        isInternalTransfer(cand) &&
+        cand.type === oppositeType &&
+        cand.date === record.date &&
+        Number(cand.amount) === Number(record.amount) &&
+        cand.description === record.description,
+    );
+  };
+
   const handleUpdateRecordTargetMonth = async (
     recordId: string,
     newTargetMonth: string,
   ) => {
     if (!newTargetMonth || !/^\d{4}-\d{2}$/.test(newTargetMonth)) return;
-    await updateFinanceRecord(recordId, { targetMonth: newTargetMonth });
-    showNotification(
-      `Месяц для ОПУ обновлён: ${formatTargetMonthShort(newTargetMonth)}`,
+    try {
+      await updateFinanceRecord(recordId, { targetMonth: newTargetMonth });
+      showNotification(
+        `Месяц для ОПУ обновлён: ${formatTargetMonthShort(newTargetMonth)}`,
+      );
+    } catch {
+      showNotification(
+        "Не удалось сохранить месяц для ОПУ. Проверьте подключение.",
+      );
+    }
+  };
+
+  const handleUpdateRecordAccount = async (
+    recordId: string,
+    newAccountId: string,
+  ) => {
+    if (!newAccountId) return;
+    const accName =
+      accounts.find((a) => a.id === newAccountId)?.name || "выбранный счёт";
+    try {
+      await updateFinanceRecord(recordId, { accountId: newAccountId });
+      showNotification(`Счёт операции изменён на «${accName}»`);
+    } catch {
+      showNotification(
+        "Не удалось изменить счёт операции. Проверьте подключение.",
+      );
+    }
+  };
+
+  const handleDeleteFinanceRow = async (record: FinanceRecord) => {
+    setDeletingFinanceId(null);
+    if (isInternalTransfer(record)) {
+      const pair = findPairedTransferRecord(record);
+      await deleteFinanceRecord(record.id);
+      if (pair) {
+        await deleteFinanceRecord(pair.id);
+      }
+      showNotification("Перевод между счетами удалён, балансы пересчитаны");
+      return;
+    }
+    await deleteFinanceRecord(record.id);
+    showNotification("Операция удалена, остаток по счёту пересчитан");
+  };
+
+  const openCreateFinanceModal = (initialType: "expense" | "income") => {
+    const todayIso = (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    })();
+    const defaultCat = financeCategories.find((c) => c.type === initialType);
+    const defaultAccId =
+      cfAccountFilter !== "all" &&
+      accounts.some((a) => a.id === cfAccountFilter)
+        ? cfAccountFilter
+        : accounts[0]?.id || "acc_cash";
+
+    setFinanceModalMode("create");
+    setEditingFinanceId(null);
+    setEditingTransferPairId(null);
+    setOpFormType(initialType);
+    setOpFormDate(todayIso);
+    setOpFormTargetMonth(todayIso.substring(0, 7));
+    setOpFormAmount("");
+    setOpFormAccountId(defaultAccId);
+    setOpFormToAccountId("");
+    setOpFormCategory(
+      defaultCat?.name ||
+        (initialType === "expense" ? "Прочие переменные расходы" : "Абонементы"),
     );
+    setOpFormIsFixed(
+      initialType === "expense" ? defaultCat?.expenseType === "fixed" : false,
+    );
+    setOpFormStatus("paid");
+    setOpFormCounterpartyId("");
+    setOpFormCoachId("");
+    setOpFormGroupName("");
+    setOpFormDescription("");
+    setOpFormError("");
+    setFinanceModalOpen(true);
+  };
+
+  const openEditFinanceModal = (record: FinanceRecord) => {
+    setFinanceModalMode("edit");
+    setEditingFinanceId(record.id);
+    setOpFormError("");
+
+    if (isInternalTransfer(record)) {
+      const pair = findPairedTransferRecord(record);
+      const expenseRec =
+        record.type === "expense" ? record : pair || record;
+      const incomeRec =
+        record.type === "income" ? record : pair || undefined;
+
+      setEditingFinanceId(expenseRec.id);
+      setEditingTransferPairId(incomeRec?.id || null);
+      setOpFormType("transfer");
+      setOpFormDate(expenseRec.date || "");
+      setOpFormTargetMonth(
+        expenseRec.targetMonth || (expenseRec.date || "").substring(0, 7),
+      );
+      setOpFormAmount(String(expenseRec.amount || ""));
+      setOpFormAccountId(expenseRec.accountId || accounts[0]?.id || "");
+      setOpFormToAccountId(
+        incomeRec?.accountId ||
+          accounts.find((a) => a.id !== expenseRec.accountId)?.id ||
+          "",
+      );
+      setOpFormCategory(record.category);
+      setOpFormIsFixed(false);
+      setOpFormStatus("paid");
+      setOpFormCounterpartyId("");
+      setOpFormCoachId("");
+      setOpFormGroupName("");
+      const commentSplit = (expenseRec.description || "").split("•");
+      setOpFormDescription(
+        commentSplit.length > 1 ? commentSplit.slice(1).join("•").trim() : "",
+      );
+      setFinanceModalOpen(true);
+      return;
+    }
+
+    setEditingTransferPairId(null);
+    setOpFormType(record.type === "income" ? "income" : "expense");
+    setOpFormDate(record.date || "");
+    setOpFormTargetMonth(getRecordAccrualMonth(record));
+    setOpFormAmount(String(record.amount ?? ""));
+    setOpFormAccountId(record.accountId || "");
+    setOpFormToAccountId("");
+    setOpFormCategory(record.category || "");
+    setOpFormIsFixed(Boolean(record.isFixed));
+    setOpFormStatus(record.paymentStatus === "accrued" ? "accrued" : "paid");
+    setOpFormCounterpartyId(record.counterpartyId || "");
+    setOpFormCoachId(record.coachId || "");
+    setOpFormGroupName(record.groupName || "");
+    setOpFormDescription(record.description || "");
+    setFinanceModalOpen(true);
+  };
+
+  const handleSaveFinanceModal = async () => {
+    const numericAmount = Number(opFormAmount);
+    if (!opFormAmount || isNaN(numericAmount) || numericAmount <= 0) {
+      setOpFormError("Укажите корректную сумму больше 0 ₽");
+      return;
+    }
+    if (!opFormDate) {
+      setOpFormError("Укажите дату операции");
+      return;
+    }
+
+    setOpFormSaving(true);
+    setOpFormError("");
+    const effectiveMonth =
+      opFormTargetMonth && /^\d{4}-\d{2}$/.test(opFormTargetMonth)
+        ? opFormTargetMonth
+        : opFormDate.substring(0, 7);
+
+    try {
+      if (opFormType === "transfer" && financeModalMode === "edit" && editingFinanceId) {
+        if (!opFormAccountId || !opFormToAccountId || opFormAccountId === opFormToAccountId) {
+          setOpFormError("Выберите два разных счёта для перевода");
+          setOpFormSaving(false);
+          return;
+        }
+        const fromName =
+          accounts.find((a) => a.id === opFormAccountId)?.name || "Счёт списания";
+        const toName =
+          accounts.find((a) => a.id === opFormToAccountId)?.name || "Счёт зачисления";
+        const commentPart = opFormDescription.trim()
+          ? ` • ${opFormDescription.trim()}`
+          : "";
+        const nextDesc = `Перевод: ${fromName} → ${toName}${commentPart}`;
+
+        await updateFinanceRecord(editingFinanceId, {
+          amount: numericAmount,
+          date: opFormDate,
+          targetMonth: effectiveMonth,
+          accountId: opFormAccountId,
+          description: nextDesc,
+        });
+        if (editingTransferPairId && editingTransferPairId !== editingFinanceId) {
+          await updateFinanceRecord(editingTransferPairId, {
+            amount: numericAmount,
+            date: opFormDate,
+            targetMonth: effectiveMonth,
+            accountId: opFormToAccountId,
+            description: nextDesc,
+          });
+        }
+        setFinanceModalOpen(false);
+        showNotification("Перевод обновлён, балансы счетов пересчитаны");
+        setOpFormSaving(false);
+        return;
+      }
+
+      if (opFormStatus === "paid" && !opFormAccountId) {
+        setOpFormError("Выберите счёт списания/зачисления");
+        setOpFormSaving(false);
+        return;
+      }
+
+      const resolvedCategory =
+        opFormCategory.trim() ||
+        (opFormType === "expense" ? "Прочие расходы" : "Абонементы");
+      const resolvedAccountId =
+        opFormAccountId || accounts[0]?.id || "acc_cash";
+
+      if (financeModalMode === "create") {
+        await addFinanceRecord({
+          type: opFormType === "income" ? "income" : "expense",
+          amount: numericAmount,
+          category: resolvedCategory,
+          date: opFormDate,
+          targetMonth: effectiveMonth,
+          accountId: resolvedAccountId,
+          isFixed: opFormType === "expense" ? opFormIsFixed : false,
+          paymentStatus: opFormStatus,
+          description: opFormDescription.trim(),
+          counterpartyId: opFormCounterpartyId || undefined,
+          coachId: opFormCoachId || undefined,
+          groupName: opFormGroupName || undefined,
+        });
+        setFinanceModalOpen(false);
+        showNotification(
+          opFormType === "expense"
+            ? "Расход проведён и учтён в ОДДС"
+            : "Доход проведён и учтён в ОДДС",
+        );
+      } else if (editingFinanceId) {
+        const clearFields: Array<keyof Omit<FinanceRecord, "id">> = [];
+        if (!opFormCounterpartyId) clearFields.push("counterpartyId");
+        if (!opFormCoachId) clearFields.push("coachId");
+        if (!opFormGroupName) clearFields.push("groupName");
+
+        await updateFinanceRecord(
+          editingFinanceId,
+          {
+            type: opFormType === "income" ? "income" : "expense",
+            amount: numericAmount,
+            category: resolvedCategory,
+            date: opFormDate,
+            targetMonth: effectiveMonth,
+            accountId: resolvedAccountId,
+            isFixed: opFormType === "expense" ? opFormIsFixed : false,
+            paymentStatus: opFormStatus,
+            description: opFormDescription.trim(),
+            ...(opFormCounterpartyId
+              ? { counterpartyId: opFormCounterpartyId }
+              : {}),
+            ...(opFormCoachId ? { coachId: opFormCoachId } : {}),
+            ...(opFormGroupName ? { groupName: opFormGroupName } : {}),
+          },
+          clearFields,
+        );
+        setFinanceModalOpen(false);
+        showNotification("Операция обновлена, счёт и отчёты пересчитаны");
+      }
+    } catch {
+      setOpFormError(
+        "Не удалось сохранить изменения в базу. Проверьте подключение и попробуйте снова.",
+      );
+    } finally {
+      setOpFormSaving(false);
+    }
   };
 
   const handlePayoutSubmit = () => {
@@ -2850,7 +3154,11 @@ export const FinanceModule: React.FC = () => {
                         Счет списания/зачисления
                       </label>
                       <select
-                        value={fAccount}
+                        value={
+                          calculatedAccounts.some((a) => a.id === fAccount)
+                            ? fAccount
+                            : calculatedAccounts[0]?.id || ""
+                        }
                         onChange={(e) => setFAccount(e.target.value)}
                         className="w-full p-2.5 bg-slate-50 border border-gray-200 outline-none rounded-xl text-sm font-semibold text-slate-800"
                       >
@@ -3058,6 +3366,110 @@ export const FinanceModule: React.FC = () => {
                 </>
               )}
             </div>
+
+            {finances.filter((f) => f.paymentStatus !== "accrued").length > 0 && (
+              <div className="mt-8 pt-6 border-t border-slate-100">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <div>
+                    <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
+                      Последние проведённые операции
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Можно сразу сменить счёт или отредактировать любую сумму и детали
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("cashflow")}
+                    className="text-[11px] font-bold text-blue-600 hover:underline"
+                  >
+                    Открыть ОДДС →
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {[...finances]
+                    .filter((f) => f.paymentStatus !== "accrued")
+                    .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+                    .slice(0, 6)
+                    .map((f) => {
+                      const transferRow = isInternalTransfer(f);
+                      const hasValidAcc = accounts.some(
+                        (a) => a.id === f.accountId,
+                      );
+                      return (
+                        <div
+                          key={f.id}
+                          className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 p-2.5 rounded-xl border border-slate-100 bg-slate-50/70 hover:bg-slate-50 transition text-xs"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-[11px] text-slate-400">
+                                {new Date(f.date).toLocaleDateString("ru-RU")}
+                              </span>
+                              <span className="font-bold text-slate-800 truncate">
+                                {f.category}
+                              </span>
+                              <span
+                                className={`font-black font-mono ml-auto sm:ml-0 ${
+                                  transferRow
+                                    ? "text-blue-600"
+                                    : f.type === "income"
+                                      ? "text-emerald-600"
+                                      : "text-red-600"
+                                }`}
+                              >
+                                {f.type === "income" ? "+" : "-"}
+                                {Number(f.amount || 0).toLocaleString("ru-RU")} ₽
+                              </span>
+                            </div>
+                            {f.description && (
+                              <div className="text-[11px] text-slate-500 truncate mt-0.5">
+                                {f.description}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {!transferRow && (
+                              <select
+                                value={hasValidAcc ? f.accountId : ""}
+                                onChange={(e) =>
+                                  handleUpdateRecordAccount(
+                                    f.id,
+                                    e.target.value,
+                                  )
+                                }
+                                title="Быстро изменить счёт операции"
+                                className={`text-[11px] font-bold rounded-lg px-2 py-1 border outline-none cursor-pointer max-w-[140px] ${
+                                  hasValidAcc
+                                    ? "bg-white text-slate-700 border-slate-200 hover:border-slate-300"
+                                    : "bg-amber-50 text-amber-800 border-amber-300"
+                                }`}
+                              >
+                                {!hasValidAcc && (
+                                  <option value="">Выберите счёт</option>
+                                )}
+                                {accounts.map((a) => (
+                                  <option key={a.id} value={a.id}>
+                                    {a.name}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => openEditFinanceModal(f)}
+                              title="Редактировать операцию"
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -3539,12 +3951,30 @@ export const FinanceModule: React.FC = () => {
                         Внутренние переводы выделены синим и не включаются в итоги «Приходы» и «Расходы» ДДС
                       </p>
                     </div>
-                    <button
-                      onClick={() => setActiveTab("input")}
-                      className="text-xs font-bold text-red-500 border border-red-200 bg-red-50 px-4 py-2 rounded-xl hover:bg-red-100 transition"
-                    >
-                      + Добавить операцию
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openCreateFinanceModal("expense")}
+                        className="text-xs font-bold text-white bg-red-600 hover:bg-red-700 px-4 py-2 rounded-xl transition shadow-xs flex items-center gap-1.5"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Внести расход</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openCreateFinanceModal("income")}
+                        className="text-xs font-bold text-emerald-700 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 px-3.5 py-2 rounded-xl transition"
+                      >
+                        + Доход
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab("input")}
+                        className="text-xs font-bold text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 px-3.5 py-2 rounded-xl transition"
+                      >
+                        ОперВвод
+                      </button>
+                    </div>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs whitespace-nowrap">
@@ -3693,22 +4123,80 @@ export const FinanceModule: React.FC = () => {
                                   <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 rounded-md inline-block">
                                     Начислено (К оплате)
                                   </span>
-                                ) : accObj ? (
-                                  accObj.name
+                                ) : transferRow ? (
+                                  <span className="font-medium text-blue-700">
+                                    {accObj ? accObj.name : "—"}
+                                  </span>
                                 ) : (
-                                  "—"
+                                  <select
+                                    value={accObj ? f.accountId : ""}
+                                    onChange={(e) =>
+                                      handleUpdateRecordAccount(
+                                        f.id,
+                                        e.target.value,
+                                      )
+                                    }
+                                    title="Счёт списания/зачисления. Нажмите, чтобы изменить"
+                                    className={`text-[11px] font-bold rounded-lg px-2 py-1 border outline-none cursor-pointer transition max-w-[165px] ${
+                                      accObj
+                                        ? "bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300"
+                                        : "bg-amber-50 text-amber-800 border-amber-300 hover:border-amber-400"
+                                    }`}
+                                  >
+                                    {!accObj && (
+                                      <option value="">— Выберите счёт —</option>
+                                    )}
+                                    {accounts.map((a) => (
+                                      <option key={a.id} value={a.id}>
+                                        {a.name}
+                                      </option>
+                                    ))}
+                                  </select>
                                 )}
                               </td>
                               <td className="px-5 py-3 text-slate-500 max-w-[180px] truncate">
                                 {f.description || "—"}
                               </td>
                               <td className="px-5 py-3 text-center">
-                                <button
-                                  onClick={() => deleteFinanceRecord(f.id)}
-                                  className="text-slate-400 hover:text-red-500 transition"
-                                >
-                                  <Trash2 className="w-4 h-4 mx-auto" />
-                                </button>
+                                {deletingFinanceId === f.id ? (
+                                  <div className="inline-flex items-center gap-1 bg-rose-50 px-1.5 py-0.5 rounded-lg border border-rose-200">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteFinanceRow(f)}
+                                      className="text-[10px] font-black text-rose-600 hover:text-rose-800 px-1"
+                                      title="Подтвердить удаление"
+                                    >
+                                      Да
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setDeletingFinanceId(null)}
+                                      className="text-[10px] font-bold text-slate-500 hover:text-slate-700 px-1"
+                                      title="Отмена"
+                                    >
+                                      Нет
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="inline-flex items-center justify-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => openEditFinanceModal(f)}
+                                      title="Редактировать операцию (счёт, сумму, дату, статью, комментарий)"
+                                      className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setDeletingFinanceId(f.id)}
+                                      title="Удалить операцию"
+                                      className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                )}
                               </td>
                             </tr>
                           );
@@ -5250,6 +5738,9 @@ export const FinanceModule: React.FC = () => {
                             <th className="px-5 py-4 border-b border-slate-50 font-medium">
                               Статус / Счет
                             </th>
+                            <th className="px-5 py-4 border-b border-slate-50 font-medium text-center">
+                              Действия
+                            </th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
@@ -5272,6 +5763,9 @@ export const FinanceModule: React.FC = () => {
                                 effectivePnlMonth !==
                                   (f.date || "").substring(0, 7);
                               const isAccrual = f.paymentStatus === "accrued";
+                              const hasValidAcc = accounts.some(
+                                (a) => a.id === f.accountId,
+                              );
                               return (
                                 <tr
                                   key={f.id}
@@ -5319,12 +5813,37 @@ export const FinanceModule: React.FC = () => {
                                         <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 rounded-md">
                                           Выплачено
                                         </span>
-                                        <span>
-                                          {accounts.find((a) => a.id === f.accountId)
-                                            ?.name || "—"}
-                                        </span>
+                                        <select
+                                          value={hasValidAcc ? f.accountId : ""}
+                                          onChange={(e) =>
+                                            handleUpdateRecordAccount(
+                                              f.id,
+                                              e.target.value,
+                                            )
+                                          }
+                                          className="text-[11px] font-bold rounded-lg px-2 py-0.5 border border-slate-200 bg-slate-50 text-slate-700 outline-none cursor-pointer"
+                                        >
+                                          {!hasValidAcc && (
+                                            <option value="">Выберите счёт</option>
+                                          )}
+                                          {accounts.map((a) => (
+                                            <option key={a.id} value={a.id}>
+                                              {a.name}
+                                            </option>
+                                          ))}
+                                        </select>
                                       </div>
                                     )}
+                                  </td>
+                                  <td className="px-5 py-4 text-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => openEditFinanceModal(f)}
+                                      title="Редактировать операцию"
+                                      className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </button>
                                   </td>
                                 </tr>
                               );
@@ -5337,7 +5856,7 @@ export const FinanceModule: React.FC = () => {
                           ).length === 0 && (
                             <tr>
                               <td
-                                colSpan={5}
+                                colSpan={6}
                                 className="px-5 py-8 text-center text-slate-400 font-medium"
                               >
                                 Нет операций за {getMonthName(gridFilterMonth)}
@@ -6191,12 +6710,24 @@ export const FinanceModule: React.FC = () => {
                                 {accObj ? accObj.name : "—"}
                               </td>
                               <td className="px-4 py-3 text-center">
-                                <button
-                                  onClick={() => deleteFinanceRecord(f.id)}
-                                  className="text-slate-400 hover:text-red-500 transition"
-                                >
-                                  <Trash2 className="w-4 h-4 mx-auto" />
-                                </button>
+                                <div className="inline-flex items-center justify-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditFinanceModal(f)}
+                                    title="Редактировать запись по аренде"
+                                    className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => deleteFinanceRecord(f.id)}
+                                    title="Удалить запись"
+                                    className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           );
@@ -8937,6 +9468,7 @@ export const FinanceModule: React.FC = () => {
                           <th className="px-4 py-3 border-b border-slate-100">Описание</th>
                           <th className="px-4 py-3 border-b border-slate-100 text-right">Сумма</th>
                           <th className="px-4 py-3 border-b border-slate-100 text-center">Статус</th>
+                          <th className="px-4 py-3 border-b border-slate-100 text-center">Ред.</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -8988,6 +9520,16 @@ export const FinanceModule: React.FC = () => {
                                 >
                                   {isAccrual ? "Начисление" : "Выплачено"}
                                 </span>
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => openEditFinanceModal(f)}
+                                  title="Редактировать операцию"
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
                               </td>
                             </tr>
                           );
@@ -9184,6 +9726,411 @@ export const FinanceModule: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Unified Finance Operation Create / Edit Modal */}
+      {financeModalOpen && (() => {
+        const categoriesForType = financeCategories.filter(
+          (c) => c.type === (opFormType === "income" ? "income" : "expense"),
+        );
+        const hasCategoryInList = categoriesForType.some(
+          (c) => c.name === opFormCategory,
+        );
+        const selectedAccObj = calculatedAccounts.find(
+          (a) => a.id === opFormAccountId,
+        );
+        const toAccObj = calculatedAccounts.find(
+          (a) => a.id === opFormToAccountId,
+        );
+
+        return (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-white rounded-3xl p-6 sm:p-8 w-full max-w-xl shadow-2xl animate-in zoom-in-95 duration-200 my-8">
+              <div className="flex items-center justify-between gap-3 mb-5 pb-4 border-b border-slate-100">
+                <div>
+                  <h3 className="text-lg font-black text-slate-900">
+                    {financeModalMode === "create"
+                      ? opFormType === "expense"
+                        ? "Внесение расхода (ОДДС)"
+                        : "Внесение дохода (ОДДС)"
+                      : opFormType === "transfer"
+                        ? "Редактирование перевода между счетами"
+                        : "Редактирование операции"}
+                  </h3>
+                  <p className="text-xs text-slate-400 font-medium mt-0.5">
+                    Изменения сразу пересчитают остатки на счетах, ОДДС и отчёт ОПУ
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFinanceModalOpen(false)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {opFormType !== "transfer" && (
+                  <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpFormType("expense");
+                        const firstExp = financeCategories.find(
+                          (c) => c.type === "expense",
+                        );
+                        if (
+                          !financeCategories.some(
+                            (c) => c.type === "expense" && c.name === opFormCategory,
+                          )
+                        ) {
+                          setOpFormCategory(firstExp?.name || "Прочие расходы");
+                          if (firstExp?.expenseType) {
+                            setOpFormIsFixed(firstExp.expenseType === "fixed");
+                          }
+                        }
+                      }}
+                      className={`py-2 rounded-lg text-xs font-bold transition ${
+                        opFormType === "expense"
+                          ? "bg-red-600 text-white shadow-xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      − Расход
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpFormType("income");
+                        setOpFormIsFixed(false);
+                        const firstInc = financeCategories.find(
+                          (c) => c.type === "income",
+                        );
+                        if (
+                          !financeCategories.some(
+                            (c) => c.type === "income" && c.name === opFormCategory,
+                          )
+                        ) {
+                          setOpFormCategory(firstInc?.name || "Абонементы");
+                        }
+                      }}
+                      className={`py-2 rounded-lg text-xs font-bold transition ${
+                        opFormType === "income"
+                          ? "bg-emerald-600 text-white shadow-xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      + Доход
+                    </button>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                      Сумма (₽)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={opFormAmount}
+                      onChange={(e) =>
+                        setOpFormAmount(e.target.value.replace(/^0+(?=\d)/, ""))
+                      }
+                      placeholder="0"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black font-mono text-slate-900 outline-none focus:bg-white focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                      Дата оплаты (ДДС)
+                    </label>
+                    <input
+                      type="date"
+                      value={opFormDate}
+                      onChange={(e) => setOpFormDate(e.target.value)}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold font-mono text-slate-900 outline-none focus:bg-white focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-indigo-600 uppercase tracking-wider mb-1.5">
+                      За месяц (ОПУ)
+                    </label>
+                    <input
+                      type="month"
+                      value={opFormTargetMonth}
+                      onChange={(e) => setOpFormTargetMonth(e.target.value)}
+                      className="w-full p-2.5 bg-indigo-50/50 border border-indigo-200 rounded-xl text-xs font-bold font-mono text-indigo-900 outline-none focus:bg-white focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                {opFormType === "transfer" ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 bg-blue-50/50 border border-blue-100 rounded-2xl">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                        Откуда (Счёт списания)
+                      </label>
+                      <select
+                        value={opFormAccountId}
+                        onChange={(e) => setOpFormAccountId(e.target.value)}
+                        className="w-full p-2.5 bg-white border border-blue-200 rounded-xl text-xs font-bold text-slate-900 outline-none"
+                      >
+                        {calculatedAccounts.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name} ({a.actualBalance.toLocaleString("ru-RU")} ₽)
+                          </option>
+                        ))}
+                      </select>
+                      {selectedAccObj && (
+                        <p className="text-[10px] text-slate-500 mt-1">
+                          Текущий остаток: {selectedAccObj.actualBalance.toLocaleString("ru-RU")} ₽
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                        Куда (Счёт зачисления)
+                      </label>
+                      <select
+                        value={opFormToAccountId}
+                        onChange={(e) => setOpFormToAccountId(e.target.value)}
+                        className="w-full p-2.5 bg-white border border-emerald-200 rounded-xl text-xs font-bold text-slate-900 outline-none"
+                      >
+                        {calculatedAccounts
+                          .filter((a) => a.id !== opFormAccountId)
+                          .map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.name} ({a.actualBalance.toLocaleString("ru-RU")} ₽)
+                            </option>
+                          ))}
+                      </select>
+                      {toAccObj && (
+                        <p className="text-[10px] text-slate-500 mt-1">
+                          Текущий остаток: {toAccObj.actualBalance.toLocaleString("ru-RU")} ₽
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                          Счёт {opFormType === "expense" ? "списания" : "зачисления"}
+                        </label>
+                        <select
+                          value={opFormAccountId}
+                          onChange={(e) => setOpFormAccountId(e.target.value)}
+                          className={`w-full p-2.5 border rounded-xl text-xs font-bold outline-none ${
+                            opFormAccountId &&
+                            calculatedAccounts.some(
+                              (a) => a.id === opFormAccountId,
+                            )
+                              ? "bg-slate-50 border-slate-200 text-slate-900 focus:bg-white focus:border-blue-500"
+                              : "bg-amber-50 border-amber-300 text-amber-900"
+                          }`}
+                        >
+                          {(!opFormAccountId ||
+                            !calculatedAccounts.some(
+                              (a) => a.id === opFormAccountId,
+                            )) && (
+                            <option value="">— Выберите счёт —</option>
+                          )}
+                          {calculatedAccounts.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.name} ({a.actualBalance.toLocaleString("ru-RU")} ₽)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                          Статус оплаты
+                        </label>
+                        <select
+                          value={opFormStatus}
+                          onChange={(e) =>
+                            setOpFormStatus(
+                              e.target.value as "paid" | "accrued",
+                            )
+                          }
+                          className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:bg-white focus:border-blue-500"
+                        >
+                          <option value="paid">
+                            Оплачено (проведено по счёту)
+                          </option>
+                          <option value="accrued">
+                            Начислено (долг, не списано со счёта)
+                          </option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                          Статья БДДС
+                        </label>
+                        <select
+                          value={opFormCategory}
+                          onChange={(e) => {
+                            const nextName = e.target.value;
+                            setOpFormCategory(nextName);
+                            if (opFormType === "expense") {
+                              const cat = financeCategories.find(
+                                (c) =>
+                                  c.type === "expense" && c.name === nextName,
+                              );
+                              if (cat?.expenseType) {
+                                setOpFormIsFixed(cat.expenseType === "fixed");
+                              }
+                            }
+                          }}
+                          className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:bg-white focus:border-blue-500"
+                        >
+                          {!hasCategoryInList && opFormCategory && (
+                            <option value={opFormCategory}>
+                              {opFormCategory}
+                            </option>
+                          )}
+                          {categoriesForType.map((c) => (
+                            <option key={c.id} value={c.name}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                          Тип расхода
+                        </label>
+                        <select
+                          disabled={opFormType === "income"}
+                          value={opFormIsFixed ? "fixed" : "variable"}
+                          onChange={(e) =>
+                            setOpFormIsFixed(e.target.value === "fixed")
+                          }
+                          className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none disabled:opacity-50"
+                        >
+                          <option value="variable">Переменный расход</option>
+                          <option value="fixed">Постоянный расход</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                          Контрагент / Площадка
+                        </label>
+                        <select
+                          value={opFormCounterpartyId}
+                          onChange={(e) =>
+                            setOpFormCounterpartyId(e.target.value)
+                          }
+                          className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-blue-500"
+                        >
+                          <option value="">Без контрагента</option>
+                          {counterparties.map((cp) => (
+                            <option key={cp.id} value={cp.id}>
+                              {cp.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                          Сотрудник / Тренер
+                        </label>
+                        <select
+                          value={opFormCoachId}
+                          onChange={(e) => setOpFormCoachId(e.target.value)}
+                          className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-blue-500"
+                        >
+                          <option value="">Не указан</option>
+                          {coaches.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                          Группа
+                        </label>
+                        <select
+                          value={opFormGroupName}
+                          onChange={(e) => setOpFormGroupName(e.target.value)}
+                          className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-blue-500"
+                        >
+                          <option value="">Не указана</option>
+                          {groups.map((g) => (
+                            <option key={g.id} value={g.name}>
+                              {g.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                    Основание / Комментарий
+                  </label>
+                  <input
+                    type="text"
+                    value={opFormDescription}
+                    onChange={(e) => setOpFormDescription(e.target.value)}
+                    placeholder="Назначение платежа или пояснение..."
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 outline-none focus:bg-white focus:border-blue-500"
+                  />
+                </div>
+
+                {opFormError && (
+                  <p className="text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-xl px-3.5 py-2">
+                    {opFormError}
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setFinanceModalOpen(false)}
+                  disabled={opFormSaving}
+                  className="px-4 py-2.5 rounded-xl font-bold text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 transition"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveFinanceModal}
+                  disabled={opFormSaving}
+                  className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold rounded-xl text-xs shadow-md shadow-slate-900/10 transition flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>
+                    {opFormSaving
+                      ? "Сохранение..."
+                      : financeModalMode === "create"
+                        ? "Провести операцию"
+                        : "Сохранить изменения"}
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

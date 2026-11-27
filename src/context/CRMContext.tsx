@@ -12,6 +12,7 @@ import {
   getDocs,
   where,
   arrayUnion,
+  deleteField,
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../firebase";
 import { sendTelegramAlert } from "../utils/telegram";
@@ -249,6 +250,7 @@ interface CRMContextType {
   updateFinanceRecord: (
     id: string,
     updates: Partial<Omit<FinanceRecord, "id">>,
+    clearFields?: Array<keyof Omit<FinanceRecord, "id">>,
   ) => Promise<void>;
   addFinanceCategory: (
     category: Omit<FinanceCategory, "id"> & { id?: string },
@@ -4470,19 +4472,46 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({
   const updateFinanceRecord = async (
     id: string,
     updates: Partial<Omit<FinanceRecord, "id">>,
+    clearFields?: Array<keyof Omit<FinanceRecord, "id">>,
   ) => {
     const cleanUpdates = removeUndefined(updates);
+    let previousRecord: FinanceRecord | undefined;
+
     setFinances((prev) =>
-      prev.map((f) => (f.id === id ? { ...f, ...cleanUpdates } : f)),
+      prev.map((f) => {
+        if (f.id !== id) return f;
+        previousRecord = f;
+        const nextRecord: FinanceRecord = { ...f, ...cleanUpdates };
+        if (clearFields) {
+          for (const field of clearFields) {
+            if (!(field in cleanUpdates)) {
+              delete nextRecord[field];
+            }
+          }
+        }
+        return nextRecord;
+      }),
     );
+
+    const firestorePayload: Record<string, any> = { ...cleanUpdates };
+    if (clearFields) {
+      for (const field of clearFields) {
+        if (!(field in cleanUpdates)) {
+          firestorePayload[field] = deleteField();
+        }
+      }
+    }
+
     try {
-      await updateDoc(doc(db, "finances", id), cleanUpdates);
+      await updateDoc(doc(db, "finances", id), firestorePayload);
     } catch (err) {
+      if (previousRecord) {
+        setFinances((prev) =>
+          prev.map((f) => (f.id === id ? previousRecord! : f)),
+        );
+      }
+      setFirestoreError(err instanceof Error ? err.message : String(err));
       handleFirestoreError(err, OperationType.WRITE, `finances/${id}`);
-      console.warn(
-        `Failed to update finance record ${id} on Firestore, kept locally:`,
-        err,
-      );
     }
   };
 
